@@ -1,0 +1,14 @@
+{
+  "name": "@flaky-tests/store-postgres",
+  "version": "0.1.0",
+  "description": "PostgreSQL store adapter for flaky-tests",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@flaky-tests/core": "workspace:*",
+    "postgres": "^3.4.0"
+  }
+}
