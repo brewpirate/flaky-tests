@@ -11,6 +11,8 @@
  *   bunx @flaky-tests/cli --prompt     # print investigation prompts
  *   bunx @flaky-tests/cli --copy       # copy first prompt to clipboard
  *   bunx @flaky-tests/cli --create-issue
+ *   bunx @flaky-tests/cli --html       # write HTML report and open in browser
+ *   bunx @flaky-tests/cli --html --out report.html  # write to a specific file
  *
  * Environment variables:
  *   FLAKY_TESTS_STORE             sqlite | turso | supabase | postgres (default: sqlite)
@@ -26,6 +28,13 @@
 import type { IStore, FlakyPattern } from '@flaky-tests/core'
 import { copyToClipboard, generatePrompt } from './prompt'
 import { createIssue, findExistingIssue, resolveRepo } from './github'
+import { writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { SqliteStore } from '@flaky-tests/store-sqlite'
+import type { FlakyPattern } from '@flaky-tests/core'
+import { generateHtml } from './html'
+
 
 async function resolveStore(): Promise<IStore> {
   const storeType = process.env.FLAKY_TESTS_STORE ?? 'sqlite'
@@ -72,6 +81,8 @@ const threshold = Number(option('threshold', 'FLAKY_TESTS_THRESHOLD') ?? 2)
 const showPrompts = flag('prompt') || flag('copy')
 const doCopy = flag('copy')
 const doCreateIssue = flag('create-issue')
+const doHtml = flag('html')
+const htmlOut = option('out')
 
 // --- Main ----------------------------------------------------------------
 
@@ -131,6 +142,19 @@ async function main(): Promise<void> {
 
   if (doCreateIssue) {
     await openGitHubIssues(patterns, windowDays)
+  if (doHtml) {
+    const html = generateHtml(patterns, windowDays)
+    const outPath = htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
+    writeFileSync(outPath, html, 'utf8')
+    console.log(`✓ Report written to ${outPath}`)
+
+    // Open in default browser
+    const opener =
+      process.platform === 'darwin' ? 'open' :
+      process.platform === 'win32'  ? 'start' :
+                                      'xdg-open'
+    Bun.spawnSync({ cmd: [opener, outPath], stdout: 'ignore', stderr: 'ignore' })
+    console.log('  Opening in browser…\n')
   }
 
   process.exit(1)
