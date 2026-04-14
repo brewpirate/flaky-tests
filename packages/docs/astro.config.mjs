@@ -11,8 +11,7 @@ export default defineConfig({
       description:
         'Zero-friction flaky test detection for Bun and Vitest. Catches patterns, generates prompts, opens issues.',
       logo: {
-        light: './src/assets/logo-light.svg',
-        dark: './src/assets/logo-dark.svg',
+        src: './src/assets/mrflaky.png',
         replacesTitle: false,
       },
       plugins: [

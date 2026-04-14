@@ -51,7 +51,7 @@ export interface IStore {
    * sequential inserts for backends that don't support transactions.
    * Preferred over calling insertFailure() in a loop for remote stores.
    */
-  insertFailures(inputs: InsertFailureInput[]): Promise<void>
+  insertFailures(inputs: readonly InsertFailureInput[]): Promise<void>
   /**
    * Returns tests that newly crossed the flakiness threshold — failures in
    * the current window but none in the prior window of the same length.

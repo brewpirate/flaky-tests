@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="mrflaky.png" alt="Mr. Flaky" width="120">
+</p>
+
 # flaky-tests
 
 > Zero-friction flaky test detection for Bun and Vitest.

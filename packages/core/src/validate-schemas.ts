@@ -14,7 +14,8 @@ export function parse<T>(schema: Type<T>, data: unknown): T {
   if (result instanceof type.errors) {
     throw new ValidationError(result.summary)
   }
-  return result
+  // ArkType's distilled output type doesn't unify with T in TS 6.0
+  return result as T
 }
 
 /** Parse an array of items against a schema. Used for getNewPatterns output. */
@@ -24,6 +25,6 @@ export function parseArray<T>(schema: Type<T>, data: unknown[]): T[] {
     if (result instanceof type.errors) {
       throw new ValidationError(`[${index}]: ${result.summary}`)
     }
-    return result
+    return result as T
   })
 }

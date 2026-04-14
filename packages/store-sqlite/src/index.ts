@@ -16,7 +16,7 @@ import {
   type IStore,
   parse,
   parseArray,
-  stripTimestampPrefix,
+  mapRowToPattern,
   type UpdateRunInput,
   updateRunInputSchema,
 } from '@flaky-tests/core'
@@ -24,7 +24,7 @@ import { type } from 'arktype'
 
 /** Configuration for the SQLite-backed flaky-tests store. */
 export const sqliteStoreOptionsSchema = type({
-  'dbPath?': 'string',
+  'dbPath?': 'string | undefined',
 })
 
 export type SqliteStoreOptions = typeof sqliteStoreOptionsSchema.infer
@@ -194,7 +194,7 @@ export class SqliteStore implements IStore {
   }
 
   /** Insert multiple failures in a single SQLite transaction. */
-  async insertFailures(inputs: InsertFailureInput[]): Promise<void> {
+  async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
     if (inputs.length === 0) return
     this.db.transaction(() => {
       for (const input of inputs) {
@@ -310,22 +310,7 @@ export class SqliteStore implements IStore {
         threshold,
       )
 
-    return parseArray(flakyPatternSchema, rows.map((r) => ({
-      testFile: r.test_file,
-      testName: r.test_name,
-      recentFails: r.recent_fails,
-      priorFails: r.prior_fails,
-      failureKinds: r.failure_kinds.split(','),
-      lastErrorMessage:
-        r.last_error_message_raw != null
-          ? stripTimestampPrefix(r.last_error_message_raw)
-          : null,
-      lastErrorStack:
-        r.last_error_stack_raw != null
-          ? stripTimestampPrefix(r.last_error_stack_raw)
-          : null,
-      lastFailed: r.last_failed,
-    })))
+    return parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
   }
 
   /** Close the underlying SQLite connection. */

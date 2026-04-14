@@ -3,6 +3,7 @@ import {
   DEFAULT_WINDOW_DAYS,
   MAX_FAILED_TESTS_PER_RUN,
   MS_PER_DAY,
+  StoreError,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -35,6 +36,8 @@ export type SupabaseStoreOptions = typeof supabaseStoreOptionsSchema.infer
  * Supabase-backed implementation of the {@link IStore} interface.
  * Persists test runs and failures to two Supabase tables.
  */
+const PACKAGE = '@flaky-tests/store-supabase'
+
 export class SupabaseStore implements IStore {
   private client: SupabaseClient
   private runsTable: string
@@ -58,10 +61,12 @@ export class SupabaseStore implements IStore {
     // Verify tables exist by attempting a lightweight query
     const { error } = await this.client.from(this.runsTable).select('run_id').limit(0)
     if (error) {
-      throw new Error(
-        `[flaky-tests/store-supabase] migrate: table "${this.runsTable}" not found. ` +
-        `Supabase requires manual table creation — see https://brewpirate.github.io/flaky-tests/stores/supabase/`,
-      )
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'migrate',
+        message: `table "${this.runsTable}" not found — Supabase requires manual table creation. See https://brewpirate.github.io/flaky-tests/stores/supabase/`,
+        cause: error,
+      })
     }
   }
 
@@ -76,10 +81,7 @@ export class SupabaseStore implements IStore {
       runtime_version: input.runtimeVersion ?? null,
       test_args: input.testArgs ?? null,
     })
-    if (error)
-      throw new Error(
-        `[flaky-tests/store-supabase] insertRun: ${error.message}`,
-      )
+    if (error) throw new StoreError({ package: PACKAGE, method: 'insertRun', message: error.message, cause: error })
   }
 
   /**
@@ -101,10 +103,7 @@ export class SupabaseStore implements IStore {
         errors_between_tests: input.errorsBetweenTests ?? null,
       })
       .eq('run_id', runId)
-    if (error)
-      throw new Error(
-        `[flaky-tests/store-supabase] updateRun: ${error.message}`,
-      )
+    if (error) throw new StoreError({ package: PACKAGE, method: 'updateRun', message: error.message, cause: error })
   }
 
   /** Record a single test failure. `durationMs` is rounded to the nearest integer. */
@@ -121,10 +120,30 @@ export class SupabaseStore implements IStore {
         input.durationMs != null ? Math.round(input.durationMs) : null,
       failed_at: input.failedAt,
     })
-    if (error)
-      throw new Error(
-        `[flaky-tests/store-supabase] insertFailure: ${error.message}`,
-      )
+    if (error) throw new StoreError({ package: PACKAGE, method: 'insertFailure', message: error.message, cause: error })
+  }
+
+  /**
+   * Insert multiple failures. Supabase does not support transactions through the
+   * JS client, so this uses a single bulk insert call for atomicity at the REST level.
+   */
+  async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
+    if (inputs.length === 0) return
+    const rows = inputs.map((input) => {
+      parse(insertFailureInputSchema, input)
+      return {
+        run_id: input.runId,
+        test_file: input.testFile,
+        test_name: input.testName,
+        failure_kind: input.failureKind,
+        error_message: input.errorMessage ?? null,
+        error_stack: input.errorStack ?? null,
+        duration_ms: input.durationMs != null ? Math.round(input.durationMs) : null,
+        failed_at: input.failedAt,
+      }
+    })
+    const { error } = await this.client.from(this.failuresTable).insert(rows)
+    if (error) throw new StoreError({ package: PACKAGE, method: 'insertFailures', message: error.message, cause: error })
   }
 
   /**
@@ -152,10 +171,7 @@ export class SupabaseStore implements IStore {
       .lt(`${this.runsTable}.failed_tests`, MAX_FAILED_TESTS_PER_RUN)
       .not(`${this.runsTable}.ended_at`, 'is', null)
 
-    if (error)
-      throw new Error(
-        `[flaky-tests/store-supabase] getNewPatterns: ${error.message}`,
-      )
+    if (error) throw new StoreError({ package: PACKAGE, method: 'getNewPatterns', message: error.message, cause: error })
 
     type Row = {
       test_file: string
@@ -165,7 +181,8 @@ export class SupabaseStore implements IStore {
       error_stack: string | null
       failed_at: string
     }
-    const rows = (data ?? []) as Row[]
+    // Supabase client returns typed JSON but the generic is too wide — Row matches the select columns above
+    const rows = (data ?? []) as unknown as Row[]
 
     // Group and compute counts per test
     const map = new Map<

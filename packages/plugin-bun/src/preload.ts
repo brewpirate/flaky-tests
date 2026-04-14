@@ -203,6 +203,7 @@ export function createPreload(store: IStore): void {
   try {
     mock.module('bun:test', () => ({
       ...bunTest,
+      // Bun's test/it/describe types don't expose the internal signature we need for wrapping
       test: wrapTest(bunTest.test as unknown as TestFn),
       it: wrapTest(bunTest.it as unknown as TestFn),
       describe: wrapDescribe(bunTest.describe as unknown as DescribeFn),

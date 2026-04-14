@@ -14,7 +14,7 @@ import {
   type IStore,
   parse,
   parseArray,
-  stripTimestampPrefix,
+  mapRowToPattern,
   type UpdateRunInput,
   updateRunInputSchema,
   validateTablePrefix,
@@ -167,6 +167,28 @@ export class PostgresStore implements IStore {
     `
   }
 
+  /** Insert multiple failures in a single Postgres transaction. */
+  async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
+    if (inputs.length === 0) return
+    const failures = this.failuresTable
+    await this.sql.begin(async (transaction) => {
+      for (const input of inputs) {
+        parse(insertFailureInputSchema, input)
+        await transaction`
+          INSERT INTO ${transaction(failures)}
+            (run_id, test_file, test_name, failure_kind,
+             error_message, error_stack, duration_ms, failed_at)
+          VALUES
+            (${input.runId}, ${input.testFile}, ${input.testName},
+             ${input.failureKind}, ${input.errorMessage ?? null},
+             ${input.errorStack ?? null},
+             ${input.durationMs != null ? Math.round(input.durationMs) : null},
+             ${input.failedAt})
+        `
+      }
+    })
+  }
+
   /**
    * Detect newly-flaky tests by comparing a recent window to a prior window of equal length.
    * Returns tests that failed >= `threshold` times in the recent window but zero times
@@ -216,22 +238,7 @@ export class PostgresStore implements IStore {
       ORDER BY recent_fails DESC
     `
 
-    return parseArray(flakyPatternSchema, rows.map((r) => ({
-      testFile: r.test_file,
-      testName: r.test_name,
-      recentFails: Number(r.recent_fails),
-      priorFails: Number(r.prior_fails),
-      failureKinds: r.failure_kinds,
-      lastErrorMessage:
-        r.last_error_message_raw !== null
-          ? stripTimestampPrefix(r.last_error_message_raw)
-          : null,
-      lastErrorStack:
-        r.last_error_stack_raw !== null
-          ? stripTimestampPrefix(r.last_error_stack_raw)
-          : null,
-      lastFailed: r.last_failed.toISOString(),
-    })))
+    return parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
   }
 
   /** Gracefully close the underlying PostgreSQL connection pool. */

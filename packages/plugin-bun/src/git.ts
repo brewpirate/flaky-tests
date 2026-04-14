@@ -1,9 +1,10 @@
-import type { GitInfo } from '@flaky-tests/core'
+import { captureGitInfo as captureGitInfoCore, type GitInfo, type RunCommand } from '@flaky-tests/core'
+export type { GitInfo } from '@flaky-tests/core'
 
-function runGit(args: string[]): string | null {
+const runCommand: RunCommand = (command, args) => {
   try {
     const result = Bun.spawnSync({
-      cmd: ['git', ...args],
+      cmd: [command, ...args],
       stdout: 'pipe',
       stderr: 'ignore',
     })
@@ -15,15 +16,9 @@ function runGit(args: string[]): string | null {
 }
 
 /**
- * Captures the current git SHA and dirty state by shelling out to `git`.
+ * Captures the current git SHA and dirty state using Bun.spawnSync.
  * Safe to call outside a git repo — returns `{ sha: null, dirty: null }`.
  */
 export function captureGitInfo(): GitInfo {
-  const sha = runGit(['rev-parse', 'HEAD'])
-  const porcelain = runGit(['status', '--porcelain'])
-  if (sha === null) return { sha: null, dirty: null }
-  return {
-    sha: sha.trim(),
-    dirty: porcelain !== null && porcelain.trim().length > 0,
-  }
+  return captureGitInfoCore(runCommand)
 }

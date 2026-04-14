@@ -6,20 +6,25 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter './packages/*' build",
-    "build:types": "bun run --filter './packages/*' build:types",
-    "changeset": "changeset",
-    "version-packages": "changeset version",
-    "release": "bun run build && changeset publish",
-    "test": "bun test",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",
     "check": "biome check .",
-    "check:fix": "biome check --write ."
+    "check:fix": "biome check --write .",
+    "test": "bun test",
+    "test:integration": "INTEGRATION=1 bun test **/*.integration.test.ts",
+    "test:all": "INTEGRATION=1 bun test",
+    "test:report": "bun packages/store-sqlite/src/report.ts --open",
+    "test:cli": "bun packages/cli/src/check.ts",
+    "build": "bun run --filter './packages/*' build",
+    "build:types": "bun run --filter './packages/*' build:types",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "bun run build && changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.11",
-    "@changesets/cli": "^2.30.0"
+    "@changesets/cli": "^2.30.0",
+    "typescript": "^6.0.2"
   }
 }

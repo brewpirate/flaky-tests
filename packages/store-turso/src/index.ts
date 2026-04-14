@@ -14,7 +14,8 @@ import {
   type IStore,
   parse,
   parseArray,
-  stripTimestampPrefix,
+  mapRowToPattern,
+  type PatternRow,
   type UpdateRunInput,
   updateRunInputSchema,
 } from '@flaky-tests/core'
@@ -169,7 +170,7 @@ export class TursoStore implements IStore {
   }
 
   /** Insert multiple failures in a single batch transaction. */
-  async insertFailures(inputs: InsertFailureInput[]): Promise<void> {
+  async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
     if (inputs.length === 0) return
     await this.client.batch(
       inputs.map((input) => {
@@ -246,22 +247,8 @@ export class TursoStore implements IStore {
       ] as InArgs,
     })
 
-    return parseArray(flakyPatternSchema, result.rows.map((r) => ({
-      testFile: String(r.test_file),
-      testName: String(r.test_name),
-      recentFails: Number(r.recent_fails),
-      priorFails: Number(r.prior_fails),
-      failureKinds: String(r.failure_kinds).split(','),
-      lastErrorMessage:
-        r.last_error_message_raw != null
-          ? stripTimestampPrefix(String(r.last_error_message_raw))
-          : null,
-      lastErrorStack:
-        r.last_error_stack_raw != null
-          ? stripTimestampPrefix(String(r.last_error_stack_raw))
-          : null,
-      lastFailed: String(r.last_failed),
-    })))
+    // libsql Row type doesn't expose named fields — cast through unknown to PatternRow
+    return parseArray(flakyPatternSchema, result.rows.map((r) => mapRowToPattern(r as unknown as PatternRow)))
   }
 
   /** Close the underlying libSQL connection. */

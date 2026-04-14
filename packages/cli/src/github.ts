@@ -36,7 +36,7 @@ export function resolveRepo(): { owner: string; repo: string } | null {
   const idx = process.argv.indexOf('--repo')
   if (idx !== -1 && idx + 1 < process.argv.length) {
     const value = process.argv[idx + 1]
-    if (!value) return undefined
+    if (!value) return null
     const [owner, repo] = value.split('/')
     if (owner && repo) return { owner, repo }
   }

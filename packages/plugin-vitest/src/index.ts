@@ -20,9 +20,10 @@
 
 // biome-ignore-all lint/suspicious/noConsole: reporter is dev tooling
 
-import { execSync } from 'node:child_process'
-import type { GitInfo, InsertFailureInput, IStore } from '@flaky-tests/core'
+import { execFileSync } from 'node:child_process'
+import type { InsertFailureInput, IStore, RunCommand } from '@flaky-tests/core'
 import {
+  captureGitInfo as captureGitInfoCore,
   categorizeError,
   extractMessage,
   extractStack,
@@ -32,24 +33,19 @@ import {
   updateRunInputSchema,
 } from '@flaky-tests/core'
 
-/**
- * Reads the current HEAD SHA and working-tree dirty status.
- * Returns nulls if git is unavailable or the project is not a git repo.
- */
-function captureGitInfo(): GitInfo {
+const runCommand: RunCommand = (command, args) => {
   try {
-    const sha = execSync('git rev-parse HEAD', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim()
-    const status = execSync('git status --porcelain', {
+    return execFileSync(command, args, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
     })
-    return { sha, dirty: status.trim().length > 0 }
   } catch {
-    return { sha: null, dirty: null }
+    return null
   }
+}
+
+function captureGitInfo() {
+  return captureGitInfoCore(runCommand)
 }
 
 // Minimal task-shape typings that work across Vitest 1.x / 2.x / 3.x.
@@ -84,7 +80,7 @@ function getTestPath(task: TaskBase): string {
 }
 
 /** Recursively visits every task (tests and suites) in a task tree. */
-function walkTasks(tasks: TaskBase[], visit: (task: TaskBase) => void): void {
+function walkTasks(tasks: readonly TaskBase[], visit: (task: TaskBase) => void): void {
   for (const task of tasks) {
     visit(task)
     if (task.tasks) walkTasks(task.tasks, visit)
@@ -150,8 +146,8 @@ export class FlakyTestsReporter {
    * @param errors - Unhandled errors that occurred between tests.
    */
   async onFinished(
-    files: TaskBase[] = [],
-    errors: unknown[] = [],
+    files: readonly TaskBase[] = [],
+    errors: readonly unknown[] = [],
   ): Promise<void> {
     if (!this.ready) return
 
@@ -186,13 +182,11 @@ export class FlakyTestsReporter {
       })
     }
 
-    for (const failure of failureInputs) {
-      await this.store
-        .insertFailure(failure)
-        .catch((e: unknown) =>
-          console.warn('[flaky-tests] insertFailure failed:', e),
-        )
-    }
+    await this.store
+      .insertFailures(failureInputs)
+      .catch((e: unknown) =>
+        console.warn('[flaky-tests] insertFailures failed:', e),
+      )
 
     await this.store
       .updateRun(this.runId, parse(updateRunInputSchema, {

@@ -8,6 +8,11 @@ export {
   MS_PER_DAY,
 } from './defaults'
 export { DescribeStack } from './describe-stack'
+export { generatePrompt } from './prompt'
+export { StoreError } from './errors'
+export { captureGitInfo, type RunCommand } from './git'
+export { escapeHtml } from './html-utils'
+export { mapRowToPattern, type PatternRow } from './pattern-mapper'
 export { stripTimestampPrefix } from './store-utils'
 export type {
   FailureKind,
