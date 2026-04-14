@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
+import catppuccin from '@catppuccin/starlight'
 
 export default defineConfig({
   integrations: [
@@ -11,13 +12,18 @@ export default defineConfig({
         dark: './src/assets/logo-dark.svg',
         replacesTitle: false,
       },
+      plugins: [
+        catppuccin({
+          dark: { flavor: 'mocha', accent: 'red' },
+          light: { flavor: 'latte', accent: 'red' },
+        }),
+      ],
       social: {
         github: 'https://github.com/brewpirate/flaky-tests',
       },
       editLink: {
         baseUrl: 'https://github.com/brewpirate/flaky-tests/edit/main/packages/docs/',
       },
-      customCss: ['./src/styles/custom.css'],
       sidebar: [
         {
           label: 'Getting Started',
