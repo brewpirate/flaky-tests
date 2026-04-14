@@ -3,6 +3,8 @@ import starlight from '@astrojs/starlight'
 import catppuccin from '@catppuccin/starlight'
 
 export default defineConfig({
+  site: 'https://brewpirate.github.io',
+  base: '/flaky-tests',
   integrations: [
     starlight({
       title: 'flaky-tests',
