@@ -48,23 +48,28 @@ runs:
       with:
         bun-version: latest
 
-    - name: Install flaky-tests CLI
-      shell: bash
-      run: bun add -g @flaky-tests/cli
+    # TODO: uncomment once @flaky-tests/cli is published to npm
+    # - name: Install flaky-tests CLI
+    #   shell: bash
+    #   run: bun add -g @flaky-tests/cli
+    #
+    # - name: Run flaky-tests check
+    #   shell: bash
+    #   env:
+    #     GITHUB_TOKEN: ${{ inputs.github-token }}
+    #     GITHUB_REPOSITORY: ${{ github.repository }}
+    #     FLAKY_TESTS_WINDOW: ${{ inputs.window-days }}
+    #     FLAKY_TESTS_THRESHOLD: ${{ inputs.threshold }}
+    #     FLAKY_TESTS_STORE: ${{ inputs.store }}
+    #     FLAKY_TESTS_CONNECTION_STRING: ${{ inputs.connection-string }}
+    #     FLAKY_TESTS_AUTH_TOKEN: ${{ inputs.auth-token }}
+    #   run: |
+    #     ISSUE_FLAG=""
+    #     if [ "${{ inputs.create-issues }}" = "true" ]; then
+    #       ISSUE_FLAG="--create-issue"
+    #     fi
+    #     bunx @flaky-tests/cli --prompt $ISSUE_FLAG || true
 
-    - name: Run flaky-tests check
+    - name: CLI not yet published
       shell: bash
-      env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        FLAKY_TESTS_WINDOW: ${{ inputs.window-days }}
-        FLAKY_TESTS_THRESHOLD: ${{ inputs.threshold }}
-        FLAKY_TESTS_STORE: ${{ inputs.store }}
-        FLAKY_TESTS_CONNECTION_STRING: ${{ inputs.connection-string }}
-        FLAKY_TESTS_AUTH_TOKEN: ${{ inputs.auth-token }}
-      run: |
-        ISSUE_FLAG=""
-        if [ "${{ inputs.create-issues }}" = "true" ]; then
-          ISSUE_FLAG="--create-issue"
-        fi
-        bunx @flaky-tests/cli --prompt $ISSUE_FLAG || true
+      run: echo "⚠️ @flaky-tests/cli is not yet published to npm — skipping detection step"
