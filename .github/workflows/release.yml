@@ -1,0 +1,75 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build packages
+        run: bun run build
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          MAJOR=$(echo $TAG | cut -d. -f1)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = '${{ steps.version.outputs.tag }}'
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: tag,
+              body: `## ${tag}\n\nSee [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.`,
+              draft: false,
+              prerelease: false,
+            })
+            console.log(`Created release: ${release.html_url}`)
+
+      - name: Update floating major tag
+        # Moves v1 (or v2, etc.) to point at the new release commit
+        # This allows users to pin to brewpirate/flaky-tests@v1 and get latest patch
+        run: |
+          MAJOR="${{ steps.version.outputs.major }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -fa "$MAJOR" -m "Update $MAJOR to ${{ steps.version.outputs.tag }}"
+          git push origin "$MAJOR" --force
+
+      - name: Publish to npm
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          # Publish each package in dependency order
+          bun run --filter @flaky-tests/core publish --access public
+          bun run --filter @flaky-tests/store-sqlite publish --access public
+          bun run --filter @flaky-tests/store-turso publish --access public
+          bun run --filter @flaky-tests/store-supabase publish --access public
+          bun run --filter @flaky-tests/store-postgres publish --access public
+          bun run --filter @flaky-tests/plugin-bun publish --access public
+          bun run --filter @flaky-tests/plugin-vitest publish --access public
+          bun run --filter @flaky-tests/cli publish --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
