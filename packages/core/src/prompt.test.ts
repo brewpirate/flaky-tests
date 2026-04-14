@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { FlakyPattern } from './types'
 import { generatePrompt } from './prompt'
+import type { FlakyPattern } from './types'
 
 function makePattern(overrides: Partial<FlakyPattern> = {}): FlakyPattern {
   return {
@@ -38,7 +38,9 @@ describe('generatePrompt()', () => {
   })
 
   test('includes failure kinds', () => {
-    const prompt = generatePrompt(makePattern({ failureKinds: ['assertion', 'timeout'] }))
+    const prompt = generatePrompt(
+      makePattern({ failureKinds: ['assertion', 'timeout'] }),
+    )
     expect(prompt).toContain('assertion, timeout')
   })
 
@@ -53,7 +55,9 @@ describe('generatePrompt()', () => {
   })
 
   test('includes stack trace when present', () => {
-    const prompt = generatePrompt(makePattern({ lastErrorStack: 'Error: fail\n  at auth.test.ts:5' }))
+    const prompt = generatePrompt(
+      makePattern({ lastErrorStack: 'Error: fail\n  at auth.test.ts:5' }),
+    )
     expect(prompt).toContain('Stack trace:')
     expect(prompt).toContain('Error: fail')
   })
@@ -64,7 +68,10 @@ describe('generatePrompt()', () => {
   })
 
   test('truncates stack trace beyond 20 lines', () => {
-    const longStack = Array.from({ length: 30 }, (_, index) => `  at func${index}(file.ts:${index})`).join('\n')
+    const longStack = Array.from(
+      { length: 30 },
+      (_, index) => `  at func${index}(file.ts:${index})`,
+    ).join('\n')
     const prompt = generatePrompt(makePattern({ lastErrorStack: longStack }))
     expect(prompt).toContain('  ...')
     expect(prompt).toContain('at func0')

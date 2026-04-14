@@ -1,21 +1,21 @@
 import {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
-  MAX_FAILED_TESTS_PER_RUN,
-  MS_PER_DAY,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
   getNewPatternsOptionsSchema,
   type InsertFailureInput,
-  insertFailureInputSchema,
   type InsertRunInput,
-  insertRunInputSchema,
   type IStore,
-  parse,
-  parseArray,
+  insertFailureInputSchema,
+  insertRunInputSchema,
+  MAX_FAILED_TESTS_PER_RUN,
+  MS_PER_DAY,
   mapRowToPattern,
   type PatternRow,
+  parse,
+  parseArray,
   type UpdateRunInput,
   updateRunInputSchema,
 } from '@flaky-tests/core'
@@ -248,7 +248,10 @@ export class TursoStore implements IStore {
     })
 
     // libsql Row type doesn't expose named fields — cast through unknown to PatternRow
-    return parseArray(flakyPatternSchema, result.rows.map((r) => mapRowToPattern(r as unknown as PatternRow)))
+    return parseArray(
+      flakyPatternSchema,
+      result.rows.map((r) => mapRowToPattern(r as unknown as PatternRow)),
+    )
   }
 
   /** Close the underlying libSQL connection. */

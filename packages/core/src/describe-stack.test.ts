@@ -38,7 +38,9 @@ describe('DescribeStack', () => {
       stack.run('bad', () => {
         throw new Error('oops')
       })
-    } catch { /* expected */ }
+    } catch {
+      /* expected */
+    }
     expect(stack.depth).toBe(0)
   })
 
@@ -78,7 +80,9 @@ describe('DescribeStack', () => {
         stack.runWithFrames(['X'], () => {
           throw new Error('fail')
         })
-      } catch { /* expected */ }
+      } catch {
+        /* expected */
+      }
       expect(stack.path('test')).toBe('A > test')
     })
   })

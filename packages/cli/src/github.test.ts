@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { resolveRepo } from './github'
 
 describe('resolveRepo', () => {
@@ -31,7 +31,9 @@ describe('resolveRepo', () => {
     const result = resolveRepo()
     // Result depends on whether we're in a git repo with a github remote
     // Just verify it doesn't throw
-    expect(result === null || (result !== null && result.owner !== undefined)).toBe(true)
+    expect(
+      result === null || (result !== null && result.owner !== undefined),
+    ).toBe(true)
   })
 
   test('returns owner/repo from --repo flag', () => {

@@ -12,8 +12,14 @@
 
 import { Database } from 'bun:sqlite'
 import { readFileSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
-import { MAX_FAILED_TESTS_PER_RUN, escapeHtml, generatePrompt, stripTimestampPrefix, type FlakyPattern } from '@flaky-tests/core'
+import { dirname, resolve } from 'node:path'
+import {
+  escapeHtml,
+  type FlakyPattern,
+  generatePrompt,
+  MAX_FAILED_TESTS_PER_RUN,
+  stripTimestampPrefix,
+} from '@flaky-tests/core'
 
 const DB_PATH =
   process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
@@ -211,7 +217,6 @@ function loadData(): {
   }
 }
 
-
 function severityClass(count: number): string {
   if (count >= 10) return 'sev-high'
   if (count >= 5) return 'sev-med'
@@ -299,9 +304,17 @@ function flakyRowToPattern(row: FlakyRow): FlakyPattern {
     testName: row.test_name,
     recentFails: row.fails,
     priorFails: 0,
-    failureKinds: row.kinds.split(',').map((kind) => kind.trim()) as FlakyPattern['failureKinds'],
-    lastErrorMessage: row.error_message_raw != null ? stripTimestampPrefix(row.error_message_raw) : null,
-    lastErrorStack: row.error_stack_raw != null ? stripTimestampPrefix(row.error_stack_raw) : null,
+    failureKinds: row.kinds
+      .split(',')
+      .map((kind) => kind.trim()) as FlakyPattern['failureKinds'],
+    lastErrorMessage:
+      row.error_message_raw != null
+        ? stripTimestampPrefix(row.error_message_raw)
+        : null,
+    lastErrorStack:
+      row.error_stack_raw != null
+        ? stripTimestampPrefix(row.error_stack_raw)
+        : null,
     lastFailed: row.last_failed,
   }
 }
@@ -512,7 +525,9 @@ function loadLogo(): string | null {
         try {
           const buffer = readFileSync(resolve(directory, filename))
           return `data:image/png;base64,${buffer.toString('base64')}`
-        } catch { /* not here */ }
+        } catch {
+          /* not here */
+        }
       }
       directory = dirname(directory)
     }

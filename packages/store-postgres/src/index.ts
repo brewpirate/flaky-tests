@@ -1,26 +1,26 @@
 import {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
-  MAX_FAILED_TESTS_PER_RUN,
-  MS_PER_DAY,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
   getNewPatternsOptionsSchema,
   type InsertFailureInput,
-  insertFailureInputSchema,
   type InsertRunInput,
-  insertRunInputSchema,
   type IStore,
+  insertFailureInputSchema,
+  insertRunInputSchema,
+  MAX_FAILED_TESTS_PER_RUN,
+  MS_PER_DAY,
+  mapRowToPattern,
   parse,
   parseArray,
-  mapRowToPattern,
   type UpdateRunInput,
   updateRunInputSchema,
   validateTablePrefix,
 } from '@flaky-tests/core'
-import postgres from 'postgres'
 import { type } from 'arktype'
+import postgres from 'postgres'
 
 /** Configuration for the PostgreSQL store. */
 export const postgresStoreOptionsSchema = type({

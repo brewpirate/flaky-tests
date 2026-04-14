@@ -27,11 +27,15 @@ describe('validateTablePrefix()', () => {
   })
 
   test('rejects hyphens', () => {
-    expect(() => validateTablePrefix('flaky-test')).toThrow('invalid tablePrefix')
+    expect(() => validateTablePrefix('flaky-test')).toThrow(
+      'invalid tablePrefix',
+    )
   })
 
   test('rejects spaces', () => {
-    expect(() => validateTablePrefix('flaky test')).toThrow('invalid tablePrefix')
+    expect(() => validateTablePrefix('flaky test')).toThrow(
+      'invalid tablePrefix',
+    )
   })
 
   test('rejects empty string', () => {
@@ -39,6 +43,8 @@ describe('validateTablePrefix()', () => {
   })
 
   test('rejects special characters', () => {
-    expect(() => validateTablePrefix('test;drop')).toThrow('invalid tablePrefix')
+    expect(() => validateTablePrefix('test;drop')).toThrow(
+      'invalid tablePrefix',
+    )
   })
 })

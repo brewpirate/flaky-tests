@@ -1,7 +1,12 @@
-import { describe, test, expect, mock, afterEach } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 import type { FlakyPattern } from '@flaky-tests/core'
 import { type } from 'arktype'
-import { gitHubConfigSchema, findExistingIssue, createIssue, type GitHubConfig } from './github'
+import {
+  createIssue,
+  findExistingIssue,
+  type GitHubConfig,
+  gitHubConfigSchema,
+} from './github'
 
 // ---------------------------------------------------------------------------
 // gitHubConfigSchema
@@ -13,19 +18,33 @@ describe('gitHubConfigSchema', () => {
   }
 
   test('accepts valid config', () => {
-    expect(isError(gitHubConfigSchema({ token: 'ghp_abc', owner: 'brewpirate', repo: 'flaky-tests' }))).toBe(false)
+    expect(
+      isError(
+        gitHubConfigSchema({
+          token: 'ghp_abc',
+          owner: 'brewpirate',
+          repo: 'flaky-tests',
+        }),
+      ),
+    ).toBe(false)
   })
 
   test('rejects empty token', () => {
-    expect(isError(gitHubConfigSchema({ token: '', owner: 'x', repo: 'y' }))).toBe(true)
+    expect(
+      isError(gitHubConfigSchema({ token: '', owner: 'x', repo: 'y' })),
+    ).toBe(true)
   })
 
   test('rejects empty owner', () => {
-    expect(isError(gitHubConfigSchema({ token: 'tok', owner: '', repo: 'y' }))).toBe(true)
+    expect(
+      isError(gitHubConfigSchema({ token: 'tok', owner: '', repo: 'y' })),
+    ).toBe(true)
   })
 
   test('rejects empty repo', () => {
-    expect(isError(gitHubConfigSchema({ token: 'tok', owner: 'x', repo: '' }))).toBe(true)
+    expect(
+      isError(gitHubConfigSchema({ token: 'tok', owner: 'x', repo: '' })),
+    ).toBe(true)
   })
 
   test('rejects missing token', () => {
@@ -70,7 +89,11 @@ describe('findExistingIssue()', () => {
 
   test('returns issue number when found', async () => {
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify({ items: [{ number: 42 }] }), { status: 200 })),
+      Promise.resolve(
+        new Response(JSON.stringify({ items: [{ number: 42 }] }), {
+          status: 200,
+        }),
+      ),
     )
     const result = await findExistingIssue(testConfig, 'auth > login')
     expect(result).toBe(42)
@@ -78,7 +101,9 @@ describe('findExistingIssue()', () => {
 
   test('returns null when no matching issues', async () => {
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
+      Promise.resolve(
+        new Response(JSON.stringify({ items: [] }), { status: 200 }),
+      ),
     )
     const result = await findExistingIssue(testConfig, 'auth > login')
     expect(result).toBeNull()
@@ -96,7 +121,9 @@ describe('findExistingIssue()', () => {
     let capturedHeaders: Headers | undefined
     globalThis.fetch = mock((_url: string, init?: RequestInit) => {
       capturedHeaders = new Headers(init?.headers)
-      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+      return Promise.resolve(
+        new Response(JSON.stringify({ items: [] }), { status: 200 }),
+      )
     })
     await findExistingIssue(testConfig, 'test')
     expect(capturedHeaders?.get('Authorization')).toBe('Bearer ghp_test123')
@@ -106,7 +133,9 @@ describe('findExistingIssue()', () => {
     let capturedUrl = ''
     globalThis.fetch = mock((url: string) => {
       capturedUrl = url
-      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+      return Promise.resolve(
+        new Response(JSON.stringify({ items: [] }), { status: 200 }),
+      )
     })
     await findExistingIssue(testConfig, 'auth > login')
     expect(capturedUrl).toContain('flaky-test')
@@ -127,7 +156,14 @@ describe('createIssue()', () => {
 
   test('returns issue URL on success', async () => {
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify({ html_url: 'https://github.com/testowner/testrepo/issues/1' }), { status: 201 })),
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            html_url: 'https://github.com/testowner/testrepo/issues/1',
+          }),
+          { status: 201 },
+        ),
+      ),
     )
     const url = await createIssue(testConfig, makePattern(), 7)
     expect(url).toBe('https://github.com/testowner/testrepo/issues/1')
@@ -139,10 +175,16 @@ describe('createIssue()', () => {
     globalThis.fetch = mock((url: string, init?: RequestInit) => {
       capturedUrl = url
       capturedMethod = init?.method ?? ''
-      return Promise.resolve(new Response(JSON.stringify({ html_url: 'https://x' }), { status: 201 }))
+      return Promise.resolve(
+        new Response(JSON.stringify({ html_url: 'https://x' }), {
+          status: 201,
+        }),
+      )
     })
     await createIssue(testConfig, makePattern(), 7)
-    expect(capturedUrl).toBe('https://api.github.com/repos/testowner/testrepo/issues')
+    expect(capturedUrl).toBe(
+      'https://api.github.com/repos/testowner/testrepo/issues',
+    )
     expect(capturedMethod).toBe('POST')
   })
 
@@ -150,7 +192,11 @@ describe('createIssue()', () => {
     let capturedBody = ''
     globalThis.fetch = mock((_url: string, init?: RequestInit) => {
       capturedBody = init?.body as string
-      return Promise.resolve(new Response(JSON.stringify({ html_url: 'https://x' }), { status: 201 }))
+      return Promise.resolve(
+        new Response(JSON.stringify({ html_url: 'https://x' }), {
+          status: 201,
+        }),
+      )
     })
     await createIssue(testConfig, makePattern(), 7)
     const parsed = JSON.parse(capturedBody)
@@ -161,7 +207,11 @@ describe('createIssue()', () => {
     let capturedBody = ''
     globalThis.fetch = mock((_url: string, init?: RequestInit) => {
       capturedBody = init?.body as string
-      return Promise.resolve(new Response(JSON.stringify({ html_url: 'https://x' }), { status: 201 }))
+      return Promise.resolve(
+        new Response(JSON.stringify({ html_url: 'https://x' }), {
+          status: 201,
+        }),
+      )
     })
     await createIssue(testConfig, makePattern(), 7)
     const parsed = JSON.parse(capturedBody)
@@ -172,14 +222,20 @@ describe('createIssue()', () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response('Validation Failed', { status: 422 })),
     )
-    expect(createIssue(testConfig, makePattern(), 7)).rejects.toThrow('GitHub API error 422')
+    expect(createIssue(testConfig, makePattern(), 7)).rejects.toThrow(
+      'GitHub API error 422',
+    )
   })
 
   test('includes investigation prompt in body', async () => {
     let capturedBody = ''
     globalThis.fetch = mock((_url: string, init?: RequestInit) => {
       capturedBody = init?.body as string
-      return Promise.resolve(new Response(JSON.stringify({ html_url: 'https://x' }), { status: 201 }))
+      return Promise.resolve(
+        new Response(JSON.stringify({ html_url: 'https://x' }), {
+          status: 201,
+        }),
+      )
     })
     await createIssue(testConfig, makePattern(), 7)
     const parsed = JSON.parse(capturedBody)

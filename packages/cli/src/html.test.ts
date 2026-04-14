@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
-import { generateHtml } from './html'
+import { describe, expect, test } from 'bun:test'
 import type { FlakyPattern } from '@flaky-tests/core'
+import { generateHtml } from './html'
 
 function makePattern(overrides: Partial<FlakyPattern> = {}): FlakyPattern {
   return {
@@ -39,18 +39,29 @@ describe('generateHtml', () => {
   })
 
   test('escapes HTML special characters in test name', () => {
-    const html = generateHtml([makePattern({ testName: '<script>alert("xss")</script>' })], 7)
-    expect(html).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;')
+    const html = generateHtml(
+      [makePattern({ testName: '<script>alert("xss")</script>' })],
+      7,
+    )
+    expect(html).toContain(
+      '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
+    )
     expect(html).not.toContain('<script>alert("xss")</script>')
   })
 
   test('escapes HTML special characters in test file', () => {
-    const html = generateHtml([makePattern({ testFile: 'src/<weird>&file.ts' })], 7)
+    const html = generateHtml(
+      [makePattern({ testFile: 'src/<weird>&file.ts' })],
+      7,
+    )
     expect(html).toContain('src/&lt;weird&gt;&amp;file.ts')
   })
 
   test('renders failure count and kinds', () => {
-    const html = generateHtml([makePattern({ recentFails: 5, failureKinds: ['timeout', 'assertion'] })], 7)
+    const html = generateHtml(
+      [makePattern({ recentFails: 5, failureKinds: ['timeout', 'assertion'] })],
+      7,
+    )
     expect(html).toContain('5 in 7d')
     expect(html).toContain('timeout, assertion')
   })
@@ -61,7 +72,10 @@ describe('generateHtml', () => {
   })
 
   test('includes last error first line when present', () => {
-    const html = generateHtml([makePattern({ lastErrorMessage: 'line one\nline two\nline three' })], 7)
+    const html = generateHtml(
+      [makePattern({ lastErrorMessage: 'line one\nline two\nline three' })],
+      7,
+    )
     expect(html).toContain('line one')
   })
 

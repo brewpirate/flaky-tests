@@ -8,11 +8,21 @@ export {
   MS_PER_DAY,
 } from './defaults'
 export { DescribeStack } from './describe-stack'
-export { generatePrompt } from './prompt'
 export { StoreError } from './errors'
 export { captureGitInfo, type RunCommand } from './git'
 export { escapeHtml } from './html-utils'
 export { mapRowToPattern, type PatternRow } from './pattern-mapper'
+export { generatePrompt } from './prompt'
+export {
+  failureKindSchema,
+  flakyPatternSchema,
+  getNewPatternsOptionsSchema,
+  gitInfoSchema,
+  insertFailureInputSchema,
+  insertRunInputSchema,
+  runStatusSchema,
+  updateRunInputSchema,
+} from './schemas'
 export { stripTimestampPrefix } from './store-utils'
 export type {
   FailureKind,
@@ -26,14 +36,4 @@ export type {
   UpdateRunInput,
 } from './types'
 export { validateTablePrefix } from './validate'
-export {
-  failureKindSchema,
-  flakyPatternSchema,
-  getNewPatternsOptionsSchema,
-  gitInfoSchema,
-  insertFailureInputSchema,
-  insertRunInputSchema,
-  runStatusSchema,
-  updateRunInputSchema,
-} from './schemas'
 export { parse, parseArray, ValidationError } from './validate-schemas'

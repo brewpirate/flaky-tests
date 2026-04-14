@@ -24,10 +24,13 @@
  *   );
  */
 
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { SupabaseStore } from './index'
 
-const SKIP = !process.env.INTEGRATION || !process.env.SUPABASE_TEST_URL || !process.env.SUPABASE_TEST_KEY
+const SKIP =
+  !process.env.INTEGRATION ||
+  !process.env.SUPABASE_TEST_URL ||
+  !process.env.SUPABASE_TEST_KEY
 const SUPABASE_URL = process.env.SUPABASE_TEST_URL ?? ''
 const SUPABASE_KEY = process.env.SUPABASE_TEST_KEY ?? ''
 const TABLE_PREFIX = 'ft_integ'
@@ -40,7 +43,12 @@ function daysAgo(n: number): Date {
   return new Date(Date.now() - n * 86400000)
 }
 
-function makeFailure(runId: string, testName: string, failedAt: Date, kind = 'assertion' as const) {
+function makeFailure(
+  runId: string,
+  testName: string,
+  failedAt: Date,
+  kind = 'assertion' as const,
+) {
   return {
     runId,
     testFile: 'tests/example.test.ts',
@@ -63,7 +71,11 @@ let store: SupabaseStore
 
 describe.skipIf(SKIP)('SupabaseStore integration', () => {
   beforeAll(async () => {
-    store = new SupabaseStore({ url: SUPABASE_URL, key: SUPABASE_KEY, tablePrefix: TABLE_PREFIX })
+    store = new SupabaseStore({
+      url: SUPABASE_URL,
+      key: SUPABASE_KEY,
+      tablePrefix: TABLE_PREFIX,
+    })
     await store.migrate()
   })
 
@@ -96,14 +108,26 @@ describe.skipIf(SKIP)('SupabaseStore integration', () => {
   test('insertFailure records a failure', async () => {
     const runId = `${RUN_PREFIX}run-f`
     await store.insertRun({ runId, startedAt: new Date().toISOString() })
-    await store.updateRun(runId, { endedAt: new Date().toISOString(), status: 'fail', totalTests: 1, passedTests: 0, failedTests: 1 })
+    await store.updateRun(runId, {
+      endedAt: new Date().toISOString(),
+      status: 'fail',
+      totalTests: 1,
+      passedTests: 0,
+      failedTests: 1,
+    })
     await store.insertFailure(makeFailure(runId, 'sb-test > fails', new Date()))
   })
 
   test('insertFailures batch inserts', async () => {
     const runId = `${RUN_PREFIX}run-b`
     await store.insertRun({ runId, startedAt: new Date().toISOString() })
-    await store.updateRun(runId, { endedAt: new Date().toISOString(), status: 'fail', totalTests: 3, passedTests: 1, failedTests: 2 })
+    await store.updateRun(runId, {
+      endedAt: new Date().toISOString(),
+      status: 'fail',
+      totalTests: 3,
+      passedTests: 1,
+      failedTests: 2,
+    })
     await store.insertFailures([
       makeFailure(runId, 'sb-test-a', new Date()),
       makeFailure(runId, 'sb-test-b', new Date()),
@@ -113,7 +137,13 @@ describe.skipIf(SKIP)('SupabaseStore integration', () => {
   test('getNewPatterns detects newly flaky test', async () => {
     const runId = `${RUN_PREFIX}det`
     await store.insertRun({ runId, startedAt: daysAgo(2).toISOString() })
-    await store.updateRun(runId, { endedAt: daysAgo(2).toISOString(), status: 'fail', totalTests: 5, passedTests: 3, failedTests: 2 })
+    await store.updateRun(runId, {
+      endedAt: daysAgo(2).toISOString(),
+      status: 'fail',
+      totalTests: 5,
+      passedTests: 3,
+      failedTests: 2,
+    })
 
     const testName = `sb-flaky-${Date.now()}`
     await store.insertFailure(makeFailure(runId, testName, daysAgo(1)))
@@ -127,7 +157,10 @@ describe.skipIf(SKIP)('SupabaseStore integration', () => {
 
   test('getNewPatterns returns empty for clean window', async () => {
     // No recent failures for a unique test name
-    const patterns = await store.getNewPatterns({ windowDays: 7, threshold: 999 })
+    const patterns = await store.getNewPatterns({
+      windowDays: 7,
+      threshold: 999,
+    })
     expect(patterns).toEqual([])
   })
 })

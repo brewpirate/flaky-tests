@@ -1,20 +1,20 @@
 import {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
-  MAX_FAILED_TESTS_PER_RUN,
-  MS_PER_DAY,
-  StoreError,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
   getNewPatternsOptionsSchema,
   type InsertFailureInput,
-  insertFailureInputSchema,
   type InsertRunInput,
-  insertRunInputSchema,
   type IStore,
+  insertFailureInputSchema,
+  insertRunInputSchema,
+  MAX_FAILED_TESTS_PER_RUN,
+  MS_PER_DAY,
   parse,
   parseArray,
+  StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
   validateTablePrefix,
@@ -59,7 +59,10 @@ export class SupabaseStore implements IStore {
    */
   async migrate(): Promise<void> {
     // Verify tables exist by attempting a lightweight query
-    const { error } = await this.client.from(this.runsTable).select('run_id').limit(0)
+    const { error } = await this.client
+      .from(this.runsTable)
+      .select('run_id')
+      .limit(0)
     if (error) {
       throw new StoreError({
         package: PACKAGE,
@@ -81,7 +84,13 @@ export class SupabaseStore implements IStore {
       runtime_version: input.runtimeVersion ?? null,
       test_args: input.testArgs ?? null,
     })
-    if (error) throw new StoreError({ package: PACKAGE, method: 'insertRun', message: error.message, cause: error })
+    if (error)
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'insertRun',
+        message: error.message,
+        cause: error,
+      })
   }
 
   /**
@@ -103,7 +112,13 @@ export class SupabaseStore implements IStore {
         errors_between_tests: input.errorsBetweenTests ?? null,
       })
       .eq('run_id', runId)
-    if (error) throw new StoreError({ package: PACKAGE, method: 'updateRun', message: error.message, cause: error })
+    if (error)
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'updateRun',
+        message: error.message,
+        cause: error,
+      })
   }
 
   /** Record a single test failure. `durationMs` is rounded to the nearest integer. */
@@ -120,7 +135,13 @@ export class SupabaseStore implements IStore {
         input.durationMs != null ? Math.round(input.durationMs) : null,
       failed_at: input.failedAt,
     })
-    if (error) throw new StoreError({ package: PACKAGE, method: 'insertFailure', message: error.message, cause: error })
+    if (error)
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'insertFailure',
+        message: error.message,
+        cause: error,
+      })
   }
 
   /**
@@ -138,12 +159,19 @@ export class SupabaseStore implements IStore {
         failure_kind: input.failureKind,
         error_message: input.errorMessage ?? null,
         error_stack: input.errorStack ?? null,
-        duration_ms: input.durationMs != null ? Math.round(input.durationMs) : null,
+        duration_ms:
+          input.durationMs != null ? Math.round(input.durationMs) : null,
         failed_at: input.failedAt,
       }
     })
     const { error } = await this.client.from(this.failuresTable).insert(rows)
-    if (error) throw new StoreError({ package: PACKAGE, method: 'insertFailures', message: error.message, cause: error })
+    if (error)
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'insertFailures',
+        message: error.message,
+        cause: error,
+      })
   }
 
   /**
@@ -171,7 +199,13 @@ export class SupabaseStore implements IStore {
       .lt(`${this.runsTable}.failed_tests`, MAX_FAILED_TESTS_PER_RUN)
       .not(`${this.runsTable}.ended_at`, 'is', null)
 
-    if (error) throw new StoreError({ package: PACKAGE, method: 'getNewPatterns', message: error.message, cause: error })
+    if (error)
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'getNewPatterns',
+        message: error.message,
+        cause: error,
+      })
 
     type Row = {
       test_file: string
@@ -228,19 +262,22 @@ export class SupabaseStore implements IStore {
       }
     }
 
-    return parseArray(flakyPatternSchema, [...map.values()]
-      .filter((e) => e.recentFails >= threshold && e.priorFails === 0)
-      .sort((a, b) => b.recentFails - a.recentFails)
-      .map((e) => ({
-        testFile: e.testFile,
-        testName: e.testName,
-        recentFails: e.recentFails,
-        priorFails: e.priorFails,
-        failureKinds: [...e.kinds],
-        lastErrorMessage: e.lastMsg,
-        lastErrorStack: e.lastStack,
-        lastFailed: e.lastFailed,
-      })))
+    return parseArray(
+      flakyPatternSchema,
+      [...map.values()]
+        .filter((e) => e.recentFails >= threshold && e.priorFails === 0)
+        .sort((a, b) => b.recentFails - a.recentFails)
+        .map((e) => ({
+          testFile: e.testFile,
+          testName: e.testName,
+          recentFails: e.recentFails,
+          priorFails: e.priorFails,
+          failureKinds: [...e.kinds],
+          lastErrorMessage: e.lastMsg,
+          lastErrorStack: e.lastStack,
+          lastFailed: e.lastFailed,
+        })),
+    )
   }
 
   async close(): Promise<void> {

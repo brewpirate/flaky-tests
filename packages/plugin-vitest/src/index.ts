@@ -80,7 +80,10 @@ function getTestPath(task: TaskBase): string {
 }
 
 /** Recursively visits every task (tests and suites) in a task tree. */
-function walkTasks(tasks: readonly TaskBase[], visit: (task: TaskBase) => void): void {
+function walkTasks(
+  tasks: readonly TaskBase[],
+  visit: (task: TaskBase) => void,
+): void {
   for (const task of tasks) {
     visit(task)
     if (task.tasks) walkTasks(task.tasks, visit)
@@ -122,14 +125,16 @@ export class FlakyTestsReporter {
     this.ready = true
     const git = captureGitInfo()
     await this.store
-      .insertRun(parse(insertRunInputSchema, {
-        runId: this.runId,
-        startedAt: new Date().toISOString(),
-        gitSha: git.sha,
-        gitDirty: git.dirty,
-        runtimeVersion: process.version,
-        testArgs: process.argv.slice(2).join(' '),
-      }))
+      .insertRun(
+        parse(insertRunInputSchema, {
+          runId: this.runId,
+          startedAt: new Date().toISOString(),
+          gitSha: git.sha,
+          gitDirty: git.dirty,
+          runtimeVersion: process.version,
+          testArgs: process.argv.slice(2).join(' '),
+        }),
+      )
       .catch((e: unknown) => console.warn('[flaky-tests] insertRun failed:', e))
   }
 
@@ -166,18 +171,20 @@ export class FlakyTestsReporter {
         if (result.state === 'fail') {
           failedTests++
           const firstError = (result.errors ?? [])[0]
-          failureInputs.push(parse(insertFailureInputSchema, {
-            runId: this.runId,
-            testFile: task.file?.filepath ?? 'unknown',
-            testName: getTestPath(task),
-            failureKind: categorizeError(firstError),
-            errorMessage:
-              firstError != null ? extractMessage(firstError) : null,
-            errorStack: firstError != null ? extractStack(firstError) : null,
-            durationMs:
-              result.duration != null ? Math.round(result.duration) : null,
-            failedAt: new Date().toISOString(),
-          }))
+          failureInputs.push(
+            parse(insertFailureInputSchema, {
+              runId: this.runId,
+              testFile: task.file?.filepath ?? 'unknown',
+              testName: getTestPath(task),
+              failureKind: categorizeError(firstError),
+              errorMessage:
+                firstError != null ? extractMessage(firstError) : null,
+              errorStack: firstError != null ? extractStack(firstError) : null,
+              durationMs:
+                result.duration != null ? Math.round(result.duration) : null,
+              failedAt: new Date().toISOString(),
+            }),
+          )
         }
       })
     }
@@ -189,15 +196,18 @@ export class FlakyTestsReporter {
       )
 
     await this.store
-      .updateRun(this.runId, parse(updateRunInputSchema, {
-        endedAt: new Date().toISOString(),
-        durationMs: Math.round(performance.now() - this.startTime),
-        status: failedTests > 0 || errors.length > 0 ? 'fail' : 'pass',
-        totalTests,
-        passedTests,
-        failedTests,
-        errorsBetweenTests: errors.length,
-      }))
+      .updateRun(
+        this.runId,
+        parse(updateRunInputSchema, {
+          endedAt: new Date().toISOString(),
+          durationMs: Math.round(performance.now() - this.startTime),
+          status: failedTests > 0 || errors.length > 0 ? 'fail' : 'pass',
+          totalTests,
+          passedTests,
+          failedTests,
+          errorsBetweenTests: errors.length,
+        }),
+      )
       .catch((e: unknown) => console.warn('[flaky-tests] updateRun failed:', e))
 
     await this.store

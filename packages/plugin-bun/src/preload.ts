@@ -84,14 +84,16 @@ export function createPreload(store: IStore): void {
   const git = captureGitInfo()
 
   safeVoid('insertRun', () =>
-    store.insertRun(parse(insertRunInputSchema, {
-      runId,
-      startedAt,
-      gitSha: git.sha,
-      gitDirty: git.dirty,
-      runtimeVersion: Bun.version,
-      testArgs: process.argv.slice(2).join(' '),
-    })),
+    store.insertRun(
+      parse(insertRunInputSchema, {
+        runId,
+        startedAt,
+        gitSha: git.sha,
+        gitDirty: git.dirty,
+        runtimeVersion: Bun.version,
+        testArgs: process.argv.slice(2).join(' '),
+      }),
+    ),
   )
 
   let testsRun = 0
@@ -103,16 +105,18 @@ export function createPreload(store: IStore): void {
   const onRunLevelError = (error: unknown): void => {
     errorsBetweenTests++
     safeVoid('insertFailure (between-tests)', () =>
-      store.insertFailure(parse(insertFailureInputSchema, {
-        runId,
-        testFile: resolveTestFile(error),
-        testName: '<between tests>',
-        failureKind: categorizeError(error),
-        errorMessage: extractMessage(error),
-        errorStack: extractStack(error),
-        durationMs: 0,
-        failedAt: new Date().toISOString(),
-      })),
+      store.insertFailure(
+        parse(insertFailureInputSchema, {
+          runId,
+          testFile: resolveTestFile(error),
+          testName: '<between tests>',
+          failureKind: categorizeError(error),
+          errorMessage: extractMessage(error),
+          errorStack: extractStack(error),
+          durationMs: 0,
+          failedAt: new Date().toISOString(),
+        }),
+      ),
     )
   }
   process.on('uncaughtException', onRunLevelError)
@@ -125,16 +129,18 @@ export function createPreload(store: IStore): void {
     durationMs: number
   }): void => {
     safeVoid('insertFailure', () =>
-      store.insertFailure(parse(insertFailureInputSchema, {
-        runId,
-        testFile: opts.testFile,
-        testName: opts.testName,
-        failureKind: categorizeError(opts.error),
-        errorMessage: extractMessage(opts.error),
-        errorStack: extractStack(opts.error),
-        durationMs: Math.round(opts.durationMs),
-        failedAt: new Date().toISOString(),
-      })),
+      store.insertFailure(
+        parse(insertFailureInputSchema, {
+          runId,
+          testFile: opts.testFile,
+          testName: opts.testName,
+          failureKind: categorizeError(opts.error),
+          errorMessage: extractMessage(opts.error),
+          errorStack: extractStack(opts.error),
+          durationMs: Math.round(opts.durationMs),
+          failedAt: new Date().toISOString(),
+        }),
+      ),
     )
   }
 
@@ -220,15 +226,18 @@ export function createPreload(store: IStore): void {
       testsFailed > 0 || errorsBetweenTests > 0 ? 'fail' : 'pass'
 
     await store
-      .updateRun(runId, parse(updateRunInputSchema, {
-        endedAt,
-        durationMs,
-        status,
-        totalTests: testsRun,
-        passedTests,
-        failedTests: testsFailed,
-        errorsBetweenTests,
-      }))
+      .updateRun(
+        runId,
+        parse(updateRunInputSchema, {
+          endedAt,
+          durationMs,
+          status,
+          totalTests: testsRun,
+          passedTests,
+          failedTests: testsFailed,
+          errorsBetweenTests,
+        }),
+      )
       .catch((e: unknown) => console.warn('[flaky-tests] updateRun failed:', e))
 
     await store

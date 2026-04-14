@@ -4,9 +4,12 @@ import { type } from 'arktype'
 // Reusable constraints
 // ---------------------------------------------------------------------------
 
-const isoTimestamp = type('string').narrow((value, ctx) =>
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)
-    || ctx.reject({ expected: 'an ISO 8601 timestamp (YYYY-MM-DDTHH:mm:ss.sssZ)' }),
+const isoTimestamp = type('string').narrow(
+  (value, ctx) =>
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) ||
+    ctx.reject({
+      expected: 'an ISO 8601 timestamp (YYYY-MM-DDTHH:mm:ss.sssZ)',
+    }),
 )
 
 const nonEmptyString = type.string.atLeastLength(1)
@@ -18,7 +21,9 @@ const positiveInt = type('number.integer > 0')
 // ---------------------------------------------------------------------------
 
 /** Coarse classification of why a test failed. */
-export const failureKindSchema = type("'assertion' | 'timeout' | 'uncaught' | 'unknown'")
+export const failureKindSchema = type(
+  "'assertion' | 'timeout' | 'uncaught' | 'unknown'",
+)
 
 /** Terminal status of a completed test run. */
 export const runStatusSchema = type("'pass' | 'fail'")

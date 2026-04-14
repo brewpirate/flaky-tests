@@ -1,5 +1,12 @@
-import { describe, test, expect, mock } from 'bun:test'
-import type { IStore, InsertRunInput, UpdateRunInput, InsertFailureInput, FlakyPattern, GetNewPatternsOptions } from '@flaky-tests/core'
+import { describe, expect, mock, test } from 'bun:test'
+import type {
+  FlakyPattern,
+  GetNewPatternsOptions,
+  InsertFailureInput,
+  InsertRunInput,
+  IStore,
+  UpdateRunInput,
+} from '@flaky-tests/core'
 import { FlakyTestsReporter } from './index'
 
 // ---------------------------------------------------------------------------
@@ -25,12 +32,26 @@ function createMockStore(): { store: IStore; calls: StoreCalls } {
 
   const store: IStore = {
     async migrate() {},
-    async insertRun(input) { calls.insertRun.push(input) },
-    async updateRun(runId, input) { calls.updateRun.push({ runId, input }) },
-    async insertFailure(input) { calls.insertFailure.push(input) },
-    async insertFailures(inputs) { calls.insertFailures.push([...inputs]) },
-    async getNewPatterns(_options?: GetNewPatternsOptions): Promise<FlakyPattern[]> { return [] },
-    async close() { calls.closed = true },
+    async insertRun(input) {
+      calls.insertRun.push(input)
+    },
+    async updateRun(runId, input) {
+      calls.updateRun.push({ runId, input })
+    },
+    async insertFailure(input) {
+      calls.insertFailure.push(input)
+    },
+    async insertFailures(inputs) {
+      calls.insertFailures.push([...inputs])
+    },
+    async getNewPatterns(
+      _options?: GetNewPatternsOptions,
+    ): Promise<FlakyPattern[]> {
+      return []
+    },
+    async close() {
+      calls.closed = true
+    },
   }
 
   return { store, calls }
@@ -127,14 +148,19 @@ describe('FlakyTestsReporter', () => {
     const error = new Error('assertion failed')
     const file = makeFileTask([
       makeTask({ name: 'passing', result: { state: 'pass' } }),
-      makeTask({ name: 'failing', result: { state: 'fail', errors: [error], duration: 123 } }),
+      makeTask({
+        name: 'failing',
+        result: { state: 'fail', errors: [error], duration: 123 },
+      }),
     ])
     await reporter.onFinished([file], [])
 
     expect(calls.insertFailures).toHaveLength(1)
     expect(calls.insertFailures[0]).toHaveLength(1)
     expect(calls.insertFailures[0]?.[0]?.testName).toBe('failing')
-    expect(calls.insertFailures[0]?.[0]?.errorMessage).toContain('assertion failed')
+    expect(calls.insertFailures[0]?.[0]?.errorMessage).toContain(
+      'assertion failed',
+    )
     expect(calls.updateRun[0]?.input.status).toBe('fail')
     expect(calls.updateRun[0]?.input.failedTests).toBe(1)
   })
@@ -159,7 +185,10 @@ describe('FlakyTestsReporter', () => {
       name: 'inner',
       type: 'suite',
       tasks: [
-        makeTask({ name: 'deep test', result: { state: 'fail', errors: [new Error('fail')] } }),
+        makeTask({
+          name: 'deep test',
+          result: { state: 'fail', errors: [new Error('fail')] },
+        }),
       ],
     }
     // Set suite parent reference
@@ -177,7 +206,9 @@ describe('FlakyTestsReporter', () => {
     const file = makeFileTask([outerSuite])
     await reporter.onFinished([file], [])
 
-    expect(calls.insertFailures[0]?.[0]?.testName).toBe('outer > inner > deep test')
+    expect(calls.insertFailures[0]?.[0]?.testName).toBe(
+      'outer > inner > deep test',
+    )
   })
 
   test('onFinished calls store.close()', async () => {
@@ -226,7 +257,13 @@ describe('FlakyTestsReporter', () => {
     await reporter.onInit({})
 
     const file = makeFileTask([
-      { id: 's1', name: 'suite', type: 'suite', result: { state: 'pass' }, tasks: [] },
+      {
+        id: 's1',
+        name: 'suite',
+        type: 'suite',
+        result: { state: 'pass' },
+        tasks: [],
+      },
       makeTask({ name: 'test', result: { state: 'pass' } }),
     ])
     await reporter.onFinished([file], [])

@@ -12,8 +12,13 @@
  * updateRun/close in afterAll (not directly testable from within tests).
  */
 
-import { describe, test, expect } from 'bun:test'
-import type { IStore, InsertRunInput, FlakyPattern, GetNewPatternsOptions } from '@flaky-tests/core'
+import { describe, expect, test } from 'bun:test'
+import type {
+  FlakyPattern,
+  GetNewPatternsOptions,
+  InsertRunInput,
+  IStore,
+} from '@flaky-tests/core'
 
 describe('createPreload store contract', () => {
   test('createPreload calls insertRun on initialization', async () => {
@@ -21,11 +26,17 @@ describe('createPreload store contract', () => {
 
     const mockStore: IStore = {
       async migrate() {},
-      async insertRun(input) { insertRunCalls.push(input) },
+      async insertRun(input) {
+        insertRunCalls.push(input)
+      },
       async updateRun(_runId, _input) {},
       async insertFailure(_input) {},
       async insertFailures(_inputs) {},
-      async getNewPatterns(_options?: GetNewPatternsOptions): Promise<FlakyPattern[]> { return [] },
+      async getNewPatterns(
+        _options?: GetNewPatternsOptions,
+      ): Promise<FlakyPattern[]> {
+        return []
+      },
       async close() {},
     }
 

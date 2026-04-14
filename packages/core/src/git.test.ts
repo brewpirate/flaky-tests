@@ -4,7 +4,8 @@ import { captureGitInfo, type RunCommand } from './git'
 describe('captureGitInfo()', () => {
   test('returns sha and dirty=false for clean repo', () => {
     const runCommand: RunCommand = (_command, args) => {
-      if (args[0] === 'rev-parse') return 'abc123def456abc123def456abc123def456abc1\n'
+      if (args[0] === 'rev-parse')
+        return 'abc123def456abc123def456abc123def456abc1\n'
       if (args[0] === 'status') return ''
       return null
     }

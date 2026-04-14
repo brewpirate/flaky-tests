@@ -73,19 +73,32 @@ describe('insertRunInputSchema', () => {
   })
 
   test('rejects empty runId', () => {
-    expect(isError(insertRunInputSchema({ ...validInput, runId: '' }))).toBe(true)
+    expect(isError(insertRunInputSchema({ ...validInput, runId: '' }))).toBe(
+      true,
+    )
   })
 
   test('rejects invalid timestamp', () => {
-    expect(isError(insertRunInputSchema({ ...validInput, startedAt: 'not-a-date' }))).toBe(true)
+    expect(
+      isError(insertRunInputSchema({ ...validInput, startedAt: 'not-a-date' })),
+    ).toBe(true)
   })
 
   test('rejects missing runId', () => {
-    expect(isError(insertRunInputSchema({ startedAt: validTimestamp }))).toBe(true)
+    expect(isError(insertRunInputSchema({ startedAt: validTimestamp }))).toBe(
+      true,
+    )
   })
 
   test('rejects timestamp without Z suffix', () => {
-    expect(isError(insertRunInputSchema({ ...validInput, startedAt: '2024-06-15T10:30:00+00:00' }))).toBe(true)
+    expect(
+      isError(
+        insertRunInputSchema({
+          ...validInput,
+          startedAt: '2024-06-15T10:30:00+00:00',
+        }),
+      ),
+    ).toBe(true)
   })
 })
 
@@ -166,15 +179,23 @@ describe('insertFailureInputSchema', () => {
   })
 
   test('rejects invalid failureKind', () => {
-    expect(isError(insertFailureInputSchema({ ...validFailure, failureKind: 'crash' }))).toBe(true)
+    expect(
+      isError(
+        insertFailureInputSchema({ ...validFailure, failureKind: 'crash' }),
+      ),
+    ).toBe(true)
   })
 
   test('rejects empty testFile', () => {
-    expect(isError(insertFailureInputSchema({ ...validFailure, testFile: '' }))).toBe(true)
+    expect(
+      isError(insertFailureInputSchema({ ...validFailure, testFile: '' })),
+    ).toBe(true)
   })
 
   test('rejects negative durationMs', () => {
-    expect(isError(insertFailureInputSchema({ ...validFailure, durationMs: -1 }))).toBe(true)
+    expect(
+      isError(insertFailureInputSchema({ ...validFailure, durationMs: -1 })),
+    ).toBe(true)
   })
 })
 
@@ -199,15 +220,21 @@ describe('flakyPatternSchema', () => {
   })
 
   test('rejects non-integer recentFails', () => {
-    expect(isError(flakyPatternSchema({ ...validPattern, recentFails: 2.5 }))).toBe(true)
+    expect(
+      isError(flakyPatternSchema({ ...validPattern, recentFails: 2.5 })),
+    ).toBe(true)
   })
 
   test('rejects negative priorFails', () => {
-    expect(isError(flakyPatternSchema({ ...validPattern, priorFails: -1 }))).toBe(true)
+    expect(
+      isError(flakyPatternSchema({ ...validPattern, priorFails: -1 })),
+    ).toBe(true)
   })
 
   test('rejects invalid lastFailed timestamp', () => {
-    expect(isError(flakyPatternSchema({ ...validPattern, lastFailed: 'bad' }))).toBe(true)
+    expect(
+      isError(flakyPatternSchema({ ...validPattern, lastFailed: 'bad' })),
+    ).toBe(true)
   })
 })
 
@@ -221,7 +248,9 @@ describe('getNewPatternsOptionsSchema', () => {
   })
 
   test('accepts valid options', () => {
-    expect(isError(getNewPatternsOptionsSchema({ windowDays: 14, threshold: 3 }))).toBe(false)
+    expect(
+      isError(getNewPatternsOptionsSchema({ windowDays: 14, threshold: 3 })),
+    ).toBe(false)
   })
 
   test('rejects zero windowDays', () => {

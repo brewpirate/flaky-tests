@@ -13,7 +13,9 @@ describe('ValidationError', () => {
 
   test('message includes prefix and summary', () => {
     const error = new ValidationError('x must be a string')
-    expect(error.message).toBe('[flaky-tests] Validation failed: x must be a string')
+    expect(error.message).toBe(
+      '[flaky-tests] Validation failed: x must be a string',
+    )
   })
 
   test('summary property is set', () => {
@@ -69,6 +71,8 @@ describe('parseArray()', () => {
   })
 
   test('fails on first invalid item', () => {
-    expect(() => parseArray(numberSchema, [1, 'bad', 3])).toThrow(ValidationError)
+    expect(() => parseArray(numberSchema, [1, 'bad', 3])).toThrow(
+      ValidationError,
+    )
   })
 })

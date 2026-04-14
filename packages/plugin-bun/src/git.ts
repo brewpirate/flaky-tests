@@ -1,4 +1,9 @@
-import { captureGitInfo as captureGitInfoCore, type GitInfo, type RunCommand } from '@flaky-tests/core'
+import {
+  captureGitInfo as captureGitInfoCore,
+  type GitInfo,
+  type RunCommand,
+} from '@flaky-tests/core'
+
 export type { GitInfo } from '@flaky-tests/core'
 
 const runCommand: RunCommand = (command, args) => {

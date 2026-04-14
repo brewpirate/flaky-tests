@@ -30,9 +30,17 @@ import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FlakyPattern, IStore } from '@flaky-tests/core'
-import { getNewPatternsOptionsSchema, MAX_CLI_ERROR_MESSAGE_LENGTH, parse } from '@flaky-tests/core'
-import { gitHubConfigSchema } from './github'
-import { createIssue, findExistingIssue, resolveRepo } from './github'
+import {
+  getNewPatternsOptionsSchema,
+  MAX_CLI_ERROR_MESSAGE_LENGTH,
+  parse,
+} from '@flaky-tests/core'
+import {
+  createIssue,
+  findExistingIssue,
+  gitHubConfigSchema,
+  resolveRepo,
+} from './github'
 import { generateHtml } from './html'
 import { copyToClipboard, generatePrompt } from './prompt'
 
@@ -74,7 +82,10 @@ async function resolveStore(): Promise<IStore> {
 // --- Argument parsing (no deps, just process.argv) -----------------------
 
 function flag(name: string): boolean {
-  return process.argv.includes(`--${name}`) || process.argv.includes(`-${name.charAt(0)}`)
+  return (
+    process.argv.includes(`--${name}`) ||
+    process.argv.includes(`-${name.charAt(0)}`)
+  )
 }
 
 function option(name: string, fallbackEnv?: string): string | undefined {
@@ -144,7 +155,9 @@ if (Number.isNaN(windowDays) || windowDays <= 0) {
 }
 
 if (Number.isNaN(threshold) || threshold <= 0 || !Number.isInteger(threshold)) {
-  console.error(`error: --threshold must be a positive integer, got "${rawThreshold}"`)
+  console.error(
+    `error: --threshold must be a positive integer, got "${rawThreshold}"`,
+  )
   process.exit(2)
 }
 
@@ -161,7 +174,9 @@ async function main(): Promise<void> {
 
   let patterns: FlakyPattern[]
   try {
-    patterns = await store.getNewPatterns(parse(getNewPatternsOptionsSchema, { windowDays, threshold }))
+    patterns = await store.getNewPatterns(
+      parse(getNewPatternsOptionsSchema, { windowDays, threshold }),
+    )
   } finally {
     await store.close()
   }
@@ -184,7 +199,9 @@ async function main(): Promise<void> {
     )
     if (p.lastErrorMessage) {
       const msg = p.lastErrorMessage.split('\n')[0] ?? p.lastErrorMessage
-      console.log(`     ${msg.slice(0, MAX_CLI_ERROR_MESSAGE_LENGTH)}${msg.length > MAX_CLI_ERROR_MESSAGE_LENGTH ? '…' : ''}`)
+      console.log(
+        `     ${msg.slice(0, MAX_CLI_ERROR_MESSAGE_LENGTH)}${msg.length > MAX_CLI_ERROR_MESSAGE_LENGTH ? '…' : ''}`,
+      )
     }
     console.log()
   }

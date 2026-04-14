@@ -25,12 +25,16 @@ describe('mapRowToPattern()', () => {
   })
 
   test('splits comma-separated failure_kinds string', () => {
-    const pattern = mapRowToPattern(makeRow({ failure_kinds: 'assertion,timeout,uncaught' }))
+    const pattern = mapRowToPattern(
+      makeRow({ failure_kinds: 'assertion,timeout,uncaught' }),
+    )
     expect(pattern.failureKinds).toEqual(['assertion', 'timeout', 'uncaught'])
   })
 
   test('handles failure_kinds as array (Postgres)', () => {
-    const pattern = mapRowToPattern(makeRow({ failure_kinds: ['assertion', 'timeout'] }))
+    const pattern = mapRowToPattern(
+      makeRow({ failure_kinds: ['assertion', 'timeout'] }),
+    )
     expect(pattern.failureKinds).toEqual(['assertion', 'timeout'])
   })
 
@@ -61,12 +65,16 @@ describe('mapRowToPattern()', () => {
   })
 
   test('passes string last_failed through (SQLite/Turso)', () => {
-    const pattern = mapRowToPattern(makeRow({ last_failed: '2024-06-15T10:00:00.000Z' }))
+    const pattern = mapRowToPattern(
+      makeRow({ last_failed: '2024-06-15T10:00:00.000Z' }),
+    )
     expect(pattern.lastFailed).toBe('2024-06-15T10:00:00.000Z')
   })
 
   test('coerces numeric fields from strings', () => {
-    const pattern = mapRowToPattern(makeRow({ recent_fails: '5', prior_fails: '1' }))
+    const pattern = mapRowToPattern(
+      makeRow({ recent_fails: '5', prior_fails: '1' }),
+    )
     expect(pattern.recentFails).toBe(5)
     expect(pattern.priorFails).toBe(1)
   })

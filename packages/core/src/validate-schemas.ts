@@ -1,4 +1,4 @@
-import { type, type Type } from 'arktype'
+import { type Type, type } from 'arktype'
 
 /** Thrown when runtime data fails ArkType schema validation. */
 export class ValidationError extends Error {

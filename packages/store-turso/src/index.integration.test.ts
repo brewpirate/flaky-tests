@@ -6,7 +6,7 @@
  * Or:  bun run test:integration
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { TursoStore } from './index'
 
 const SKIP = !process.env.INTEGRATION
@@ -20,7 +20,12 @@ function daysAgo(n: number): Date {
   return new Date(Date.now() - n * 86400000)
 }
 
-function makeFailure(runId: string, testName: string, failedAt: Date, kind = 'assertion' as const) {
+function makeFailure(
+  runId: string,
+  testName: string,
+  failedAt: Date,
+  kind = 'assertion' as const,
+) {
   return {
     runId,
     testFile: 'tests/example.test.ts',
@@ -71,14 +76,32 @@ describe.skipIf(SKIP)('TursoStore integration', () => {
   })
 
   test('insertFailure records a failure', async () => {
-    await store.insertRun({ runId: 'run-f', startedAt: new Date().toISOString() })
-    await store.updateRun('run-f', { endedAt: new Date().toISOString(), status: 'fail', totalTests: 1, passedTests: 0, failedTests: 1 })
+    await store.insertRun({
+      runId: 'run-f',
+      startedAt: new Date().toISOString(),
+    })
+    await store.updateRun('run-f', {
+      endedAt: new Date().toISOString(),
+      status: 'fail',
+      totalTests: 1,
+      passedTests: 0,
+      failedTests: 1,
+    })
     await store.insertFailure(makeFailure('run-f', 'test > fails', new Date()))
   })
 
   test('insertFailures batch inserts', async () => {
-    await store.insertRun({ runId: 'run-b', startedAt: new Date().toISOString() })
-    await store.updateRun('run-b', { endedAt: new Date().toISOString(), status: 'fail', totalTests: 3, passedTests: 1, failedTests: 2 })
+    await store.insertRun({
+      runId: 'run-b',
+      startedAt: new Date().toISOString(),
+    })
+    await store.updateRun('run-b', {
+      endedAt: new Date().toISOString(),
+      status: 'fail',
+      totalTests: 3,
+      passedTests: 1,
+      failedTests: 2,
+    })
     await store.insertFailures([
       makeFailure('run-b', 'test-a', new Date()),
       makeFailure('run-b', 'test-b', new Date()),
@@ -87,7 +110,13 @@ describe.skipIf(SKIP)('TursoStore integration', () => {
 
   test('getNewPatterns detects newly flaky test', async () => {
     await store.insertRun({ runId: 'r1', startedAt: daysAgo(2).toISOString() })
-    await store.updateRun('r1', { endedAt: daysAgo(2).toISOString(), status: 'fail', totalTests: 5, passedTests: 3, failedTests: 2 })
+    await store.updateRun('r1', {
+      endedAt: daysAgo(2).toISOString(),
+      status: 'fail',
+      totalTests: 5,
+      passedTests: 3,
+      failedTests: 2,
+    })
     await store.insertFailure(makeFailure('r1', 'auth > login', daysAgo(1)))
     await store.insertFailure(makeFailure('r1', 'auth > login', daysAgo(2)))
 
@@ -100,7 +129,13 @@ describe.skipIf(SKIP)('TursoStore integration', () => {
 
   test('getNewPatterns excludes tests with prior failures', async () => {
     await store.insertRun({ runId: 'r1', startedAt: daysAgo(2).toISOString() })
-    await store.updateRun('r1', { endedAt: daysAgo(2).toISOString(), status: 'fail', totalTests: 5, passedTests: 2, failedTests: 3 })
+    await store.updateRun('r1', {
+      endedAt: daysAgo(2).toISOString(),
+      status: 'fail',
+      totalTests: 5,
+      passedTests: 2,
+      failedTests: 3,
+    })
     await store.insertFailure(makeFailure('r1', 'auth > login', daysAgo(1)))
     await store.insertFailure(makeFailure('r1', 'auth > login', daysAgo(2)))
     await store.insertFailure(makeFailure('r1', 'auth > login', daysAgo(10))) // prior window
@@ -116,7 +151,13 @@ describe.skipIf(SKIP)('TursoStore integration', () => {
 
   test('getNewPatterns respects threshold', async () => {
     await store.insertRun({ runId: 'r1', startedAt: daysAgo(1).toISOString() })
-    await store.updateRun('r1', { endedAt: daysAgo(1).toISOString(), status: 'fail', totalTests: 2, passedTests: 0, failedTests: 2 })
+    await store.updateRun('r1', {
+      endedAt: daysAgo(1).toISOString(),
+      status: 'fail',
+      totalTests: 2,
+      passedTests: 0,
+      failedTests: 2,
+    })
     await store.insertFailure(makeFailure('r1', 'flaky', daysAgo(1)))
     await store.insertFailure(makeFailure('r1', 'flaky', daysAgo(2)))
 
@@ -126,8 +167,16 @@ describe.skipIf(SKIP)('TursoStore integration', () => {
 
   test('getNewPatterns collects failure kinds', async () => {
     await store.insertRun({ runId: 'r1', startedAt: daysAgo(1).toISOString() })
-    await store.updateRun('r1', { endedAt: daysAgo(1).toISOString(), status: 'fail', totalTests: 3, passedTests: 1, failedTests: 2 })
-    await store.insertFailure(makeFailure('r1', 'flaky', daysAgo(1), 'assertion'))
+    await store.updateRun('r1', {
+      endedAt: daysAgo(1).toISOString(),
+      status: 'fail',
+      totalTests: 3,
+      passedTests: 1,
+      failedTests: 2,
+    })
+    await store.insertFailure(
+      makeFailure('r1', 'flaky', daysAgo(1), 'assertion'),
+    )
     await store.insertFailure(makeFailure('r1', 'flaky', daysAgo(2), 'timeout'))
 
     const patterns = await store.getNewPatterns({ threshold: 2 })
@@ -136,14 +185,30 @@ describe.skipIf(SKIP)('TursoStore integration', () => {
 
   test('getNewPatterns includes error message from most recent failure', async () => {
     await store.insertRun({ runId: 'r1', startedAt: daysAgo(2).toISOString() })
-    await store.updateRun('r1', { endedAt: new Date().toISOString(), status: 'fail', totalTests: 2, passedTests: 0, failedTests: 2 })
-    await store.insertFailure({
-      runId: 'r1', testFile: 'f.test.ts', testName: 'flaky', failureKind: 'assertion',
-      errorMessage: 'older error', errorStack: null, failedAt: daysAgo(2).toISOString(),
+    await store.updateRun('r1', {
+      endedAt: new Date().toISOString(),
+      status: 'fail',
+      totalTests: 2,
+      passedTests: 0,
+      failedTests: 2,
     })
     await store.insertFailure({
-      runId: 'r1', testFile: 'f.test.ts', testName: 'flaky', failureKind: 'assertion',
-      errorMessage: 'newer error', errorStack: null, failedAt: daysAgo(1).toISOString(),
+      runId: 'r1',
+      testFile: 'f.test.ts',
+      testName: 'flaky',
+      failureKind: 'assertion',
+      errorMessage: 'older error',
+      errorStack: null,
+      failedAt: daysAgo(2).toISOString(),
+    })
+    await store.insertFailure({
+      runId: 'r1',
+      testFile: 'f.test.ts',
+      testName: 'flaky',
+      failureKind: 'assertion',
+      errorMessage: 'newer error',
+      errorStack: null,
+      failedAt: daysAgo(1).toISOString(),
     })
 
     const patterns = await store.getNewPatterns({ threshold: 2 })
