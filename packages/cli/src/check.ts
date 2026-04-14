@@ -10,6 +10,8 @@
  *   bunx @flaky-tests/cli --window 14 --threshold 3
  *   bunx @flaky-tests/cli --prompt     # print investigation prompts
  *   bunx @flaky-tests/cli --copy       # copy first prompt to clipboard
+ *   bunx @flaky-tests/cli --html       # write HTML report and open in browser
+ *   bunx @flaky-tests/cli --html --out report.html  # write to a specific file
  *
  * Environment variables:
  *   FLAKY_TESTS_DB         Override SQLite DB path
@@ -19,9 +21,13 @@
 
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
+import { writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { SqliteStore } from '@flaky-tests/store-sqlite'
 import type { FlakyPattern } from '@flaky-tests/core'
 import { copyToClipboard, generatePrompt } from './prompt'
+import { generateHtml } from './html'
 
 // --- Argument parsing (no deps, just process.argv) -----------------------
 
@@ -40,6 +46,8 @@ const windowDays = Number(option('window', 'FLAKY_TESTS_WINDOW') ?? 7)
 const threshold = Number(option('threshold', 'FLAKY_TESTS_THRESHOLD') ?? 2)
 const showPrompts = flag('prompt') || flag('copy')
 const doCopy = flag('copy')
+const doHtml = flag('html')
+const htmlOut = option('out')
 
 // --- Main ----------------------------------------------------------------
 
@@ -96,6 +104,21 @@ async function main(): Promise<void> {
     } else {
       console.log('⚠ Could not copy to clipboard — print with --prompt instead\n')
     }
+  }
+
+  if (doHtml) {
+    const html = generateHtml(patterns, windowDays)
+    const outPath = htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
+    writeFileSync(outPath, html, 'utf8')
+    console.log(`✓ Report written to ${outPath}`)
+
+    // Open in default browser
+    const opener =
+      process.platform === 'darwin' ? 'open' :
+      process.platform === 'win32'  ? 'start' :
+                                      'xdg-open'
+    Bun.spawnSync({ cmd: [opener, outPath], stdout: 'ignore', stderr: 'ignore' })
+    console.log('  Opening in browser…\n')
   }
 
   process.exit(1)
