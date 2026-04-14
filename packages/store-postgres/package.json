@@ -4,11 +4,36 @@
   "description": "PostgreSQL store adapter for flaky-tests",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/",
+    "src/",
+    "package.json",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir dist --format esm --target node --external @flaky-tests/core --external postgres",
+    "build:types": "tsc --project tsconfig.build.json",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "license": "MIT",
   "dependencies": {
     "@flaky-tests/core": "workspace:*",
+    "arktype": "^2.1.0",
     "postgres": "^3.4.0"
   }
 }

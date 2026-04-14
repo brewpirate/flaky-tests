@@ -4,7 +4,26 @@
   "description": "Vitest reporter plugin for flaky-tests",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist/", "src/", "package.json", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir dist --format esm --target node --external @flaky-tests/core --external vitest",
+    "build:types": "tsc --project tsconfig.build.json",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "license": "MIT",
   "dependencies": {
@@ -12,5 +31,8 @@
   },
   "peerDependencies": {
     "vitest": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0"
   }
 }

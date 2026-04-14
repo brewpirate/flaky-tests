@@ -11,6 +11,7 @@
 // biome-ignore-all lint/suspicious/noConsole: CLI script
 
 import { Database } from 'bun:sqlite'
+import { MAX_FAILED_TESTS_PER_RUN } from '@flaky-tests/core'
 
 const DB_PATH =
   process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
@@ -80,7 +81,7 @@ function loadData(): {
               GROUP_CONCAT(DISTINCT f.failure_kind) AS kinds
          FROM failures f
          JOIN runs r ON r.run_id = f.run_id
-        WHERE r.failed_tests < 10
+        WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
           AND r.ended_at IS NOT NULL
           AND f.failed_at > datetime('now', '-30 days')
         GROUP BY f.test_file, f.test_name
@@ -137,7 +138,7 @@ function loadData(): {
            SELECT 1
              FROM failures f
              JOIN runs r ON r.run_id = f.run_id
-            WHERE r.failed_tests < 10
+            WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
               AND r.ended_at IS NOT NULL
               AND f.failed_at > datetime('now', '-30 days')
             GROUP BY f.test_file, f.test_name
@@ -187,7 +188,12 @@ function loadData(): {
   db.close()
 
   return {
-    summary: { activeFlakyTests, dominantKind: dominantKindRow, worstFile: worstFileRow, recentRunPassRate },
+    summary: {
+      activeFlakyTests,
+      dominantKind: dominantKindRow,
+      worstFile: worstFileRow,
+      recentRunPassRate,
+    },
     flaky,
     kinds,
     recentRuns,
@@ -247,13 +253,21 @@ function passRateTone(pct: number | null): string {
 }
 
 function renderSummary(s: Summary): string {
-  const flakyTone = s.activeFlakyTests === 0 ? 'tone-good' : s.activeFlakyTests <= 3 ? 'tone-warn' : 'tone-bad'
-  const flakyLabel = s.activeFlakyTests === 0 ? 'none' : `${s.activeFlakyTests} test${s.activeFlakyTests === 1 ? '' : 's'}`
+  let flakyTone = 'tone-bad'
+  if (s.activeFlakyTests === 0) flakyTone = 'tone-good'
+  else if (s.activeFlakyTests <= 3) flakyTone = 'tone-warn'
+  const flakyLabel =
+    s.activeFlakyTests === 0
+      ? 'none'
+      : `${s.activeFlakyTests} test${s.activeFlakyTests === 1 ? '' : 's'}`
   const kindLabel = s.dominantKind
     ? `<span class="badge kind-${escapeHtml(s.dominantKind.kind)}">${escapeHtml(s.dominantKind.kind)}</span>`
     : '<span class="muted">—</span>'
-  const fileLabel = s.worstFile ? escapeHtml(s.worstFile.file.split('/').pop() ?? s.worstFile.file) : '—'
-  const pct = s.recentRunPassRate !== null ? Math.round(s.recentRunPassRate * 100) : null
+  const fileLabel = s.worstFile
+    ? escapeHtml(s.worstFile.file.split('/').pop() ?? s.worstFile.file)
+    : '—'
+  const pct =
+    s.recentRunPassRate !== null ? Math.round(s.recentRunPassRate * 100) : null
 
   return `<section class="summary-grid">
     <div class="summary-card ${flakyTone}">
@@ -280,17 +294,23 @@ function renderSummary(s: Summary): string {
 }
 
 function renderFlaky(rows: FlakyRow[]): string {
-  if (rows.length === 0) return '<p class="empty">No failures in the last 30 days. Clean house.</p>'
-  const items = rows.map((r) => {
-    const kinds = r.kinds.split(',').map((k) => kindBadge(k.trim())).join(' ')
-    return `<tr>
+  if (rows.length === 0)
+    return '<p class="empty">No failures in the last 30 days. Clean house.</p>'
+  const items = rows
+    .map((r) => {
+      const kinds = r.kinds
+        .split(',')
+        .map((k) => kindBadge(k.trim()))
+        .join(' ')
+      return `<tr>
       <td><span class="count ${severityClass(r.fails)}">${r.fails}</span></td>
       <td class="test-name">${escapeHtml(r.test_name)}</td>
       <td class="file-path">${escapeHtml(r.test_file)}</td>
       <td>${kinds}</td>
       <td class="muted">${formatRelative(r.last_failed)}</td>
     </tr>`
-  }).join('')
+    })
+    .join('')
   return `<table>
     <thead><tr><th>Fails</th><th>Test</th><th>File</th><th>Kinds</th><th>Last seen</th></tr></thead>
     <tbody>${items}</tbody>
@@ -300,14 +320,16 @@ function renderFlaky(rows: FlakyRow[]): string {
 function renderKinds(rows: KindRow[]): string {
   if (rows.length === 0) return '<p class="empty">No data.</p>'
   const total = rows.reduce((s, r) => s + r.count, 0)
-  return `<div class="kind-grid">${rows.map((r) => {
-    const pct = total === 0 ? 0 : Math.round((r.count / total) * 100)
-    return `<div class="kind-card kind-${escapeHtml(r.failure_kind)}">
+  return `<div class="kind-grid">${rows
+    .map((r) => {
+      const pct = total === 0 ? 0 : Math.round((r.count / total) * 100)
+      return `<div class="kind-card kind-${escapeHtml(r.failure_kind)}">
       <div class="kind-label">${escapeHtml(r.failure_kind)}</div>
       <div class="kind-count">${r.count}</div>
       <div class="kind-pct">${pct}%</div>
     </div>`
-  }).join('')}</div>`
+    })
+    .join('')}</div>`
 }
 
 function statusClass(status: string | null): string {
@@ -318,12 +340,16 @@ function statusClass(status: string | null): string {
 
 function renderRuns(rows: RunRow[]): string {
   if (rows.length === 0) return '<p class="empty">No runs recorded.</p>'
-  const items = rows.map((r) => {
-    const dirty = r.git_dirty === 1 ? '<span class="dirty" title="working tree dirty">●</span>' : ''
-    const passed = r.passed_tests ?? 0
-    const failed = r.failed_tests ?? 0
-    const errs = r.errors_between_tests ?? 0
-    return `<tr>
+  const items = rows
+    .map((r) => {
+      const dirty =
+        r.git_dirty === 1
+          ? '<span class="dirty" title="working tree dirty">●</span>'
+          : ''
+      const passed = r.passed_tests ?? 0
+      const failed = r.failed_tests ?? 0
+      const errs = r.errors_between_tests ?? 0
+      return `<tr>
       <td><span class="status ${statusClass(r.status)}">${r.status ?? 'crashed'}</span></td>
       <td class="muted">${formatRelative(r.started_at)}</td>
       <td>${formatDuration(r.duration_ms)}</td>
@@ -333,7 +359,8 @@ function renderRuns(rows: RunRow[]): string {
       <td>${errs > 0 ? `<span class="fail-count" title="errors outside tests">${errs}</span>` : '0'}</td>
       <td class="muted mono">${shortSha(r.git_sha)}${dirty}</td>
     </tr>`
-  }).join('')
+    })
+    .join('')
   return `<table>
     <thead><tr><th>Status</th><th>When</th><th>Duration</th><th>Total</th><th>Passed</th><th>Failed</th><th>Errors</th><th>SHA</th></tr></thead>
     <tbody>${items}</tbody>
@@ -342,11 +369,15 @@ function renderRuns(rows: RunRow[]): string {
 
 function renderHotFiles(rows: HotFileRow[]): string {
   if (rows.length === 0) return '<p class="empty">No data.</p>'
-  const items = rows.map((r) => `<tr>
+  const items = rows
+    .map(
+      (r) => `<tr>
     <td><span class="count ${severityClass(r.fails)}">${r.fails}</span></td>
     <td>${r.distinct_tests}</td>
     <td class="file-path">${escapeHtml(r.test_file)}</td>
-  </tr>`).join('')
+  </tr>`,
+    )
+    .join('')
   return `<table>
     <thead><tr><th>Fails</th><th>Distinct tests</th><th>File</th></tr></thead>
     <tbody>${items}</tbody>
@@ -490,13 +521,17 @@ function openInBrowser(filePath: string): void {
 
 async function main(): Promise<void> {
   if (!(await Bun.file(DB_PATH).exists())) {
-    console.error(`[flaky-tests] DB not found at ${DB_PATH}. Run tests at least once.`)
+    console.error(
+      `[flaky-tests] DB not found at ${DB_PATH}. Run tests at least once.`,
+    )
     process.exit(1)
   }
   const data = loadData()
   const html = render(data)
   await Bun.write(OUT_PATH, html)
-  console.log(`[flaky-tests] Wrote ${OUT_PATH} (${data.totalRuns} runs, ${data.totalFailures} failures)`)
+  console.log(
+    `[flaky-tests] Wrote ${OUT_PATH} (${data.totalRuns} runs, ${data.totalFailures} failures)`,
+  )
   if (process.argv.includes('--open')) openInBrowser(OUT_PATH)
 }
 

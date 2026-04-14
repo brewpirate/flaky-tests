@@ -1,4 +1,4 @@
-import type { FlakyPattern } from '@flaky-tests/core'
+import { MAX_PROMPT_STACK_LINES, type FlakyPattern } from '@flaky-tests/core'
 
 /**
  * Generates a structured investigation prompt for a flaky test pattern.
@@ -10,7 +10,9 @@ export function generatePrompt(pattern: FlakyPattern, windowDays = 7): string {
   lines.push(`Test \`${pattern.testName}\` has become flaky.`)
   lines.push('')
   lines.push(`File:        ${pattern.testFile}`)
-  lines.push(`Failures:    ${pattern.recentFails} in the last ${windowDays} days (${pattern.priorFails} the ${windowDays} days before)`)
+  lines.push(
+    `Failures:    ${pattern.recentFails} in the last ${windowDays} days (${pattern.priorFails} the ${windowDays} days before)`,
+  )
   lines.push(`Kind:        ${pattern.failureKinds.join(', ')}`)
 
   if (pattern.lastErrorMessage) {
@@ -19,17 +21,21 @@ export function generatePrompt(pattern: FlakyPattern, windowDays = 7): string {
 
   lines.push('')
   lines.push('Investigate whether this is:')
-  lines.push('  • A test issue  — poor setup, timing dependency, bad assertion, environment assumption')
-  lines.push('  • A code issue  — regression, race condition, changed behaviour')
+  lines.push(
+    '  • A test issue  — poor setup, timing dependency, bad assertion, environment assumption',
+  )
+  lines.push(
+    '  • A code issue  — regression, race condition, changed behaviour',
+  )
 
   if (pattern.lastErrorStack) {
     lines.push('')
     lines.push('Stack trace:')
     lines.push('```')
-    // Trim to first 20 lines to keep the prompt focused
-    const stackLines = pattern.lastErrorStack.split('\n').slice(0, 20)
+    const allStackLines = pattern.lastErrorStack.split('\n')
+    const stackLines = allStackLines.slice(0, MAX_PROMPT_STACK_LINES)
     lines.push(stackLines.join('\n'))
-    if (pattern.lastErrorStack.split('\n').length > 20) lines.push('  ...')
+    if (allStackLines.length > MAX_PROMPT_STACK_LINES) lines.push('  ...')
     lines.push('```')
   }
 

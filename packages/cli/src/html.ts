@@ -45,7 +45,10 @@ function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
  * @param windowDays - Detection window size in days (used in headings and prompts)
  * @returns Complete HTML document string
  */
-export function generateHtml(patterns: FlakyPattern[], windowDays: number): string {
+export function generateHtml(
+  patterns: FlakyPattern[],
+  windowDays: number,
+): string {
   const plural = patterns.length === 1 ? 'pattern' : 'patterns'
   const cards = patterns.map((p, i) => patternCard(p, i, windowDays)).join('\n')
 

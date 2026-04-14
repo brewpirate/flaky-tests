@@ -108,6 +108,16 @@ jobs:
 
 ---
 
+## Development
+
+See the [dev docs](docs/dev/) for contributor guides:
+
+- [Setup and local development](docs/dev/setup.md)
+- [Package guide and gotchas](docs/dev/packages.md)
+- [Creating a release](docs/dev/releasing.md)
+
+---
+
 ## Packages
 
 | Package | Description |

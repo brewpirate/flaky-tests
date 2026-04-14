@@ -1,19 +1,33 @@
-import { mkdirSync } from 'node:fs'
 import { Database } from 'bun:sqlite'
-import type {
-  FlakyPattern,
-  GetNewPatternsOptions,
-  InsertFailureInput,
-  InsertRunInput,
-  IStore,
-  UpdateRunInput,
+import { mkdirSync } from 'node:fs'
+import {
+  DEFAULT_THRESHOLD,
+  DEFAULT_WINDOW_DAYS,
+  MAX_FAILED_TESTS_PER_RUN,
+  MS_PER_DAY,
+  type FlakyPattern,
+  flakyPatternSchema,
+  type GetNewPatternsOptions,
+  getNewPatternsOptionsSchema,
+  type InsertFailureInput,
+  insertFailureInputSchema,
+  type InsertRunInput,
+  insertRunInputSchema,
+  type IStore,
+  parse,
+  parseArray,
+  stripTimestampPrefix,
+  type UpdateRunInput,
+  updateRunInputSchema,
 } from '@flaky-tests/core'
+import { type } from 'arktype'
 
 /** Configuration for the SQLite-backed flaky-tests store. */
-export interface SqliteStoreOptions {
-  /** Path to the SQLite database file. Defaults to node_modules/.cache/flaky-tests/failures.db */
-  dbPath?: string
-}
+export const sqliteStoreOptionsSchema = type({
+  'dbPath?': 'string',
+})
+
+export type SqliteStoreOptions = typeof sqliteStoreOptionsSchema.infer
 
 const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'
 
@@ -46,8 +60,10 @@ CREATE TABLE IF NOT EXISTS failures (
   failed_at      TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_failures_test ON failures(test_file, test_name);
-CREATE INDEX IF NOT EXISTS idx_failures_run  ON failures(run_id);
+CREATE INDEX IF NOT EXISTS idx_failures_test      ON failures(test_file, test_name);
+CREATE INDEX IF NOT EXISTS idx_failures_run       ON failures(run_id);
+CREATE INDEX IF NOT EXISTS idx_failures_failed_at ON failures(failed_at);
+CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests);
 `
 
 function ensureDirectory(dbPath: string): void {
@@ -75,7 +91,8 @@ export class SqliteStore implements IStore {
    * @param options - Store configuration; uses sensible defaults when omitted.
    */
   constructor(options: SqliteStoreOptions = {}) {
-    const dbPath = options.dbPath ?? DEFAULT_DB_PATH
+    const validated = parse(sqliteStoreOptionsSchema, options)
+    const dbPath = validated.dbPath ?? DEFAULT_DB_PATH
     ensureDirectory(dbPath)
     this.db = new Database(dbPath, { create: true })
     this.db.exec('PRAGMA journal_mode = WAL')
@@ -84,11 +101,10 @@ export class SqliteStore implements IStore {
   }
 
   /**
-   * Idempotent column adds for databases created before schema updates.
-   * SQLite lacks `ADD COLUMN IF NOT EXISTS`, so each ALTER throws when the
-   * column already exists — we catch and ignore.
+   * Create tables and run idempotent column additions for older databases.
+   * Called automatically in the constructor — safe to call again.
    */
-  private migrate(): void {
+  async migrate(): Promise<void> {
     const migrations = [
       'ALTER TABLE runs ADD COLUMN passed_tests INTEGER',
       'ALTER TABLE runs ADD COLUMN errors_between_tests INTEGER',
@@ -109,6 +125,7 @@ export class SqliteStore implements IStore {
    * @param input - Run metadata including ID, timestamp, and optional git info.
    */
   async insertRun(input: InsertRunInput): Promise<void> {
+    parse(insertRunInputSchema, input)
     this.db.run(
       `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -116,7 +133,7 @@ export class SqliteStore implements IStore {
         input.runId,
         input.startedAt,
         input.gitSha ?? null,
-        input.gitDirty != null ? (input.gitDirty ? 1 : 0) : null,
+        input.gitDirty != null ? Number(input.gitDirty) : null,
         input.runtimeVersion ?? null,
         input.testArgs ?? null,
       ],
@@ -129,6 +146,7 @@ export class SqliteStore implements IStore {
    * @param input - Completion data for the run.
    */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+    parse(updateRunInputSchema, input)
     this.db.run(
       `UPDATE runs
           SET ended_at             = ?,
@@ -157,6 +175,7 @@ export class SqliteStore implements IStore {
    * @param input - Failure details including test identity, error info, and timing.
    */
   async insertFailure(input: InsertFailureInput): Promise<void> {
+    parse(insertFailureInputSchema, input)
     this.db.run(
       `INSERT INTO failures
          (run_id, test_file, test_name, failure_kind, error_message, error_stack, duration_ms, failed_at)
@@ -172,6 +191,31 @@ export class SqliteStore implements IStore {
         input.failedAt,
       ],
     )
+  }
+
+  /** Insert multiple failures in a single SQLite transaction. */
+  async insertFailures(inputs: InsertFailureInput[]): Promise<void> {
+    if (inputs.length === 0) return
+    this.db.transaction(() => {
+      for (const input of inputs) {
+        parse(insertFailureInputSchema, input)
+        this.db.run(
+          `INSERT INTO failures
+             (run_id, test_file, test_name, failure_kind, error_message, error_stack, duration_ms, failed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            input.runId,
+            input.testFile,
+            input.testName,
+            input.failureKind,
+            input.errorMessage ?? null,
+            input.errorStack ?? null,
+            input.durationMs != null ? Math.round(input.durationMs) : null,
+            input.failedAt,
+          ],
+        )
+      }
+    })()
   }
 
   /**
@@ -193,6 +237,7 @@ export class SqliteStore implements IStore {
         WHERE run_id = ?`,
       [runId],
     )
+    // biome-ignore lint/suspicious/noConsole: legitimate runtime warning for operator visibility
     console.warn(
       `[flaky-tests] Run ${runId} exited with failure but preload recorded status=pass. Overriding to fail.`,
     )
@@ -208,18 +253,19 @@ export class SqliteStore implements IStore {
    * @param options - Window size and threshold overrides.
    * @returns Flaky patterns sorted by recent failure count descending.
    */
-  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
-    const windowDays = options.windowDays ?? 7
-    const threshold = options.threshold ?? 2
+  async getNewPatterns(
+    options: GetNewPatternsOptions = {},
+  ): Promise<FlakyPattern[]> {
+    const validated = parse(getNewPatternsOptionsSchema, options)
+    const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
+    const threshold = validated.threshold ?? DEFAULT_THRESHOLD
     const now = Date.now()
-    const windowStart = new Date(now - windowDays * 86400000).toISOString()
-    const priorStart = new Date(now - windowDays * 2 * 86400000).toISOString()
+    const windowStart = new Date(now - windowDays * MS_PER_DAY).toISOString()
+    const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY).toISOString()
 
-    // ISO 8601 timestamps from .toISOString() are always 24 chars and sort
-    // lexicographically. Prefixing values with the timestamp lets MAX() select
-    // the most-recent row's payload; we strip the 25-char prefix (24 + separator)
-    // afterward. CHAR(1) is a control character that won't appear in messages.
-    const TS_LEN = 25 // 24-char timestamp + CHAR(1) separator
+    // Prefixing values with the timestamp lets MAX() select the most-recent
+    // row's payload. CHAR(1) is a control character that won't appear in messages.
+    // stripTimestampPrefix() removes the prefix dynamically after the query.
 
     type Row = {
       test_file: string
@@ -247,25 +293,39 @@ export class SqliteStore implements IStore {
            MAX(f.failed_at) AS last_failed
          FROM failures f
          JOIN runs r ON r.run_id = f.run_id
-        WHERE r.failed_tests < 10
+        WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
           AND r.ended_at IS NOT NULL
           AND f.failed_at > ?
         GROUP BY f.test_file, f.test_name
         HAVING recent_fails >= ? AND prior_fails = 0
         ORDER BY recent_fails DESC`,
       )
-      .all(windowStart, windowStart, priorStart, windowStart, windowStart, priorStart, threshold)
+      .all(
+        windowStart,
+        windowStart,
+        priorStart,
+        windowStart,
+        windowStart,
+        priorStart,
+        threshold,
+      )
 
-    return rows.map((r) => ({
+    return parseArray(flakyPatternSchema, rows.map((r) => ({
       testFile: r.test_file,
       testName: r.test_name,
       recentFails: r.recent_fails,
       priorFails: r.prior_fails,
       failureKinds: r.failure_kinds.split(','),
-      lastErrorMessage: r.last_error_message_raw != null ? r.last_error_message_raw.slice(TS_LEN) : null,
-      lastErrorStack: r.last_error_stack_raw != null ? r.last_error_stack_raw.slice(TS_LEN) : null,
+      lastErrorMessage:
+        r.last_error_message_raw != null
+          ? stripTimestampPrefix(r.last_error_message_raw)
+          : null,
+      lastErrorStack:
+        r.last_error_stack_raw != null
+          ? stripTimestampPrefix(r.last_error_stack_raw)
+          : null,
       lastFailed: r.last_failed,
-    }))
+    })))
   }
 
   /** Close the underlying SQLite connection. */

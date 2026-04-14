@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { categorizeError, extractMessage, extractStack } from '../src'
 
 describe('categorizeError', () => {
@@ -17,7 +17,9 @@ describe('categorizeError', () => {
   })
 
   test('classifies timeout by message — "timed out"', () => {
-    expect(categorizeError(new Error('Test timed out after 5000ms'))).toBe('timeout')
+    expect(categorizeError(new Error('Test timed out after 5000ms'))).toBe(
+      'timeout',
+    )
   })
 
   test('classifies timeout by message — "timeout"', () => {
@@ -48,7 +50,9 @@ describe('categorizeError', () => {
 
   test('returns uncaught for generic errors', () => {
     expect(categorizeError(new Error('something blew up'))).toBe('uncaught')
-    expect(categorizeError(new TypeError('cannot read property'))).toBe('uncaught')
+    expect(categorizeError(new TypeError('cannot read property'))).toBe(
+      'uncaught',
+    )
   })
 })
 

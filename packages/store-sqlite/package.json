@@ -4,12 +4,41 @@
   "description": "SQLite store adapter for flaky-tests (Bun built-in)",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./report": "./src/report.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./report": {
+      "bun": "./src/report.ts",
+      "import": "./dist/report.js",
+      "types": "./dist/report.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/",
+    "src/",
+    "package.json",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/report.ts --outdir dist --format esm --target node --external @flaky-tests/core --external bun:sqlite",
+    "build:types": "tsc --project tsconfig.build.json",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "license": "MIT",
   "dependencies": {
-    "@flaky-tests/core": "workspace:*"
+    "@flaky-tests/core": "workspace:*",
+    "arktype": "^2.1.0"
   },
   "devDependencies": {
     "bun-types": "latest"

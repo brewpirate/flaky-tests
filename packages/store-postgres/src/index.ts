@@ -1,28 +1,40 @@
-import postgres from 'postgres'
-import type {
-  FlakyPattern,
-  GetNewPatternsOptions,
-  InsertFailureInput,
-  InsertRunInput,
-  IStore,
-  UpdateRunInput,
+import {
+  DEFAULT_THRESHOLD,
+  DEFAULT_WINDOW_DAYS,
+  MAX_FAILED_TESTS_PER_RUN,
+  MS_PER_DAY,
+  type FlakyPattern,
+  flakyPatternSchema,
+  type GetNewPatternsOptions,
+  getNewPatternsOptionsSchema,
+  type InsertFailureInput,
+  insertFailureInputSchema,
+  type InsertRunInput,
+  insertRunInputSchema,
+  type IStore,
+  parse,
+  parseArray,
+  stripTimestampPrefix,
+  type UpdateRunInput,
+  updateRunInputSchema,
+  validateTablePrefix,
 } from '@flaky-tests/core'
+import postgres from 'postgres'
+import { type } from 'arktype'
 
-export interface PostgresStoreOptions {
-  /** Full connection string, e.g. postgres://user:pass@host:5432/db */
-  connectionString?: string
-  host?: string
-  port?: number
-  database?: string
-  username?: string
-  password?: string
-  ssl?: boolean | 'require' | 'prefer' | 'allow'
-  /**
-   * Table name prefix. Defaults to `flaky_test`, producing tables
-   * `flaky_test_runs` and `flaky_test_failures`.
-   */
-  tablePrefix?: string
-}
+/** Configuration for the PostgreSQL store. */
+export const postgresStoreOptionsSchema = type({
+  'connectionString?': 'string',
+  'host?': 'string',
+  'port?': 'number.integer > 0',
+  'database?': 'string',
+  'username?': 'string',
+  'password?': 'string',
+  'ssl?': "boolean | 'require' | 'prefer' | 'allow'",
+  'tablePrefix?': 'string',
+})
+
+export type PostgresStoreOptions = typeof postgresStoreOptionsSchema.infer
 
 /**
  * PostgreSQL-backed implementation of the flaky-tests store.
@@ -35,26 +47,81 @@ export class PostgresStore implements IStore {
   private failuresTable: string
 
   constructor(options: PostgresStoreOptions = {}) {
-    const prefix = options.tablePrefix ?? 'flaky_test'
+    const validated = parse(postgresStoreOptionsSchema, options)
+    const prefix = validated.tablePrefix ?? 'flaky_test'
+    validateTablePrefix(prefix)
     this.runsTable = `${prefix}_runs`
     this.failuresTable = `${prefix}_failures`
 
-    if (options.connectionString) {
-      this.sql = postgres(options.connectionString)
+    if (validated.connectionString) {
+      this.sql = postgres(validated.connectionString)
     } else {
       this.sql = postgres({
-        host: options.host ?? 'localhost',
-        port: options.port ?? 5432,
-        database: options.database,
-        username: options.username,
-        password: options.password,
-        ssl: options.ssl,
+        host: validated.host ?? 'localhost',
+        port: validated.port ?? 5432,
+        database: validated.database,
+        username: validated.username,
+        password: validated.password,
+        ssl: validated.ssl,
       })
     }
   }
 
+  /** Create tables and run idempotent schema migrations. Safe to call on every startup. */
+  async migrate(): Promise<void> {
+    const runs = this.runsTable
+    const failures = this.failuresTable
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS ${this.sql(runs)} (
+        run_id                TEXT PRIMARY KEY,
+        started_at            TIMESTAMPTZ NOT NULL,
+        ended_at              TIMESTAMPTZ,
+        duration_ms           INTEGER,
+        status                TEXT,
+        total_tests           INTEGER,
+        passed_tests          INTEGER,
+        failed_tests          INTEGER,
+        errors_between_tests  INTEGER,
+        git_sha               TEXT,
+        git_dirty             BOOLEAN,
+        runtime_version       TEXT,
+        test_args             TEXT
+      )
+    `
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS ${this.sql(failures)} (
+        id             SERIAL PRIMARY KEY,
+        run_id         TEXT NOT NULL REFERENCES ${this.sql(runs)}(run_id),
+        test_file      TEXT NOT NULL,
+        test_name      TEXT NOT NULL,
+        failure_kind   TEXT NOT NULL,
+        error_message  TEXT,
+        error_stack    TEXT,
+        duration_ms    INTEGER,
+        failed_at      TIMESTAMPTZ NOT NULL
+      )
+    `
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS ${this.sql(`idx_${failures}_test`)}
+        ON ${this.sql(failures)}(test_file, test_name)
+    `
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS ${this.sql(`idx_${failures}_run`)}
+        ON ${this.sql(failures)}(run_id)
+    `
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS ${this.sql(`idx_${failures}_failed_at`)}
+        ON ${this.sql(failures)}(failed_at)
+    `
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS ${this.sql(`idx_${runs}_status`)}
+        ON ${this.sql(runs)}(ended_at, failed_tests)
+    `
+  }
+
   /** Insert a new test run record. Must be called before any failures reference this run. */
   async insertRun(input: InsertRunInput): Promise<void> {
+    parse(insertRunInputSchema, input)
     const runs = this.runsTable
     await this.sql`
       INSERT INTO ${this.sql(runs)}
@@ -68,6 +135,7 @@ export class PostgresStore implements IStore {
 
   /** Update a run with final results (duration, status, test counts) after it completes. */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+    parse(updateRunInputSchema, input)
     const runs = this.runsTable
     await this.sql`
       UPDATE ${this.sql(runs)} SET
@@ -84,6 +152,7 @@ export class PostgresStore implements IStore {
 
   /** Record a single test failure associated with an existing run. */
   async insertFailure(input: InsertFailureInput): Promise<void> {
+    parse(insertFailureInputSchema, input)
     const failures = this.failuresTable
     await this.sql`
       INSERT INTO ${this.sql(failures)}
@@ -103,37 +172,42 @@ export class PostgresStore implements IStore {
    * Returns tests that failed >= `threshold` times in the recent window but zero times
    * in the prior window, filtering out runs with 10+ failures (likely infrastructure issues).
    */
-  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
-    const windowDays = options.windowDays ?? 7
-    const threshold = options.threshold ?? 2
+  async getNewPatterns(
+    options: GetNewPatternsOptions = {},
+  ): Promise<FlakyPattern[]> {
+    const validated = parse(getNewPatternsOptionsSchema, options)
+    const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
+    const threshold = validated.threshold ?? DEFAULT_THRESHOLD
     const now = Date.now()
-    const windowStart = new Date(now - windowDays * 86400000)
-    const priorStart = new Date(now - windowDays * 2 * 86400000)
+    const windowStart = new Date(now - windowDays * MS_PER_DAY)
+    const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY)
     const runs = this.runsTable
     const failures = this.failuresTable
 
-    const rows = await this.sql<Array<{
-      test_file: string
-      test_name: string
-      recent_fails: string
-      prior_fails: string
-      failure_kinds: string[]
-      last_error_message: string | null
-      last_error_stack: string | null
-      last_failed: Date
-    }>>`
+    const rows = await this.sql<
+      Array<{
+        test_file: string
+        test_name: string
+        recent_fails: string
+        prior_fails: string
+        failure_kinds: string[]
+        last_error_message_raw: string | null
+        last_error_stack_raw: string | null
+        last_failed: Date
+      }>
+    >`
       SELECT
         f.test_file,
         f.test_name,
         COUNT(*) FILTER (WHERE f.failed_at > ${windowStart})                                    AS recent_fails,
         COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart})   AS prior_fails,
         ARRAY_AGG(DISTINCT f.failure_kind)                                                       AS failure_kinds,
-        MAX(f.error_message) FILTER (WHERE f.failed_at > ${windowStart})                        AS last_error_message,
-        MAX(f.error_stack)   FILTER (WHERE f.failed_at > ${windowStart})                        AS last_error_stack,
+        MAX(f.failed_at::text || chr(1) || f.error_message) FILTER (WHERE f.failed_at > ${windowStart} AND f.error_message IS NOT NULL) AS last_error_message_raw,
+        MAX(f.failed_at::text || chr(1) || f.error_stack)  FILTER (WHERE f.failed_at > ${windowStart} AND f.error_stack IS NOT NULL)  AS last_error_stack_raw,
         MAX(f.failed_at)                                                                         AS last_failed
       FROM ${this.sql(failures)} f
       JOIN ${this.sql(runs)} r ON r.run_id = f.run_id
-      WHERE r.failed_tests < 10
+      WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
         AND r.ended_at IS NOT NULL
         AND f.failed_at > ${priorStart}
       GROUP BY f.test_file, f.test_name
@@ -142,16 +216,22 @@ export class PostgresStore implements IStore {
       ORDER BY recent_fails DESC
     `
 
-    return rows.map((r) => ({
+    return parseArray(flakyPatternSchema, rows.map((r) => ({
       testFile: r.test_file,
       testName: r.test_name,
       recentFails: Number(r.recent_fails),
       priorFails: Number(r.prior_fails),
       failureKinds: r.failure_kinds,
-      lastErrorMessage: r.last_error_message,
-      lastErrorStack: r.last_error_stack,
+      lastErrorMessage:
+        r.last_error_message_raw !== null
+          ? stripTimestampPrefix(r.last_error_message_raw)
+          : null,
+      lastErrorStack:
+        r.last_error_stack_raw !== null
+          ? stripTimestampPrefix(r.last_error_stack_raw)
+          : null,
       lastFailed: r.last_failed.toISOString(),
-    }))
+    })))
   }
 
   /** Gracefully close the underlying PostgreSQL connection pool. */

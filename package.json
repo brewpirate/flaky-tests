@@ -2,8 +2,24 @@
   "name": "flaky-tests",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "test": "bun test"
+    "build": "bun run --filter './packages/*' build",
+    "build:types": "bun run --filter './packages/*' build:types",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "bun run build && changeset publish",
+    "test": "bun test",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.11",
+    "@changesets/cli": "^2.30.0"
   }
 }

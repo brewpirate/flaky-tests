@@ -1,10 +1,4 @@
-/** Git metadata captured at test-run start. `null` fields indicate git is unavailable. */
-export interface GitInfo {
-  /** Full HEAD commit SHA, or `null` if not in a git repo. */
-  sha: string | null
-  /** Whether the working tree has uncommitted changes, or `null` if not in a git repo. */
-  dirty: boolean | null
-}
+import type { GitInfo } from '@flaky-tests/core'
 
 function runGit(args: string[]): string | null {
   try {
