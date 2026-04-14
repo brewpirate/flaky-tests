@@ -7,8 +7,11 @@ flaky-tests is a TypeScript monorepo for detecting flaky tests. It captures fail
 ## Build & run
 
 ```sh
-bun install        # install all workspace dependencies
-bun test           # run all tests across packages
+bun install          # install all workspace dependencies
+bun test             # run unit tests (integration tests skipped)
+bun run test:integration  # run integration tests (needs databases)
+bun run test:all     # run everything
+bun run build        # build all packages
 ```
 
 Docs site (Astro + Starlight):
@@ -16,8 +19,6 @@ Docs site (Astro + Starlight):
 cd packages/docs && bun run dev      # local dev server
 cd packages/docs && bun run build    # production build
 ```
-
-No explicit build step for library packages — they ship TypeScript source directly.
 
 ## Monorepo structure
 
@@ -35,23 +36,37 @@ Dependency order: core → stores → plugins → cli
 
 ## Key architecture
 
-- **IStore interface** (`packages/core/src/types.ts`) — all stores implement `insertRun`, `updateRun`, `insertFailure`, `getNewPatterns`, `close`
+- **IStore interface** (`packages/core/src/types.ts`) — all stores implement `insertRun`, `updateRun`, `insertFailure`, `insertFailures`, `getNewPatterns`, `close`
+- **ArkType schemas** (`packages/core/src/schemas.ts`) — single source of truth for all data types; runtime validation at both plugin and store boundaries
 - **Pattern detection** — compares failure counts in two equal time windows; flags tests with ≥threshold recent failures and zero prior failures; filters out runs where ≥10 tests failed (infra blowups)
 - **Two-phase run recording** — `insertRun()` at start, `updateRun()` at completion
+- **AI prompts** (`packages/core/src/prompt.ts`) — `generatePrompt()` shared by CLI and HTML report
 
 ## Testing
 
-Tests use Bun's built-in test runner. Key test files:
-- `packages/core/src/categorize.test.ts`
-- `packages/cli/src/prompt.test.ts`
-- `packages/store-sqlite/src/index.test.ts`
+Tests use Bun's built-in test runner. Two tiers:
+
+**Unit tests** (`bun test`) — run on every commit, no external deps:
+- `packages/core/src/*.test.ts` — schemas, validation, escaping, git, errors, prompt, pattern mapper
+- `packages/cli/src/*.test.ts` — prompt generation, GitHub API, HTML report
+- `packages/plugin-vitest/src/index.test.ts` — reporter lifecycle with mock store
+- `packages/plugin-bun/src/*.test.ts` — preload store contract, git capture
+- `packages/store-sqlite/src/index.test.ts` — full store + pattern detection
+
+**Integration tests** (`bun run test:integration`) — skipped by default, run on main push:
+- `packages/store-turso/src/index.integration.test.ts` — uses `file::memory:`
+- `packages/store-postgres/src/index.integration.test.ts` — needs Docker Postgres
+- `packages/store-supabase/src/index.integration.test.ts` — needs Supabase secrets
+
+Integration tests are guarded by `describe.skipIf(!process.env.INTEGRATION)`.
 
 ## CI/CD
 
-- `ci.yml` — tests on push to main and all PRs
+- `ci.yml` — unit tests on push to main and all PRs
+- `integration.yml` — integration tests on push to main + manual trigger (Postgres via Docker, Turso in-memory, Supabase via secrets)
 - `flaky-check.yml` — scheduled detection (Monday 9am UTC) + manual trigger
 - `docs.yml` — deploys docs to GitHub Pages when `packages/docs/**` changes
-- `release.yml` — tag-triggered npm publish in dependency order + GitHub Release
+- `release.yml` — changesets-driven npm publish + GitHub Release
 
 ## GitHub Action
 
