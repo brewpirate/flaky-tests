@@ -1,0 +1,42 @@
+name: CI
+
+# Example workflow showing how to integrate flaky-tests into your CI pipeline.
+# Copy and adapt this for your own project.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      # Run tests — the preload captures failures to your store automatically
+      - name: Run tests
+        env:
+          FLAKY_TESTS_CONNECTION_STRING: ${{ secrets.FLAKY_TESTS_TURSO_URL }}
+          FLAKY_TESTS_AUTH_TOKEN: ${{ secrets.FLAKY_TESTS_TURSO_TOKEN }}
+        run: bun test
+
+      # Optional: check for new patterns immediately after the test run.
+      # Runs on main only to avoid noisy PR comments.
+      - name: Check for new flaky patterns
+        if: github.ref == 'refs/heads/main'
+        uses: brewpirate/flaky-tests@v1
+        with:
+          store: turso
+          connection-string: ${{ secrets.FLAKY_TESTS_TURSO_URL }}
+          auth-token: ${{ secrets.FLAKY_TESTS_TURSO_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          create-issues: 'true'
