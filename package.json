@@ -16,8 +16,9 @@
     "test:all": "INTEGRATION=1 bun test",
     "test:report": "bun packages/store-sqlite/src/report.ts --open",
     "test:cli": "bun packages/cli/src/check.ts",
-    "build": "bun run --filter './packages/*' build",
-    "build:types": "bun run --filter './packages/*' build:types",
+    "build": "bun run --filter '!@flaky-tests/docs' build",
+    "build:types": "bun run --filter '!@flaky-tests/docs' build:types",
+    "build:docs": "bun run --filter '@flaky-tests/docs' build",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "bun run build && changeset publish"

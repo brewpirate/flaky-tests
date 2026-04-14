@@ -18,7 +18,7 @@
   "files": ["dist/", "src/", "package.json", "LICENSE"],
   "publishConfig": { "access": "public" },
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/check.ts --outdir dist --format esm --target node --external @flaky-tests/store-turso --external @flaky-tests/store-supabase --external @flaky-tests/store-postgres --external @flaky-tests/store-sqlite --external @flaky-tests/core",
+    "build": "bun build ./src/index.ts ./src/check.ts --outdir dist --format esm --target node --external @flaky-tests/store-turso --external @flaky-tests/store-supabase --external @flaky-tests/store-postgres --external @flaky-tests/store-sqlite --external @flaky-tests/core --external arktype",
     "build:types": "tsc --project tsconfig.build.json",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",

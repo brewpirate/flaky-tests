@@ -22,7 +22,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --format esm --target node --external @flaky-tests/core --external postgres",
+    "build": "bun build ./src/index.ts --outdir dist --format esm --target node --external @flaky-tests/core --external arktype --external postgres",
     "build:types": "tsc --project tsconfig.build.json",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
