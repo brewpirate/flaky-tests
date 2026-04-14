@@ -1,0 +1,92 @@
+---
+title: SQLite (local)
+description: The default store — zero config, fast, and entirely local.
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+The SQLite store uses **Bun's built-in SQLite driver** (`bun:sqlite`). No separate driver package is needed. The database file is created automatically on first use.
+
+## Installation
+
+```sh
+bun add -D @flaky-tests/store-sqlite
+```
+
+## Usage
+
+```ts
+import { SqliteStore } from '@flaky-tests/store-sqlite'
+
+const store = new SqliteStore()
+// or with a custom path:
+const store = new SqliteStore({ path: './data/tests.db' })
+```
+
+The `SqliteStore` constructor calls `migrate()` synchronously — tables are created before any other operations.
+
+## Configuration
+
+### Constructor options
+
+```ts
+interface SqliteStoreOptions {
+  /** Path to the SQLite file. Default: node_modules/.cache/flaky-tests/failures.db */
+  path?: string
+}
+```
+
+### Environment variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `FLAKY_TESTS_SQLITE_PATH` | Override the database path | `node_modules/.cache/flaky-tests/failures.db` |
+
+The constructor option takes precedence over the environment variable.
+
+## Schema
+
+The store creates two tables:
+
+```sql
+CREATE TABLE IF NOT EXISTS runs (
+  id TEXT PRIMARY KEY,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  exit_code INTEGER
+)
+
+CREATE TABLE IF NOT EXISTS failures (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id),
+  test_file TEXT NOT NULL,
+  test_name TEXT NOT NULL,
+  failure_kind TEXT NOT NULL,
+  error_message TEXT,
+  error_stack TEXT,
+  failed_at TEXT NOT NULL
+)
+```
+
+## Limitations
+
+<Aside type="caution">
+SQLite is **local only**. The database lives on a single machine. If you run tests in CI, each runner gets a fresh environment with an empty database. Use [Turso](/stores/turso/), [Supabase](/stores/supabase/), or [Postgres](/stores/postgres/) if you need shared failure history across machines.
+</Aside>
+
+## Inspecting the database
+
+You can query the database directly with any SQLite client:
+
+```sh
+# With Bun
+bun run -e "
+  const { Database } = require('bun:sqlite')
+  const db = new Database('node_modules/.cache/flaky-tests/failures.db')
+  console.log(db.query('SELECT * FROM failures ORDER BY failed_at DESC LIMIT 20').all())
+"
+
+# With sqlite3 CLI
+sqlite3 node_modules/.cache/flaky-tests/failures.db \
+  "SELECT test_name, count(*) as fails FROM failures GROUP BY test_name ORDER BY fails DESC"
+```

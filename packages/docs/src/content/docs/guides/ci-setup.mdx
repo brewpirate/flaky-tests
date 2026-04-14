@@ -1,0 +1,132 @@
+---
+title: CI setup
+description: Capture test failures in CI and detect patterns automatically.
+---
+
+import { Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components'
+
+Running flaky-tests in CI gives you a shared failure history across every pull request and push, which makes pattern detection much more reliable than local-only data.
+
+## Prerequisites
+
+You need a **shared store** — SQLite is local-only and won't work for CI. Use [Turso](/stores/turso/), [Supabase](/stores/supabase/), or [Postgres](/stores/postgres/).
+
+## Basic setup
+
+<Tabs>
+  <TabItem label="GitHub Actions">
+
+```yaml title=".github/workflows/ci.yml"
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install
+
+      # Capture failures during test run
+      - run: bun test
+        env:
+          FLAKY_TESTS_STORE: turso
+          TURSO_URL: ${{ secrets.TURSO_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+      # On main: check for new patterns and open issues if found
+      - if: github.ref == 'refs/heads/main'
+        uses: brewpirate/flaky-tests@v1
+        with:
+          store: turso
+          connection-string: ${{ secrets.TURSO_URL }}
+          auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          create-issues: 'true'
+```
+
+  </TabItem>
+  <TabItem label="Vitest">
+
+```yaml title=".github/workflows/ci.yml"
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - run: npx vitest run
+        env:
+          FLAKY_TESTS_STORE: turso
+          TURSO_URL: ${{ secrets.TURSO_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+      - if: github.ref == 'refs/heads/main'
+        uses: brewpirate/flaky-tests@v1
+        with:
+          store: turso
+          connection-string: ${{ secrets.TURSO_URL }}
+          auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          create-issues: 'true'
+```
+
+  </TabItem>
+</Tabs>
+
+## Setting up secrets
+
+<Steps>
+
+1. Create a Turso database (or Supabase/Postgres project)
+2. Go to your GitHub repo → **Settings** → **Secrets and variables** → **Actions**
+3. Add the required secrets:
+   - `TURSO_URL` — your Turso database URL (`libsql://...`)
+   - `TURSO_AUTH_TOKEN` — your Turso auth token
+
+</Steps>
+
+## What runs when
+
+| Event | Captures failures | Checks for patterns | Opens issues |
+|---|---|---|---|
+| Pull request | Yes | No | No |
+| Push to main | Yes | Yes (if `create-issues: true`) | Yes (if new patterns) |
+| Scheduled (weekly) | No | Yes | Yes (if new patterns) |
+
+<Aside type="tip">
+The recommended pattern is: capture on every run (PR + main), detect on main pushes and scheduled runs. This maximizes the data you collect while keeping noise low.
+</Aside>
+
+## Capture-only mode
+
+If you want to collect data without running detection yet:
+
+```yaml
+- run: bun test
+  env:
+    FLAKY_TESTS_STORE: turso
+    TURSO_URL: ${{ secrets.TURSO_URL }}
+    TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+# No detection step — just accumulate data
+```
+
+Run in capture-only mode for a week or two to build up baseline data before enabling detection.

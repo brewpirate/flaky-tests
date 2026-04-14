@@ -1,0 +1,43 @@
+---
+title: Introduction
+description: What flaky-tests is, why it exists, and how it works.
+---
+
+## What is flaky-tests?
+
+**flaky-tests** is a lightweight test telemetry tool. It hooks into your test runner, records every failure to a database, and gives you a CLI to detect when tests have _newly_ started failing intermittently.
+
+The philosophy is simple: **capture everything passively, surface problems on demand, remove friction to investigate.**
+
+## Why not just use a dashboard?
+
+Most flaky test tools are either:
+
+- **SaaS platforms** — expensive, require sending your data to a third party, and need significant setup before they're useful
+- **Retry libraries** — they paper over the problem instead of surfacing it
+
+flaky-tests is the alternative: a local-first, zero-account tool that just stores test failures in a database. You own the data. You query it when something feels wrong.
+
+## How it works
+
+1. **Capture** — A preload or reporter hooks into your test runner and writes every failure to your chosen store (SQLite, Turso, Supabase, or Postgres)
+2. **Detect** — The `flaky-tests check` CLI compares failure counts across two equal time windows. If a test crossed the threshold in the current window but had zero failures in the prior one, it's flagged as a new pattern
+3. **Investigate** — The CLI generates a structured prompt ready to paste into Claude, Cursor, or Copilot. Either a test issue (bad setup, timing, wrong assertion) or a code issue (regression, race condition)
+4. **Notify** — The CLI can open a GitHub issue with the investigation prompt embedded, or you can schedule a GitHub Action to do it automatically
+
+## Architecture
+
+flaky-tests is a monorepo of focused packages:
+
+| Package | Role |
+|---|---|
+| `@flaky-tests/core` | Shared types and `IStore` interface |
+| `@flaky-tests/plugin-bun` | Bun test preload |
+| `@flaky-tests/plugin-vitest` | Vitest reporter |
+| `@flaky-tests/store-sqlite` | Local SQLite (Bun built-in) |
+| `@flaky-tests/store-turso` | Turso — remote SQLite, free tier |
+| `@flaky-tests/store-supabase` | Supabase |
+| `@flaky-tests/store-postgres` | PostgreSQL / Neon |
+| `@flaky-tests/cli` | Pattern detection and issue creation |
+
+You only install what you need.

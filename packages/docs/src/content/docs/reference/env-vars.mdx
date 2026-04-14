@@ -1,0 +1,62 @@
+---
+title: Environment variables
+description: All environment variables recognized by flaky-tests packages.
+---
+
+## Plugin variables
+
+These are read by `@flaky-tests/plugin-bun` and `@flaky-tests/plugin-vitest` during test runs.
+
+| Variable | Package | Description | Default |
+|---|---|---|---|
+| `FLAKY_TESTS_DISABLED` | All plugins | Set to `1` to disable failure capture entirely | — |
+| `FLAKY_TESTS_SQLITE_PATH` | `store-sqlite` | Path to the SQLite database file | `node_modules/.cache/flaky-tests/failures.db` |
+| `FLAKY_TESTS_STORE` | CLI | Which store to use: `sqlite`, `turso`, `supabase`, `postgres` | `sqlite` |
+
+## Store variables
+
+### SQLite
+
+| Variable | Description | Default |
+|---|---|---|
+| `FLAKY_TESTS_SQLITE_PATH` | Path to the SQLite database file | `node_modules/.cache/flaky-tests/failures.db` |
+
+### Turso
+
+| Variable | Description | Required |
+|---|---|---|
+| `TURSO_URL` | `libsql://` URL for your Turso database | Yes |
+| `TURSO_AUTH_TOKEN` | Turso auth token | Yes (for remote DBs) |
+
+### Supabase
+
+| Variable | Description | Required |
+|---|---|---|
+| `SUPABASE_URL` | Your Supabase project URL (`https://...supabase.co`) | Yes |
+| `SUPABASE_KEY` | Anon key or service role key | Yes |
+
+### Postgres
+
+| Variable | Description | Required |
+|---|---|---|
+| `POSTGRES_URL` | PostgreSQL connection string | Yes |
+
+## CLI variables
+
+These are read by `@flaky-tests/cli` when running `bunx @flaky-tests/cli`.
+
+| Variable | Description | Default |
+|---|---|---|
+| `FLAKY_TESTS_STORE` | Which store backend to use | `sqlite` |
+| `GITHUB_TOKEN` | Token used to create issues (also `GH_TOKEN`) | — |
+| `GITHUB_REPOSITORY` | `owner/repo` for issue creation (set automatically in Actions) | — |
+
+## GitHub Action inputs
+
+When using the `brewpirate/flaky-tests` GitHub Action, inputs map to environment variables automatically. See [Action inputs](/github-action/inputs/) for the full list.
+
+## Precedence
+
+Constructor options → environment variables → defaults.
+
+If you pass `path` to `new SqliteStore({ path: '...' })`, that overrides `FLAKY_TESTS_SQLITE_PATH`. If neither is set, the default path is used.

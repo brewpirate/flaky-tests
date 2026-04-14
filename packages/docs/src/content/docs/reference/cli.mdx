@@ -1,0 +1,127 @@
+---
+title: CLI commands
+description: Reference for all flaky-tests CLI flags and options.
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+The CLI is provided by `@flaky-tests/cli`. Run it with `bunx`:
+
+```sh
+bunx @flaky-tests/cli [flags]
+```
+
+Or install globally:
+
+```sh
+bun add -g @flaky-tests/cli
+flaky-tests [flags]
+```
+
+## Default behavior
+
+Running the CLI with no flags:
+
+1. Connects to the configured store
+2. Calls `getNewPatterns()` with default window (7 days) and threshold (2 failures)
+3. Prints a summary to stdout
+4. Exits `0` if no patterns found, `1` if patterns were found
+
+## Flags
+
+### `--window <days>`
+
+Number of days in each detection window. The CLI compares the current window against an equal prior window.
+
+```sh
+bunx @flaky-tests/cli --window 14   # 14-day windows
+```
+
+Default: `7`
+
+### `--threshold <n>`
+
+Minimum number of failures in the current window to flag a test as flaky.
+
+```sh
+bunx @flaky-tests/cli --threshold 3
+```
+
+Default: `2`
+
+### `--prompt`
+
+Print an AI investigation prompt for each pattern to stdout. Structured for pasting into Claude, Cursor, or Copilot.
+
+```sh
+bunx @flaky-tests/cli --prompt
+```
+
+### `--copy`
+
+Copy the investigation prompt to the clipboard. Uses `pbcopy` on macOS, `xclip` on Linux, `clip` on Windows.
+
+```sh
+bunx @flaky-tests/cli --prompt --copy
+```
+
+If multiple patterns are found, all prompts are concatenated before copying.
+
+### `--create-issue`
+
+Open a GitHub issue for each new pattern. Requires `GITHUB_TOKEN` and either `GITHUB_REPOSITORY` (set automatically in Actions) or `--repo`.
+
+```sh
+bunx @flaky-tests/cli --create-issue --repo your-org/your-repo
+```
+
+Issues include the investigation prompt in a collapsible `<details>` block. If an open issue for the same test already exists, a new one is not created.
+
+### `--repo <owner/repo>`
+
+Override the repository for issue creation. Defaults to `GITHUB_REPOSITORY` env var, then falls back to parsing `git remote get-url origin`.
+
+```sh
+bunx @flaky-tests/cli --create-issue --repo acme/api
+```
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | No new patterns detected |
+| `1` | One or more new patterns detected |
+| `2` | Configuration error (missing env vars, store connection failed) |
+
+<Aside type="tip">
+The exit code makes the CLI composable in CI pipelines. Use `|| true` to suppress failure if you want CI to pass regardless of flaky patterns:
+
+```sh
+bunx @flaky-tests/cli || true
+```
+</Aside>
+
+## Examples
+
+```sh
+# Check with defaults
+bunx @flaky-tests/cli
+
+# Check 30-day window, threshold 5
+bunx @flaky-tests/cli --window 30 --threshold 5
+
+# Print prompts for each pattern
+bunx @flaky-tests/cli --prompt
+
+# Copy single prompt to clipboard
+bunx @flaky-tests/cli --prompt --copy
+
+# Create GitHub issues
+GITHUB_TOKEN=$TOKEN bunx @flaky-tests/cli --create-issue --repo your-org/your-repo
+
+# Use Turso store
+FLAKY_TESTS_STORE=turso \
+  TURSO_URL=libsql://... \
+  TURSO_AUTH_TOKEN=... \
+  bunx @flaky-tests/cli
+```

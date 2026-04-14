@@ -1,0 +1,132 @@
+---
+title: Turso
+description: Remote SQLite via Turso — shared failure history with a free tier.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components'
+
+[Turso](https://turso.tech) is a remote SQLite service. The `@flaky-tests/store-turso` package uses the `@libsql/client` driver and runs the same SQL schema as the local SQLite store.
+
+**Free tier:** 500 databases, 1 GB storage, 1 billion row reads/month.
+
+## Installation
+
+```sh
+bun add -D @flaky-tests/store-turso
+# or: npm install -D @flaky-tests/store-turso
+```
+
+## Setup
+
+<Steps>
+
+1. **Create a Turso account and database**
+
+   ```sh
+   # Install the Turso CLI
+   curl -sSfL https://get.tur.so/install.sh | bash
+
+   # Log in
+   turso auth login
+
+   # Create a database
+   turso db create flaky-tests
+   ```
+
+2. **Get the connection URL and auth token**
+
+   ```sh
+   turso db show flaky-tests --url
+   # → libsql://flaky-tests-yourname.turso.io
+
+   turso db tokens create flaky-tests
+   # → eyJhbGci...
+   ```
+
+3. **Add to your environment**
+
+   ```sh
+   # .env.local (or GitHub Actions secrets)
+   TURSO_URL=libsql://flaky-tests-yourname.turso.io
+   TURSO_AUTH_TOKEN=eyJhbGci...
+   ```
+
+</Steps>
+
+## Usage
+
+```ts
+import { TursoStore } from '@flaky-tests/store-turso'
+
+const store = new TursoStore({
+  url: process.env.TURSO_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+await store.migrate() // creates tables if they don't exist
+```
+
+<Aside type="note">
+Unlike `SqliteStore`, `TursoStore` requires an explicit `await store.migrate()` call because the libSQL client is async. This is handled automatically when using `FLAKY_TESTS_STORE=turso` with the CLI.
+</Aside>
+
+## Constructor options
+
+```ts
+interface TursoStoreOptions {
+  /** libsql:// URL for your Turso database */
+  url: string
+  /** Auth token (not required for local file:// URLs) */
+  authToken?: string
+}
+```
+
+## CLI usage
+
+```sh
+FLAKY_TESTS_STORE=turso \
+  TURSO_URL=libsql://flaky-tests-yourname.turso.io \
+  TURSO_AUTH_TOKEN=eyJhbGci... \
+  bunx @flaky-tests/cli
+```
+
+## Plugin configuration (Bun)
+
+Create a custom preload:
+
+```ts title="preload.ts"
+import { createPreload } from '@flaky-tests/plugin-bun'
+import { TursoStore } from '@flaky-tests/store-turso'
+
+const store = new TursoStore({
+  url: process.env.TURSO_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+await store.migrate()
+
+createPreload(store)
+```
+
+```toml title="bunfig.toml"
+[test]
+preload = ["./preload.ts"]
+```
+
+## Plugin configuration (Vitest)
+
+```ts title="vitest.config.ts"
+import { defineConfig } from 'vitest/config'
+import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+import { TursoStore } from '@flaky-tests/store-turso'
+
+const store = new TursoStore({
+  url: process.env.TURSO_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+await store.migrate()
+
+export default defineConfig({
+  test: {
+    reporters: ['default', new FlakyTestsReporter({ store })],
+  },
+})
+```

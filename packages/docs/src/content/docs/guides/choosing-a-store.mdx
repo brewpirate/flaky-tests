@@ -1,0 +1,81 @@
+---
+title: Choosing a store
+description: Compare SQLite, Turso, Supabase, and Postgres to find the right backend for your team.
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components'
+
+flaky-tests is **storage-agnostic** — every store implements the same `IStore` interface, so you can swap backends without touching your test configuration.
+
+## Quick comparison
+
+| Store | Best for | Cost | Setup |
+|---|---|---|---|
+| SQLite | Local development, solo projects | Free | Zero config |
+| Turso | Small teams, edge, low ops overhead | Free tier (500 DBs) | Create DB, copy URL |
+| Supabase | Teams already on Supabase | Free tier | Create project |
+| Postgres | Larger teams, existing Postgres infra | Varies | Connection string |
+
+## SQLite
+
+The default. Uses Bun's built-in SQLite driver — no external dependencies.
+
+**Limitations:** local only. The database lives in `node_modules/.cache/flaky-tests/failures.db` and is not shared across machines or CI environments. If you run tests on multiple machines, each machine builds its own independent failure history.
+
+**When to use:** local development, solo projects, or any setup where you only care about patterns on a single machine.
+
+→ [SQLite store reference](/stores/sqlite/)
+
+## Turso
+
+Remote SQLite via [Turso](https://turso.tech). The schema and queries are identical to the local SQLite store. Data is stored in Turso's cloud and accessible from any machine.
+
+**Free tier:** 500 databases, 1 GB storage, 1 billion row reads/month — more than enough for most projects.
+
+**When to use:** small teams that want shared failure history across CI and local without operating a database server.
+
+→ [Turso store reference](/stores/turso/)
+
+## Supabase
+
+Uses the [Supabase JavaScript client](https://supabase.com/docs/reference/javascript). Works with any Supabase project.
+
+<Aside type="caution">
+Pattern detection (`getNewPatterns`) does two round-trip fetches and groups results in JS, because PostgREST doesn't support the conditional aggregates flaky-tests uses. This is fine for typical failure volumes but will be slower than a direct Postgres connection.
+</Aside>
+
+**Free tier:** unlimited projects (paused after 1 week of inactivity on free plan), 500 MB database.
+
+**When to use:** teams already running Supabase for their application.
+
+→ [Supabase store reference](/stores/supabase/)
+
+## Postgres
+
+Direct connection using the `postgres` npm package (tagged-template SQL). Works with any Postgres-compatible server including [Neon](https://neon.tech), [Railway](https://railway.app), and self-hosted.
+
+Uses `COUNT(*) FILTER (WHERE ...)` aggregates, which is more efficient than the Supabase two-pass approach.
+
+**When to use:** teams with an existing Postgres server, or anyone who wants the most efficient queries.
+
+→ [Postgres / Neon store reference](/stores/postgres/)
+
+## Switching stores
+
+Change the `FLAKY_TESTS_STORE` environment variable:
+
+```sh
+# Uses SQLite (default)
+bunx @flaky-tests/cli
+
+# Uses Turso
+FLAKY_TESTS_STORE=turso TURSO_URL=libsql://... TURSO_AUTH_TOKEN=... bunx @flaky-tests/cli
+
+# Uses Supabase
+FLAKY_TESTS_STORE=supabase SUPABASE_URL=https://... SUPABASE_KEY=... bunx @flaky-tests/cli
+
+# Uses Postgres
+FLAKY_TESTS_STORE=postgres POSTGRES_URL=postgres://... bunx @flaky-tests/cli
+```
+
+The store packages are loaded dynamically so unused packages are never bundled.
