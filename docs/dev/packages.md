@@ -4,27 +4,23 @@ This guide explains each package in the monorepo, how they connect, and the gotc
 
 ## How the packages fit together
 
-```
-User's test runner
-       │
-       ▼
-┌─────────────────┐     ┌─────────────────┐
-│   plugin-bun    │     │  plugin-vitest   │   ← Captures failures
-│  (Bun preload)  │     │ (Vitest reporter)│
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         ▼                       ▼
-┌─────────────────────────────────────────┐
-│              core                        │   ← Shared types + utilities
-└────────┬──────┬──────┬──────┬───────────┘
-         │      │      │      │
-         ▼      ▼      ▼      ▼
-      sqlite  turso  supabase  postgres    ← Store adapters
-         │
-         ▼
-┌─────────────────┐
-│      cli         │   ← Detects patterns, generates prompts, opens issues
-└─────────────────┘
+```mermaid
+graph TD
+    Runner["User's test runner"] --> PluginBun["plugin-bun<br/><small>Bun preload</small>"]
+    Runner --> PluginVitest["plugin-vitest<br/><small>Vitest reporter</small>"]
+
+    PluginBun --> Core["core<br/><small>Shared types + utilities</small>"]
+    PluginVitest --> Core
+
+    Core --> SQLite["store-sqlite"]
+    Core --> Turso["store-turso"]
+    Core --> Supabase["store-supabase"]
+    Core --> Postgres["store-postgres"]
+
+    SQLite --> CLI["cli<br/><small>Detects patterns, generates prompts, opens issues</small>"]
+    Turso --> CLI
+    Supabase --> CLI
+    Postgres --> CLI
 ```
 
 **Data flow**: Plugin captures failure → writes to store → CLI reads from store → detects flaky patterns → generates prompt or GitHub issue.
@@ -207,4 +203,4 @@ All store methods validate inputs at runtime using ArkType schemas via `parse()`
 
 ### Testing
 
-Tests are colocated (`*.test.ts` next to `*.ts`). Run all tests with `bun test` from the repo root. Tests use `bun:test` (describe/test/expect). Remote stores (turso, supabase, postgres) have no tests because they require live database connections.
+Tests are colocated (`*.test.ts` next to `*.ts`). Run `bun test` for unit tests, `bun run test:integration` for integration tests (remote stores). Integration tests are guarded by `describe.skipIf(!process.env.INTEGRATION)` and skipped during normal runs.
