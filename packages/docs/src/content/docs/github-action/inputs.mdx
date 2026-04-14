@@ -1,0 +1,111 @@
+---
+title: Action inputs
+description: All inputs for the brewpirate/flaky-tests GitHub Action.
+---
+
+The `brewpirate/flaky-tests` Action runs `flaky-tests check` on your failure database and optionally opens GitHub issues for new patterns.
+
+## Usage
+
+```yaml
+- uses: brewpirate/flaky-tests@v1
+  with:
+    store: turso
+    connection-string: ${{ secrets.TURSO_URL }}
+    auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    create-issues: 'true'
+```
+
+## Inputs
+
+### `store`
+
+**Required.** The store backend to use.
+
+| Value | Store |
+|---|---|
+| `sqlite` | Local SQLite (not useful in CI — no shared state) |
+| `turso` | Turso remote SQLite |
+| `supabase` | Supabase |
+| `postgres` | PostgreSQL / Neon |
+
+### `connection-string`
+
+**Required for remote stores.** The primary connection URL for the store.
+
+| Store | Expected format |
+|---|---|
+| `turso` | `libsql://your-db.turso.io` |
+| `supabase` | `https://abcdef.supabase.co` |
+| `postgres` | `postgres://user:pass@host:5432/db` |
+
+### `auth-token`
+
+**Required for Turso and Supabase.** The authentication token or API key.
+
+| Store | Value |
+|---|---|
+| `turso` | Turso auth token from `turso db tokens create` |
+| `supabase` | Supabase anon key or service role key |
+| `postgres` | Not used (credentials embedded in `connection-string`) |
+
+### `github-token`
+
+**Required for `create-issues: true`.** A token with `issues: write` permission.
+
+Use `${{ secrets.GITHUB_TOKEN }}` for the built-in token, which is sufficient for creating issues in the same repository.
+
+### `window-days`
+
+Number of days in each detection window.
+
+- **Default:** `7`
+- **Type:** string (number)
+
+### `threshold`
+
+Minimum number of failures in the current window to flag a test as flaky.
+
+- **Default:** `2`
+- **Type:** string (number)
+
+### `create-issues`
+
+Whether to open GitHub issues for new patterns.
+
+- **Default:** `true`
+- **Type:** string (`'true'` or `'false'`)
+
+## Required permissions
+
+When using `create-issues: true`, your job needs `issues: write` permission:
+
+```yaml
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: brewpirate/flaky-tests@v1
+        with:
+          # ...
+```
+
+## Outputs
+
+The action exits with code `1` if new patterns are found, `0` if clean. You can use this to gate downstream steps:
+
+```yaml
+- id: check
+  uses: brewpirate/flaky-tests@v1
+  with:
+    store: turso
+    connection-string: ${{ secrets.TURSO_URL }}
+    auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
+  continue-on-error: true
+
+- if: steps.check.outcome == 'failure'
+  run: echo "Flaky tests detected! Check the issues tab."
+```

@@ -1,0 +1,66 @@
+import { defineConfig } from 'astro/config'
+import starlight from '@astrojs/starlight'
+
+export default defineConfig({
+  integrations: [
+    starlight({
+      title: 'flaky-tests',
+      description: 'Zero-friction flaky test detection for Bun and Vitest. Catches patterns, generates prompts, opens issues.',
+      logo: {
+        light: './src/assets/logo-light.svg',
+        dark: './src/assets/logo-dark.svg',
+        replacesTitle: false,
+      },
+      social: {
+        github: 'https://github.com/brewpirate/flaky-tests',
+      },
+      editLink: {
+        baseUrl: 'https://github.com/brewpirate/flaky-tests/edit/main/packages/docs/',
+      },
+      customCss: ['./src/styles/custom.css'],
+      sidebar: [
+        {
+          label: 'Getting Started',
+          items: [
+            { label: 'Introduction', slug: 'getting-started/introduction' },
+            { label: 'Quick Start', slug: 'getting-started/quick-start' },
+          ],
+        },
+        {
+          label: 'Guides',
+          items: [
+            { label: 'Setting up with Bun', slug: 'guides/bun' },
+            { label: 'Setting up with Vitest', slug: 'guides/vitest' },
+            { label: 'Choosing a store', slug: 'guides/choosing-a-store' },
+            { label: 'CI setup', slug: 'guides/ci-setup' },
+            { label: 'Scheduled detection', slug: 'guides/scheduled-detection' },
+          ],
+        },
+        {
+          label: 'Stores',
+          items: [
+            { label: 'SQLite (local)', slug: 'stores/sqlite' },
+            { label: 'Turso', slug: 'stores/turso' },
+            { label: 'Supabase', slug: 'stores/supabase' },
+            { label: 'Postgres / Neon', slug: 'stores/postgres' },
+          ],
+        },
+        {
+          label: 'Reference',
+          items: [
+            { label: 'Environment variables', slug: 'reference/env-vars' },
+            { label: 'CLI commands', slug: 'reference/cli' },
+            { label: 'IStore interface', slug: 'reference/istore' },
+          ],
+        },
+        {
+          label: 'GitHub Action',
+          items: [
+            { label: 'Inputs', slug: 'github-action/inputs' },
+            { label: 'Example workflows', slug: 'github-action/example-workflows' },
+          ],
+        },
+      ],
+    }),
+  ],
+})

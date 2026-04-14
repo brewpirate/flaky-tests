@@ -1,0 +1,32 @@
+---
+title: flaky-tests
+description: Zero-friction flaky test detection for Bun and Vitest.
+template: splash
+hero:
+  tagline: Your tests should be flaky. Just kidding — but now you'll know when they are.
+  actions:
+    - text: Quick Start
+      link: /getting-started/quick-start/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/brewpirate/flaky-tests
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components'
+
+<CardGrid stagger>
+  <Card title="Zero config" icon="pencil">
+    One line in `bunfig.toml`. Tests run normally. Failures are captured automatically.
+  </Card>
+  <Card title="Any backend" icon="setting">
+    SQLite locally. Turso, Supabase, or Postgres for teams. Swap without changing your tests.
+  </Card>
+  <Card title="Detect patterns" icon="magnifier">
+    `bunx @flaky-tests/cli` compares failure rates across time windows and flags new flakiness.
+  </Card>
+  <Card title="Close the loop" icon="rocket">
+    Generates AI investigation prompts and opens GitHub issues automatically.
+  </Card>
+</CardGrid>

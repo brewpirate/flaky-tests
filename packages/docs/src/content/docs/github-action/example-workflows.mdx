@@ -1,0 +1,164 @@
+---
+title: Example workflows
+description: Ready-to-use GitHub Actions workflows for common flaky-tests setups.
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+## Weekly scheduled detection
+
+The recommended pattern: capture failures on every push, detect patterns once a week.
+
+```yaml title=".github/workflows/flaky-check.yml"
+name: Flaky test detection
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # Monday 9am UTC
+  workflow_dispatch:
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: brewpirate/flaky-tests@v1
+        with:
+          store: turso
+          connection-string: ${{ secrets.TURSO_URL }}
+          auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          window-days: '7'
+          threshold: '2'
+          create-issues: 'true'
+```
+
+## CI with capture + detection on main
+
+Capture failures on every PR and push. Detect patterns on main pushes only.
+
+```yaml title=".github/workflows/ci.yml"
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      - run: bun test
+        env:
+          FLAKY_TESTS_STORE: turso
+          TURSO_URL: ${{ secrets.TURSO_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+      # Detect patterns and open issues — only on main branch pushes
+      - if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: brewpirate/flaky-tests@v1
+        with:
+          store: turso
+          connection-string: ${{ secrets.TURSO_URL }}
+          auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          create-issues: 'true'
+```
+
+## Supabase store
+
+```yaml title=".github/workflows/flaky-check.yml"
+name: Flaky test detection
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: brewpirate/flaky-tests@v1
+        with:
+          store: supabase
+          connection-string: ${{ secrets.SUPABASE_URL }}
+          auth-token: ${{ secrets.SUPABASE_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          create-issues: 'true'
+```
+
+## Postgres / Neon store
+
+```yaml title=".github/workflows/flaky-check.yml"
+name: Flaky test detection
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: brewpirate/flaky-tests@v1
+        with:
+          store: postgres
+          connection-string: ${{ secrets.POSTGRES_URL }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          create-issues: 'true'
+```
+
+<Aside type="note">
+The Postgres store doesn't use `auth-token` — credentials are embedded in the `connection-string`.
+</Aside>
+
+## Capture-only (no detection)
+
+Just accumulate data without opening issues — useful during initial rollout:
+
+```yaml title=".github/workflows/ci.yml"
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - run: bun test
+        env:
+          FLAKY_TESTS_STORE: turso
+          TURSO_URL: ${{ secrets.TURSO_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      # No detection step — just capture
+```
+
+## Detection without issue creation
+
+Check for patterns and fail CI if found, without creating GitHub issues:
+
+```yaml
+- uses: brewpirate/flaky-tests@v1
+  with:
+    store: turso
+    connection-string: ${{ secrets.TURSO_URL }}
+    auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
+    create-issues: 'false'
+    # No github-token needed
+```
+
+This exits `1` if patterns are found. Use `continue-on-error: true` if you don't want to block CI.

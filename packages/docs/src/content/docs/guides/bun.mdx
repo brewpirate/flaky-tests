@@ -1,0 +1,84 @@
+---
+title: Setting up with Bun
+description: Install the Bun plugin and capture test failures automatically.
+---
+
+import { Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components'
+
+The Bun plugin works as a **preload script** — it runs before your tests and wraps `bun:test` to intercept every failure.
+
+## Installation
+
+<Steps>
+
+1. **Install the plugin and a store**
+
+   ```sh
+   bun add -D @flaky-tests/plugin-bun @flaky-tests/store-sqlite
+   ```
+
+2. **Add the preload to `bunfig.toml`**
+
+   ```toml
+   [test]
+   preload = ["@flaky-tests/plugin-bun/preload"]
+   ```
+
+3. **Run your tests as normal**
+
+   ```sh
+   bun test
+   ```
+
+   Every failure is written to `node_modules/.cache/flaky-tests/failures.db` automatically.
+
+</Steps>
+
+## How it works
+
+The preload script uses `mock.module('bun:test', ...)` to wrap the `test`, `it`, and `describe` globals with a thin proxy. When a test fails, the failure is written to the store. When all tests finish, the run is closed.
+
+The proxy preserves all sub-APIs: `.skip`, `.only`, `.each`, `.todo`, `.if`, and `.skipIf` all work exactly as before.
+
+## Choosing a different store
+
+By default the preload uses SQLite. To use a remote store, create your own preload entry point:
+
+```ts title="preload.ts"
+import { createPreload } from '@flaky-tests/plugin-bun'
+import { TursoStore } from '@flaky-tests/store-turso'
+
+const store = new TursoStore({
+  url: process.env.TURSO_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+await store.migrate()
+
+createPreload(store)
+```
+
+Then point `bunfig.toml` at your file:
+
+```toml
+[test]
+preload = ["./preload.ts"]
+```
+
+## Environment variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `FLAKY_TESTS_DISABLED` | Set to `1` to skip all capture | — |
+| `FLAKY_TESTS_SQLITE_PATH` | Override the SQLite file path | `node_modules/.cache/flaky-tests/failures.db` |
+
+## Disabling capture
+
+To skip capture for a single run:
+
+```sh
+FLAKY_TESTS_DISABLED=1 bun test
+```
+
+<Aside type="tip">
+This is useful in watch mode, where you don't want to fill the database with failures from in-progress edits.
+</Aside>
