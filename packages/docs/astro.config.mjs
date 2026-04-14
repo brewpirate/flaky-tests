@@ -3,6 +3,8 @@ import starlight from '@astrojs/starlight'
 import catppuccin from '@catppuccin/starlight'
 
 export default defineConfig({
+  site: 'https://brewpirate.github.io',
+  base: '/flaky-tests',
   integrations: [
     starlight({
       title: 'flaky-tests',
@@ -18,9 +20,9 @@ export default defineConfig({
           light: { flavor: 'latte', accent: 'red' },
         }),
       ],
-      social: {
-        github: 'https://github.com/brewpirate/flaky-tests',
-      },
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/brewpirate/flaky-tests' },
+      ],
       editLink: {
         baseUrl: 'https://github.com/brewpirate/flaky-tests/edit/main/packages/docs/',
       },
