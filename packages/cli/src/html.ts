@@ -38,6 +38,13 @@ function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
   </article>`
 }
 
+/**
+ * Generates a self-contained HTML report for detected flaky test patterns.
+ * Includes styled cards with metadata and copy-able investigation prompts.
+ * @param patterns - Flaky test patterns to render
+ * @param windowDays - Detection window size in days (used in headings and prompts)
+ * @returns Complete HTML document string
+ */
 export function generateHtml(patterns: FlakyPattern[], windowDays: number): string {
   const plural = patterns.length === 1 ? 'pattern' : 'patterns'
   const cards = patterns.map((p, i) => patternCard(p, i, windowDays)).join('\n')

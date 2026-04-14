@@ -21,6 +21,10 @@ export interface SupabaseStoreOptions {
   tablePrefix?: string
 }
 
+/**
+ * Supabase-backed implementation of the {@link IStore} interface.
+ * Persists test runs and failures to two Supabase tables.
+ */
 export class SupabaseStore implements IStore {
   private client: SupabaseClient
   private runsTable: string
@@ -33,6 +37,7 @@ export class SupabaseStore implements IStore {
     this.failuresTable = `${prefix}_failures`
   }
 
+  /** Insert a new test run record. Throws on Supabase errors. */
   async insertRun(input: InsertRunInput): Promise<void> {
     const { error } = await this.client.from(this.runsTable).insert({
       run_id: input.runId,
@@ -45,6 +50,11 @@ export class SupabaseStore implements IStore {
     if (error) throw new Error(`[flaky-tests/store-supabase] insertRun: ${error.message}`)
   }
 
+  /**
+   * Update an existing test run with final results.
+   * @param runId - The run to update (matched via `run_id` column).
+   * @param input - Fields to set (nulls are written explicitly).
+   */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     const { error } = await this.client
       .from(this.runsTable)
@@ -61,6 +71,7 @@ export class SupabaseStore implements IStore {
     if (error) throw new Error(`[flaky-tests/store-supabase] updateRun: ${error.message}`)
   }
 
+  /** Record a single test failure. `durationMs` is rounded to the nearest integer. */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     const { error } = await this.client.from(this.failuresTable).insert({
       run_id: input.runId,
@@ -75,6 +86,12 @@ export class SupabaseStore implements IStore {
     if (error) throw new Error(`[flaky-tests/store-supabase] insertFailure: ${error.message}`)
   }
 
+  /**
+   * Detect newly-flaky tests by comparing a recent window against a prior window.
+   * Returns tests that failed >= `threshold` times recently but zero times in the
+   * prior window, sorted by failure count descending. Only considers runs with
+   * fewer than 10 total failures and a non-null `ended_at`.
+   */
   async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
     const windowDays = options.windowDays ?? 7
     const threshold = options.threshold ?? 2

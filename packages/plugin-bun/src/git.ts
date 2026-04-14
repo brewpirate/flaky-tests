@@ -1,5 +1,8 @@
+/** Git metadata captured at test-run start. `null` fields indicate git is unavailable. */
 export interface GitInfo {
+  /** Full HEAD commit SHA, or `null` if not in a git repo. */
   sha: string | null
+  /** Whether the working tree has uncommitted changes, or `null` if not in a git repo. */
   dirty: boolean | null
 }
 
@@ -17,6 +20,10 @@ function runGit(args: string[]): string | null {
   }
 }
 
+/**
+ * Captures the current git SHA and dirty state by shelling out to `git`.
+ * Safe to call outside a git repo — returns `{ sha: null, dirty: null }`.
+ */
 export function captureGitInfo(): GitInfo {
   const sha = runGit(['rev-parse', 'HEAD'])
   const porcelain = runGit(['status', '--porcelain'])

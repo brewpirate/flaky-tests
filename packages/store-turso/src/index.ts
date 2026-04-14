@@ -54,6 +54,10 @@ CREATE INDEX IF NOT EXISTS idx_failures_test ON failures(test_file, test_name);
 CREATE INDEX IF NOT EXISTS idx_failures_run  ON failures(run_id);
 `
 
+/**
+ * Flaky-test store backed by Turso (libSQL). Wire-compatible with
+ * the SQLite store — swap the connection URL to go local or remote.
+ */
 export class TursoStore implements IStore {
   private client: Client
 
@@ -85,6 +89,7 @@ export class TursoStore implements IStore {
     }
   }
 
+  /** Persist a new test-run row. Call before any failures are recorded. */
   async insertRun(input: InsertRunInput): Promise<void> {
     await this.client.execute({
       sql: `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
@@ -100,6 +105,7 @@ export class TursoStore implements IStore {
     })
   }
 
+  /** Update a run with its final summary (status, counts, duration). */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     await this.client.execute({
       sql: `UPDATE runs
@@ -124,6 +130,7 @@ export class TursoStore implements IStore {
     })
   }
 
+  /** Record a single test failure linked to an existing run. */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     await this.client.execute({
       sql: `INSERT INTO failures
@@ -143,6 +150,15 @@ export class TursoStore implements IStore {
     })
   }
 
+  /**
+   * Detect newly-flaky tests: tests that failed >= `threshold` times in the
+   * recent window but had zero failures in the prior window of equal length.
+   * Only considers runs where fewer than 10 tests failed (filters out broken builds).
+   *
+   * @param options.windowDays - Length of the recent window (default 7).
+   * @param options.threshold  - Minimum recent failures to qualify (default 2).
+   * @returns Patterns sorted by recent failure count descending.
+   */
   async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
     const windowDays = options.windowDays ?? 7
     const threshold = options.threshold ?? 2
@@ -184,6 +200,7 @@ export class TursoStore implements IStore {
     }))
   }
 
+  /** Close the underlying libSQL connection. */
   async close(): Promise<void> {
     this.client.close()
   }

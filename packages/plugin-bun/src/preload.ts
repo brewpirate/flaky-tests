@@ -52,6 +52,13 @@ function resolveTestFile(error: unknown): string {
   return 'unknown'
 }
 
+/**
+ * Monkey-patches `bun:test` to intercept test/describe registrations and
+ * record failures to the provided store. Registers an `afterAll` hook to
+ * finalize the run with aggregate stats.
+ *
+ * @param store - Storage backend implementing {@link IStore} (e.g. SQLite, Supabase).
+ */
 export function createPreload(store: IStore): void {
   // Use a run id provided by run-tracked (so it can reconcile the row post-exit)
   // or generate a fresh one.

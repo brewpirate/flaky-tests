@@ -3,7 +3,7 @@ title: flaky-tests
 description: Zero-friction flaky test detection for Bun and Vitest.
 template: splash
 hero:
-  tagline: Your tests should be flaky. Just kidding — but now you'll know when they are.
+  tagline: Automatically detect, categorize, and track flaky tests across your CI runs — so intermittent failures stop slipping through the cracks.
   actions:
     - text: Quick Start
       link: /flaky-tests/getting-started/quick-start/
@@ -18,15 +18,25 @@ import { Card, CardGrid } from '@astrojs/starlight/components'
 
 <CardGrid>
   <Card title="Zero config" icon="pencil">
-    One line in `bunfig.toml`. Tests run normally. Failures are captured automatically.
+    Add a single preload line to your Bun or Vitest config. Every test run is silently recorded — test names, durations, error messages, and stack traces — with zero changes to your test code.
   </Card>
   <Card title="Any backend" icon="setting">
-    SQLite locally. Turso, Supabase, or Postgres for teams. Swap without changing your tests.
+    SQLite for local development, Turso or Supabase for shared team visibility, Postgres for existing infrastructure. All backends share the same interface — swap with an environment variable.
   </Card>
   <Card title="Detect patterns" icon="magnifier">
-    `bunx @flaky-tests/cli` compares failure rates across time windows and flags new flakiness.
+    The CLI compares failure rates across sliding time windows (default: 7 days) and flags tests that recently crossed a flakiness threshold. Failures are categorized as assertion errors, timeouts, or uncaught exceptions.
   </Card>
   <Card title="Close the loop" icon="rocket">
-    Generates AI investigation prompts and opens GitHub issues automatically.
+    Generate AI-ready investigation prompts with full context, copy them to your clipboard, open GitHub issues automatically (with duplicate detection), or export an HTML report.
   </Card>
 </CardGrid>
+
+## How it works
+
+1. **Install a plugin** — add `@flaky-tests/plugin-bun` or `@flaky-tests/plugin-vitest` as a preload. It hooks into your test runner and records every run to a local or remote database.
+
+2. **Run your tests as usual** — the plugin captures pass/fail results, error categories (assertion, timeout, uncaught), stack traces, git SHA, and timing data. No test code changes needed.
+
+3. **Detect flakiness** — run `bunx @flaky-tests/cli` (or `npx`) to analyze recorded results. It compares the current time window against the prior window and surfaces tests that are newly failing intermittently.
+
+4. **Take action** — use `--prompt` to generate an investigation prompt you can paste into an AI assistant, `--create-issue` to open a GitHub issue for each flaky pattern, or `--html` to generate a visual report.

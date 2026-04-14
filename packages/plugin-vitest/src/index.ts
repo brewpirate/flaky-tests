@@ -24,11 +24,16 @@ import { execSync } from 'node:child_process'
 import type { IStore, InsertFailureInput } from '@flaky-tests/core'
 import { categorizeError, extractMessage, extractStack } from '@flaky-tests/core'
 
+/** Git metadata captured at the start of a test run. */
 interface GitInfo {
   sha: string | null
   dirty: boolean | null
 }
 
+/**
+ * Reads the current HEAD SHA and working-tree dirty status.
+ * Returns nulls if git is unavailable or the project is not a git repo.
+ */
 function captureGitInfo(): GitInfo {
   try {
     const sha = execSync('git rev-parse HEAD', {
@@ -62,6 +67,10 @@ interface TaskBase {
   tasks?: TaskBase[]
 }
 
+/**
+ * Builds a human-readable test path by walking up the suite hierarchy.
+ * Example output: `"outer suite > inner suite > test name"`.
+ */
 function getTestPath(task: TaskBase): string {
   const parts: string[] = [task.name]
   let current = task.suite
@@ -72,6 +81,7 @@ function getTestPath(task: TaskBase): string {
   return parts.join(' > ')
 }
 
+/** Recursively visits every task (tests and suites) in a task tree. */
 function walkTasks(tasks: TaskBase[], visit: (task: TaskBase) => void): void {
   for (const task of tasks) {
     visit(task)
@@ -79,12 +89,32 @@ function walkTasks(tasks: TaskBase[], visit: (task: TaskBase) => void): void {
   }
 }
 
+/**
+ * Vitest custom reporter that records test failures to a flaky-tests store.
+ *
+ * Implements Vitest's `Reporter` interface (the `onInit` / `onFinished`
+ * lifecycle hooks) and is compatible with Vitest 1.x, 2.x, and 3.x.
+ *
+ * @example
+ * ```ts
+ * // vitest.config.ts
+ * export default defineConfig({
+ *   test: {
+ *     reporters: ['default', new FlakyTestsReporter(new SqliteStore())],
+ *   },
+ * })
+ * ```
+ */
 export class FlakyTestsReporter {
   private store: IStore
   private runId: string = crypto.randomUUID()
   private startTime: number = performance.now()
   private ready = false
 
+  /**
+   * @param store - Backend store implementation (e.g. SqliteStore, SupabaseStore)
+   *               that persists run and failure records.
+   */
   constructor(store: IStore) {
     this.store = store
   }
@@ -113,6 +143,9 @@ export class FlakyTestsReporter {
    * new run row (run_id is stable per reporter instance, so subsequent reruns
    * overwrite the same row — create a new reporter instance per run if you
    * want separate rows).
+   *
+   * @param files - Completed file tasks containing nested test results.
+   * @param errors - Unhandled errors that occurred between tests.
    */
   async onFinished(files: TaskBase[] = [], errors: unknown[] = []): Promise<void> {
     if (!this.ready) return

@@ -8,6 +8,7 @@
 import type { FlakyPattern } from '@flaky-tests/core'
 import { generatePrompt } from './prompt'
 
+/** Authentication and target repository for GitHub API calls. */
 export interface GitHubConfig {
   token: string
   owner: string

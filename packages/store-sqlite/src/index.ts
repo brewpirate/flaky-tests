@@ -9,6 +9,7 @@ import type {
   UpdateRunInput,
 } from '@flaky-tests/core'
 
+/** Configuration for the SQLite-backed flaky-tests store. */
 export interface SqliteStoreOptions {
   /** Path to the SQLite database file. Defaults to node_modules/.cache/flaky-tests/failures.db */
   dbPath?: string
@@ -60,9 +61,19 @@ function ensureDirectory(dbPath: string): void {
   }
 }
 
+/**
+ * SQLite-backed implementation of the flaky-tests {@link IStore} interface.
+ *
+ * Creates the database file and schema on construction. Uses WAL journal mode
+ * for concurrent read performance and applies forward-compatible migrations.
+ */
 export class SqliteStore implements IStore {
   private db: Database
 
+  /**
+   * Open (or create) a SQLite store.
+   * @param options - Store configuration; uses sensible defaults when omitted.
+   */
   constructor(options: SqliteStoreOptions = {}) {
     const dbPath = options.dbPath ?? DEFAULT_DB_PATH
     ensureDirectory(dbPath)
@@ -93,6 +104,10 @@ export class SqliteStore implements IStore {
     }
   }
 
+  /**
+   * Record a new test run. Called at the start of a test session.
+   * @param input - Run metadata including ID, timestamp, and optional git info.
+   */
   async insertRun(input: InsertRunInput): Promise<void> {
     this.db.run(
       `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
@@ -108,6 +123,11 @@ export class SqliteStore implements IStore {
     )
   }
 
+  /**
+   * Finalize a run with end-of-session stats (duration, pass/fail counts, status).
+   * @param runId - The run to update.
+   * @param input - Completion data for the run.
+   */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     this.db.run(
       `UPDATE runs
@@ -132,6 +152,10 @@ export class SqliteStore implements IStore {
     )
   }
 
+  /**
+   * Record an individual test failure within a run.
+   * @param input - Failure details including test identity, error info, and timing.
+   */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     this.db.run(
       `INSERT INTO failures
@@ -174,6 +198,16 @@ export class SqliteStore implements IStore {
     )
   }
 
+  /**
+   * Detect newly-flaky tests by comparing recent failures against a prior window.
+   *
+   * Returns tests that failed at least {@link GetNewPatternsOptions.threshold | threshold}
+   * times in the recent window but zero times in the prior window of equal length.
+   * Runs with >= 10 failures are excluded to filter out infrastructure blowups.
+   *
+   * @param options - Window size and threshold overrides.
+   * @returns Flaky patterns sorted by recent failure count descending.
+   */
   async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
     const windowDays = options.windowDays ?? 7
     const threshold = options.threshold ?? 2
@@ -234,6 +268,7 @@ export class SqliteStore implements IStore {
     }))
   }
 
+  /** Close the underlying SQLite connection. */
   async close(): Promise<void> {
     this.db.close()
   }

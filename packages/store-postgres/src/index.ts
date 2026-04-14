@@ -24,6 +24,11 @@ export interface PostgresStoreOptions {
   tablePrefix?: string
 }
 
+/**
+ * PostgreSQL-backed implementation of the flaky-tests store.
+ * Persists test runs and failures into two configurable tables
+ * and supports querying for newly-emerging flaky patterns.
+ */
 export class PostgresStore implements IStore {
   private sql: ReturnType<typeof postgres>
   private runsTable: string
@@ -48,6 +53,7 @@ export class PostgresStore implements IStore {
     }
   }
 
+  /** Insert a new test run record. Must be called before any failures reference this run. */
   async insertRun(input: InsertRunInput): Promise<void> {
     const runs = this.runsTable
     await this.sql`
@@ -60,6 +66,7 @@ export class PostgresStore implements IStore {
     `
   }
 
+  /** Update a run with final results (duration, status, test counts) after it completes. */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     const runs = this.runsTable
     await this.sql`
@@ -75,6 +82,7 @@ export class PostgresStore implements IStore {
     `
   }
 
+  /** Record a single test failure associated with an existing run. */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     const failures = this.failuresTable
     await this.sql`
@@ -90,6 +98,11 @@ export class PostgresStore implements IStore {
     `
   }
 
+  /**
+   * Detect newly-flaky tests by comparing a recent window to a prior window of equal length.
+   * Returns tests that failed >= `threshold` times in the recent window but zero times
+   * in the prior window, filtering out runs with 10+ failures (likely infrastructure issues).
+   */
   async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
     const windowDays = options.windowDays ?? 7
     const threshold = options.threshold ?? 2
@@ -141,6 +154,7 @@ export class PostgresStore implements IStore {
     }))
   }
 
+  /** Gracefully close the underlying PostgreSQL connection pool. */
   async close(): Promise<void> {
     await this.sql.end()
   }

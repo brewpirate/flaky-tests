@@ -1,5 +1,7 @@
+/** Coarse classification of why a test failed. */
 export type FailureKind = 'assertion' | 'timeout' | 'uncaught' | 'unknown'
 
+/** Fields required to record a new test run. */
 export interface InsertRunInput {
   runId: string
   startedAt: string
@@ -9,6 +11,7 @@ export interface InsertRunInput {
   testArgs?: string | null
 }
 
+/** Partial fields for updating a run after it completes. */
 export interface UpdateRunInput {
   endedAt?: string
   durationMs?: number
@@ -19,6 +22,7 @@ export interface UpdateRunInput {
   errorsBetweenTests?: number
 }
 
+/** Fields required to record a single test failure within a run. */
 export interface InsertFailureInput {
   runId: string
   testFile: string
