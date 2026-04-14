@@ -1,5 +1,7 @@
 import postgres from 'postgres'
 import type {
+  FlakyPattern,
+  GetNewPatternsOptions,
   InsertFailureInput,
   InsertRunInput,
   IStore,
@@ -86,6 +88,57 @@ export class PostgresStore implements IStore {
          ${input.durationMs != null ? Math.round(input.durationMs) : null},
          ${input.failedAt})
     `
+  }
+
+  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
+    const windowDays = options.windowDays ?? 7
+    const threshold = options.threshold ?? 2
+    const now = Date.now()
+    const windowStart = new Date(now - windowDays * 86400000)
+    const priorStart = new Date(now - windowDays * 2 * 86400000)
+    const runs = this.runsTable
+    const failures = this.failuresTable
+
+    const rows = await this.sql<Array<{
+      test_file: string
+      test_name: string
+      recent_fails: string
+      prior_fails: string
+      failure_kinds: string[]
+      last_error_message: string | null
+      last_error_stack: string | null
+      last_failed: Date
+    }>>`
+      SELECT
+        f.test_file,
+        f.test_name,
+        COUNT(*) FILTER (WHERE f.failed_at > ${windowStart})                                    AS recent_fails,
+        COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart})   AS prior_fails,
+        ARRAY_AGG(DISTINCT f.failure_kind)                                                       AS failure_kinds,
+        MAX(f.error_message) FILTER (WHERE f.failed_at > ${windowStart})                        AS last_error_message,
+        MAX(f.error_stack)   FILTER (WHERE f.failed_at > ${windowStart})                        AS last_error_stack,
+        MAX(f.failed_at)                                                                         AS last_failed
+      FROM ${this.sql(failures)} f
+      JOIN ${this.sql(runs)} r ON r.run_id = f.run_id
+      WHERE r.failed_tests < 10
+        AND r.ended_at IS NOT NULL
+        AND f.failed_at > ${priorStart}
+      GROUP BY f.test_file, f.test_name
+      HAVING COUNT(*) FILTER (WHERE f.failed_at > ${windowStart}) >= ${threshold}
+         AND COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart}) = 0
+      ORDER BY recent_fails DESC
+    `
+
+    return rows.map((r) => ({
+      testFile: r.test_file,
+      testName: r.test_name,
+      recentFails: Number(r.recent_fails),
+      priorFails: Number(r.prior_fails),
+      failureKinds: r.failure_kinds,
+      lastErrorMessage: r.last_error_message,
+      lastErrorStack: r.last_error_stack,
+      lastFailed: r.last_failed.toISOString(),
+    }))
   }
 
   async close(): Promise<void> {

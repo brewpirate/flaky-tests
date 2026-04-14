@@ -1,6 +1,8 @@
 import { mkdirSync } from 'node:fs'
 import { Database } from 'bun:sqlite'
 import type {
+  FlakyPattern,
+  GetNewPatternsOptions,
   InsertFailureInput,
   InsertRunInput,
   IStore,
@@ -170,6 +172,58 @@ export class SqliteStore implements IStore {
     console.warn(
       `[flaky-tests] Run ${runId} exited with failure but preload recorded status=pass. Overriding to fail.`,
     )
+  }
+
+  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
+    const windowDays = options.windowDays ?? 7
+    const threshold = options.threshold ?? 2
+    const now = Date.now()
+    const windowStart = new Date(now - windowDays * 86400000).toISOString()
+    const priorStart = new Date(now - windowDays * 2 * 86400000).toISOString()
+
+    type Row = {
+      test_file: string
+      test_name: string
+      recent_fails: number
+      prior_fails: number
+      failure_kinds: string
+      last_error_message: string | null
+      last_error_stack: string | null
+      last_failed: string
+    }
+
+    const rows = this.db
+      .query<Row, [string, string, string, string, string, string, number]>(
+        `SELECT
+           f.test_file,
+           f.test_name,
+           SUM(CASE WHEN f.failed_at > ?  THEN 1 ELSE 0 END) AS recent_fails,
+           SUM(CASE WHEN f.failed_at <= ? AND f.failed_at > ? THEN 1 ELSE 0 END) AS prior_fails,
+           GROUP_CONCAT(DISTINCT f.failure_kind) AS failure_kinds,
+           MAX(CASE WHEN f.failed_at > ? THEN f.error_message END) AS last_error_message,
+           MAX(CASE WHEN f.failed_at > ? THEN f.error_stack   END) AS last_error_stack,
+           MAX(f.failed_at) AS last_failed
+         FROM failures f
+         JOIN runs r ON r.run_id = f.run_id
+        WHERE r.failed_tests < 10
+          AND r.ended_at IS NOT NULL
+          AND f.failed_at > ?
+        GROUP BY f.test_file, f.test_name
+        HAVING recent_fails >= ? AND prior_fails = 0
+        ORDER BY recent_fails DESC`,
+      )
+      .all(windowStart, windowStart, priorStart, windowStart, windowStart, priorStart, threshold)
+
+    return rows.map((r) => ({
+      testFile: r.test_file,
+      testName: r.test_name,
+      recentFails: r.recent_fails,
+      priorFails: r.prior_fails,
+      failureKinds: r.failure_kinds.split(','),
+      lastErrorMessage: r.last_error_message,
+      lastErrorStack: r.last_error_stack,
+      lastFailed: r.last_failed,
+    }))
   }
 
   async close(): Promise<void> {

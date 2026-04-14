@@ -3,6 +3,8 @@ export type {
   InsertRunInput,
   UpdateRunInput,
   InsertFailureInput,
+  FlakyPattern,
+  GetNewPatternsOptions,
   IStore,
 } from './types'
 export { categorizeError, extractMessage, extractStack } from './categorize'

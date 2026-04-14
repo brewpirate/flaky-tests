@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
+  FlakyPattern,
+  GetNewPatternsOptions,
   InsertFailureInput,
   InsertRunInput,
   IStore,
@@ -71,6 +73,64 @@ export class SupabaseStore implements IStore {
       failed_at: input.failedAt,
     })
     if (error) throw new Error(`[flaky-tests/store-supabase] insertFailure: ${error.message}`)
+  }
+
+  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
+    const windowDays = options.windowDays ?? 7
+    const threshold = options.threshold ?? 2
+    const now = Date.now()
+    const windowStart = new Date(now - windowDays * 86400000).toISOString()
+    const priorStart = new Date(now - windowDays * 2 * 86400000).toISOString()
+
+    // Fetch failures from both windows in one query, filter to relevant runs
+    const { data, error } = await this.client
+      .from(this.failuresTable)
+      .select(`run_id, test_file, test_name, failure_kind, error_message, error_stack, failed_at,
+               ${this.runsTable}!inner(failed_tests, ended_at)`)
+      .gt('failed_at', priorStart)
+      .lt(`${this.runsTable}.failed_tests`, 10)
+      .not(`${this.runsTable}.ended_at`, 'is', null)
+
+    if (error) throw new Error(`[flaky-tests/store-supabase] getNewPatterns: ${error.message}`)
+
+    type Row = { test_file: string; test_name: string; failure_kind: string; error_message: string | null; error_stack: string | null; failed_at: string }
+    const rows = (data ?? []) as Row[]
+
+    // Group and compute counts per test
+    const map = new Map<string, { testFile: string; testName: string; recentFails: number; priorFails: number; kinds: Set<string>; lastMsg: string | null; lastStack: string | null; lastFailed: string }>()
+
+    for (const row of rows) {
+      const key = `${row.test_file}::${row.test_name}`
+      if (!map.has(key)) {
+        map.set(key, { testFile: row.test_file, testName: row.test_name, recentFails: 0, priorFails: 0, kinds: new Set(), lastMsg: null, lastStack: null, lastFailed: row.failed_at })
+      }
+      const entry = map.get(key)!
+      if (row.failed_at > windowStart) {
+        entry.recentFails++
+        entry.kinds.add(row.failure_kind)
+        if (row.failed_at > entry.lastFailed) {
+          entry.lastFailed = row.failed_at
+          entry.lastMsg = row.error_message
+          entry.lastStack = row.error_stack
+        }
+      } else {
+        entry.priorFails++
+      }
+    }
+
+    return [...map.values()]
+      .filter((e) => e.recentFails >= threshold && e.priorFails === 0)
+      .sort((a, b) => b.recentFails - a.recentFails)
+      .map((e) => ({
+        testFile: e.testFile,
+        testName: e.testName,
+        recentFails: e.recentFails,
+        priorFails: e.priorFails,
+        failureKinds: [...e.kinds],
+        lastErrorMessage: e.lastMsg,
+        lastErrorStack: e.lastStack,
+        lastFailed: e.lastFailed,
+      }))
   }
 
   async close(): Promise<void> {
