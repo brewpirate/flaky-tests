@@ -4,9 +4,34 @@
   "description": "Bun test preload plugin for flaky-tests",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./preload": "./src/preload-sqlite.ts",
-    "./run-tracked": "./src/run-tracked.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./preload": {
+      "bun": "./src/preload-sqlite.ts",
+      "import": "./dist/preload-sqlite.js",
+      "types": "./dist/preload-sqlite.d.ts"
+    },
+    "./run-tracked": {
+      "bun": "./src/run-tracked.ts",
+      "import": "./dist/run-tracked.js",
+      "types": "./dist/run-tracked.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist/", "src/", "package.json", "LICENSE"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/preload-sqlite.ts ./src/run-tracked.ts --outdir dist --format esm --target node --external @flaky-tests/core --external @flaky-tests/store-sqlite --external bun:sqlite --external bun:test",
+    "build:types": "tsc --project tsconfig.build.json",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "license": "MIT",
   "dependencies": {

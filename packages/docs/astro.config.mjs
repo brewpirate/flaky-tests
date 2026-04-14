@@ -1,6 +1,6 @@
-import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
 import catppuccin from '@catppuccin/starlight'
+import { defineConfig } from 'astro/config'
 
 export default defineConfig({
   site: 'https://brewpirate.github.io',
@@ -8,10 +8,10 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'flaky-tests',
-      description: 'Zero-friction flaky test detection for Bun and Vitest. Catches patterns, generates prompts, opens issues.',
+      description:
+        'Zero-friction flaky test detection for Bun and Vitest. Catches patterns, generates prompts, opens issues.',
       logo: {
-        light: './src/assets/logo-light.svg',
-        dark: './src/assets/logo-dark.svg',
+        src: './src/assets/mrflaky.png',
         replacesTitle: false,
       },
       plugins: [
@@ -21,10 +21,15 @@ export default defineConfig({
         }),
       ],
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/brewpirate/flaky-tests' },
+        {
+          icon: 'github',
+          label: 'GitHub',
+          href: 'https://github.com/brewpirate/flaky-tests',
+        },
       ],
       editLink: {
-        baseUrl: 'https://github.com/brewpirate/flaky-tests/edit/main/packages/docs/',
+        baseUrl:
+          'https://github.com/brewpirate/flaky-tests/edit/main/packages/docs/',
       },
       sidebar: [
         {
@@ -41,7 +46,10 @@ export default defineConfig({
             { label: 'Setting up with Vitest', slug: 'guides/vitest' },
             { label: 'Choosing a store', slug: 'guides/choosing-a-store' },
             { label: 'CI setup', slug: 'guides/ci-setup' },
-            { label: 'Scheduled detection', slug: 'guides/scheduled-detection' },
+            {
+              label: 'Scheduled detection',
+              slug: 'guides/scheduled-detection',
+            },
           ],
         },
         {
@@ -65,7 +73,10 @@ export default defineConfig({
           label: 'GitHub Action',
           items: [
             { label: 'Inputs', slug: 'github-action/inputs' },
-            { label: 'Example workflows', slug: 'github-action/example-workflows' },
+            {
+              label: 'Example workflows',
+              slug: 'github-action/example-workflows',
+            },
           ],
         },
       ],

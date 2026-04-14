@@ -1,0 +1,9 @@
+{
+  "name": "@flaky-tests/plugin-bun",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./preload": "./src/preload-sqlite.ts",
+    "./run-tracked": "./src/run-tracked.ts"
+  }
+}

@@ -1,13 +1,5 @@
-import type { FlakyPattern } from '@flaky-tests/core'
+import { escapeHtml, type FlakyPattern } from '@flaky-tests/core'
 import { generatePrompt } from './prompt'
-
-function esc(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
 
 function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
   const prompt = generatePrompt(p, windowDays)
@@ -18,22 +10,22 @@ function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
   <article class="card" id="pattern-${i + 1}">
     <header class="card-header">
       <span class="badge">${i + 1}</span>
-      <h2 class="test-name">${esc(p.testName)}</h2>
+      <h2 class="test-name">${escapeHtml(p.testName)}</h2>
     </header>
     <dl class="meta">
-      <div><dt>File</dt><dd><code>${esc(p.testFile)}</code></dd></div>
+      <div><dt>File</dt><dd><code>${escapeHtml(p.testFile)}</code></dd></div>
       <div><dt>Failures</dt><dd>${p.recentFails} in ${windowDays}d &nbsp;·&nbsp; ${p.priorFails} prior</dd></div>
-      <div><dt>Kind</dt><dd>${esc(kinds)}</dd></div>
-      ${firstLine ? `<div><dt>Last error</dt><dd class="error-msg">${esc(firstLine)}</dd></div>` : ''}
+      <div><dt>Kind</dt><dd>${escapeHtml(kinds)}</dd></div>
+      ${firstLine ? `<div><dt>Last error</dt><dd class="error-msg">${escapeHtml(firstLine)}</dd></div>` : ''}
     </dl>
     <div class="prompt-section">
       <div class="prompt-toolbar">
         <span class="prompt-label">Investigation prompt</span>
-        <button class="copy-btn" data-prompt="${esc(prompt)}" onclick="copyPrompt(this)">
+        <button class="copy-btn" data-prompt="${escapeHtml(prompt)}" onclick="copyPrompt(this)">
           Copy
         </button>
       </div>
-      <pre class="prompt-body">${esc(prompt)}</pre>
+      <pre class="prompt-body">${escapeHtml(prompt)}</pre>
     </div>
   </article>`
 }
@@ -45,7 +37,10 @@ function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
  * @param windowDays - Detection window size in days (used in headings and prompts)
  * @returns Complete HTML document string
  */
-export function generateHtml(patterns: FlakyPattern[], windowDays: number): string {
+export function generateHtml(
+  patterns: FlakyPattern[],
+  windowDays: number,
+): string {
   const plural = patterns.length === 1 ? 'pattern' : 'patterns'
   const cards = patterns.map((p, i) => patternCard(p, i, windowDays)).join('\n')
 

@@ -1,15 +1,15 @@
-/** Git metadata captured at test-run start. `null` fields indicate git is unavailable. */
-export interface GitInfo {
-  /** Full HEAD commit SHA, or `null` if not in a git repo. */
-  sha: string | null
-  /** Whether the working tree has uncommitted changes, or `null` if not in a git repo. */
-  dirty: boolean | null
-}
+import {
+  captureGitInfo as captureGitInfoCore,
+  type GitInfo,
+  type RunCommand,
+} from '@flaky-tests/core'
 
-function runGit(args: string[]): string | null {
+export type { GitInfo } from '@flaky-tests/core'
+
+const runCommand: RunCommand = (command, args) => {
   try {
     const result = Bun.spawnSync({
-      cmd: ['git', ...args],
+      cmd: [command, ...args],
       stdout: 'pipe',
       stderr: 'ignore',
     })
@@ -21,15 +21,9 @@ function runGit(args: string[]): string | null {
 }
 
 /**
- * Captures the current git SHA and dirty state by shelling out to `git`.
+ * Captures the current git SHA and dirty state using Bun.spawnSync.
  * Safe to call outside a git repo — returns `{ sha: null, dirty: null }`.
  */
 export function captureGitInfo(): GitInfo {
-  const sha = runGit(['rev-parse', 'HEAD'])
-  const porcelain = runGit(['status', '--porcelain'])
-  if (sha === null) return { sha: null, dirty: null }
-  return {
-    sha: sha.trim(),
-    dirty: porcelain !== null && porcelain.trim().length > 0,
-  }
+  return captureGitInfoCore(runCommand)
 }

@@ -20,34 +20,32 @@
 
 // biome-ignore-all lint/suspicious/noConsole: reporter is dev tooling
 
-import { execSync } from 'node:child_process'
-import type { IStore, InsertFailureInput } from '@flaky-tests/core'
-import { categorizeError, extractMessage, extractStack } from '@flaky-tests/core'
+import { execFileSync } from 'node:child_process'
+import type { InsertFailureInput, IStore, RunCommand } from '@flaky-tests/core'
+import {
+  captureGitInfo as captureGitInfoCore,
+  categorizeError,
+  extractMessage,
+  extractStack,
+  insertFailureInputSchema,
+  insertRunInputSchema,
+  parse,
+  updateRunInputSchema,
+} from '@flaky-tests/core'
 
-/** Git metadata captured at the start of a test run. */
-interface GitInfo {
-  sha: string | null
-  dirty: boolean | null
-}
-
-/**
- * Reads the current HEAD SHA and working-tree dirty status.
- * Returns nulls if git is unavailable or the project is not a git repo.
- */
-function captureGitInfo(): GitInfo {
+const runCommand: RunCommand = (command, args) => {
   try {
-    const sha = execSync('git rev-parse HEAD', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim()
-    const status = execSync('git status --porcelain', {
+    return execFileSync(command, args, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
     })
-    return { sha, dirty: status.trim().length > 0 }
   } catch {
-    return { sha: null, dirty: null }
+    return null
   }
+}
+
+function captureGitInfo() {
+  return captureGitInfoCore(runCommand)
 }
 
 // Minimal task-shape typings that work across Vitest 1.x / 2.x / 3.x.
@@ -82,7 +80,10 @@ function getTestPath(task: TaskBase): string {
 }
 
 /** Recursively visits every task (tests and suites) in a task tree. */
-function walkTasks(tasks: TaskBase[], visit: (task: TaskBase) => void): void {
+function walkTasks(
+  tasks: readonly TaskBase[],
+  visit: (task: TaskBase) => void,
+): void {
   for (const task of tasks) {
     visit(task)
     if (task.tasks) walkTasks(task.tasks, visit)
@@ -124,14 +125,16 @@ export class FlakyTestsReporter {
     this.ready = true
     const git = captureGitInfo()
     await this.store
-      .insertRun({
-        runId: this.runId,
-        startedAt: new Date().toISOString(),
-        gitSha: git.sha,
-        gitDirty: git.dirty,
-        runtimeVersion: process.version,
-        testArgs: process.argv.slice(2).join(' '),
-      })
+      .insertRun(
+        parse(insertRunInputSchema, {
+          runId: this.runId,
+          startedAt: new Date().toISOString(),
+          gitSha: git.sha,
+          gitDirty: git.dirty,
+          runtimeVersion: process.version,
+          testArgs: process.argv.slice(2).join(' '),
+        }),
+      )
       .catch((e: unknown) => console.warn('[flaky-tests] insertRun failed:', e))
   }
 
@@ -147,7 +150,10 @@ export class FlakyTestsReporter {
    * @param files - Completed file tasks containing nested test results.
    * @param errors - Unhandled errors that occurred between tests.
    */
-  async onFinished(files: TaskBase[] = [], errors: unknown[] = []): Promise<void> {
+  async onFinished(
+    files: readonly TaskBase[] = [],
+    errors: readonly unknown[] = [],
+  ): Promise<void> {
     if (!this.ready) return
 
     let totalTests = 0
@@ -165,37 +171,43 @@ export class FlakyTestsReporter {
         if (result.state === 'fail') {
           failedTests++
           const firstError = (result.errors ?? [])[0]
-          failureInputs.push({
-            runId: this.runId,
-            testFile: task.file?.filepath ?? 'unknown',
-            testName: getTestPath(task),
-            failureKind: categorizeError(firstError),
-            errorMessage: firstError != null ? extractMessage(firstError) : null,
-            errorStack: firstError != null ? extractStack(firstError) : null,
-            durationMs:
-              result.duration != null ? Math.round(result.duration) : null,
-            failedAt: new Date().toISOString(),
-          })
+          failureInputs.push(
+            parse(insertFailureInputSchema, {
+              runId: this.runId,
+              testFile: task.file?.filepath ?? 'unknown',
+              testName: getTestPath(task),
+              failureKind: categorizeError(firstError),
+              errorMessage:
+                firstError != null ? extractMessage(firstError) : null,
+              errorStack: firstError != null ? extractStack(firstError) : null,
+              durationMs:
+                result.duration != null ? Math.round(result.duration) : null,
+              failedAt: new Date().toISOString(),
+            }),
+          )
         }
       })
     }
 
-    for (const failure of failureInputs) {
-      await this.store
-        .insertFailure(failure)
-        .catch((e: unknown) => console.warn('[flaky-tests] insertFailure failed:', e))
-    }
+    await this.store
+      .insertFailures(failureInputs)
+      .catch((e: unknown) =>
+        console.warn('[flaky-tests] insertFailures failed:', e),
+      )
 
     await this.store
-      .updateRun(this.runId, {
-        endedAt: new Date().toISOString(),
-        durationMs: Math.round(performance.now() - this.startTime),
-        status: failedTests > 0 || errors.length > 0 ? 'fail' : 'pass',
-        totalTests,
-        passedTests,
-        failedTests,
-        errorsBetweenTests: errors.length,
-      })
+      .updateRun(
+        this.runId,
+        parse(updateRunInputSchema, {
+          endedAt: new Date().toISOString(),
+          durationMs: Math.round(performance.now() - this.startTime),
+          status: failedTests > 0 || errors.length > 0 ? 'fail' : 'pass',
+          totalTests,
+          passedTests,
+          failedTests,
+          errorsBetweenTests: errors.length,
+        }),
+      )
       .catch((e: unknown) => console.warn('[flaky-tests] updateRun failed:', e))
 
     await this.store

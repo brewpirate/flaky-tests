@@ -6,14 +6,17 @@
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
 import type { FlakyPattern } from '@flaky-tests/core'
+import { type } from 'arktype'
 import { generatePrompt } from './prompt'
 
 /** Authentication and target repository for GitHub API calls. */
-export interface GitHubConfig {
-  token: string
-  owner: string
-  repo: string
-}
+export const gitHubConfigSchema = type({
+  token: type.string.atLeastLength(1),
+  owner: type.string.atLeastLength(1),
+  repo: type.string.atLeastLength(1),
+})
+
+export type GitHubConfig = typeof gitHubConfigSchema.infer
 
 /**
  * Resolve owner/repo from:
@@ -32,8 +35,9 @@ export function resolveRepo(): { owner: string; repo: string } | null {
   // --repo flag
   const idx = process.argv.indexOf('--repo')
   if (idx !== -1 && idx + 1 < process.argv.length) {
-    const val = process.argv[idx + 1]!
-    const [owner, repo] = val.split('/')
+    const value = process.argv[idx + 1]
+    if (!value) return null
+    const [owner, repo] = value.split('/')
     if (owner && repo) return { owner, repo }
   }
 
@@ -48,7 +52,7 @@ export function resolveRepo(): { owner: string; repo: string } | null {
       const url = new TextDecoder().decode(result.stdout).trim()
       // https://github.com/owner/repo.git  or  git@github.com:owner/repo.git
       const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/)
-      if (match) return { owner: match[1]!, repo: match[2]! }
+      if (match?.[1] && match[2]) return { owner: match[1], repo: match[2] }
     }
   } catch {
     // git not available
@@ -76,9 +80,12 @@ export async function findExistingIssue(
   const q = encodeURIComponent(
     `repo:${config.owner}/${config.repo} is:issue is:open "${title}" in:title`,
   )
-  const res = await fetch(`https://api.github.com/search/issues?q=${q}&per_page=1`, {
-    headers: githubHeaders(config.token),
-  })
+  const res = await fetch(
+    `https://api.github.com/search/issues?q=${q}&per_page=1`,
+    {
+      headers: githubHeaders(config.token),
+    },
+  )
   if (!res.ok) return null
   const data = (await res.json()) as { items: Array<{ number: number }> }
   return data.items[0]?.number ?? null

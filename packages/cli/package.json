@@ -4,15 +4,33 @@
   "description": "CLI for flaky-tests pattern detection and prompt generation",
   "type": "module",
   "bin": {
-    "flaky-tests": "./src/check.ts"
+    "flaky-tests": "./dist/check.js"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist/", "src/", "package.json", "LICENSE"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/check.ts --outdir dist --format esm --target node --external @flaky-tests/store-turso --external @flaky-tests/store-supabase --external @flaky-tests/store-postgres --external @flaky-tests/store-sqlite --external @flaky-tests/core --external arktype",
+    "build:types": "tsc --project tsconfig.build.json",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "license": "MIT",
   "dependencies": {
     "@flaky-tests/core": "workspace:*",
-    "@flaky-tests/store-sqlite": "workspace:*"
+    "@flaky-tests/store-sqlite": "workspace:*",
+    "arktype": "^2.1.0"
   },
   "optionalDependencies": {
     "@flaky-tests/store-turso": "workspace:*",

@@ -11,6 +11,15 @@
 // biome-ignore-all lint/suspicious/noConsole: CLI script
 
 import { Database } from 'bun:sqlite'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import {
+  escapeHtml,
+  type FlakyPattern,
+  generatePrompt,
+  MAX_FAILED_TESTS_PER_RUN,
+  stripTimestampPrefix,
+} from '@flaky-tests/core'
 
 const DB_PATH =
   process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
@@ -27,6 +36,8 @@ interface FlakyRow {
   fails: number
   last_failed: string
   kinds: string
+  error_message_raw: string | null
+  error_stack_raw: string | null
 }
 
 interface KindRow {
@@ -77,10 +88,14 @@ function loadData(): {
       `SELECT f.test_file, f.test_name,
               COUNT(*) AS fails,
               MAX(f.failed_at) AS last_failed,
-              GROUP_CONCAT(DISTINCT f.failure_kind) AS kinds
+              GROUP_CONCAT(DISTINCT f.failure_kind) AS kinds,
+              MAX(CASE WHEN f.error_message IS NOT NULL
+                       THEN f.failed_at || CHAR(1) || f.error_message END) AS error_message_raw,
+              MAX(CASE WHEN f.error_stack IS NOT NULL
+                       THEN f.failed_at || CHAR(1) || f.error_stack END) AS error_stack_raw
          FROM failures f
          JOIN runs r ON r.run_id = f.run_id
-        WHERE r.failed_tests < 10
+        WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
           AND r.ended_at IS NOT NULL
           AND f.failed_at > datetime('now', '-30 days')
         GROUP BY f.test_file, f.test_name
@@ -137,7 +152,7 @@ function loadData(): {
            SELECT 1
              FROM failures f
              JOIN runs r ON r.run_id = f.run_id
-            WHERE r.failed_tests < 10
+            WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
               AND r.ended_at IS NOT NULL
               AND f.failed_at > datetime('now', '-30 days')
             GROUP BY f.test_file, f.test_name
@@ -187,7 +202,12 @@ function loadData(): {
   db.close()
 
   return {
-    summary: { activeFlakyTests, dominantKind: dominantKindRow, worstFile: worstFileRow, recentRunPassRate },
+    summary: {
+      activeFlakyTests,
+      dominantKind: dominantKindRow,
+      worstFile: worstFileRow,
+      recentRunPassRate,
+    },
     flaky,
     kinds,
     recentRuns,
@@ -195,15 +215,6 @@ function loadData(): {
     totalFailures,
     totalRuns,
   }
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
 }
 
 function severityClass(count: number): string {
@@ -247,13 +258,21 @@ function passRateTone(pct: number | null): string {
 }
 
 function renderSummary(s: Summary): string {
-  const flakyTone = s.activeFlakyTests === 0 ? 'tone-good' : s.activeFlakyTests <= 3 ? 'tone-warn' : 'tone-bad'
-  const flakyLabel = s.activeFlakyTests === 0 ? 'none' : `${s.activeFlakyTests} test${s.activeFlakyTests === 1 ? '' : 's'}`
+  let flakyTone = 'tone-bad'
+  if (s.activeFlakyTests === 0) flakyTone = 'tone-good'
+  else if (s.activeFlakyTests <= 3) flakyTone = 'tone-warn'
+  const flakyLabel =
+    s.activeFlakyTests === 0
+      ? 'none'
+      : `${s.activeFlakyTests} test${s.activeFlakyTests === 1 ? '' : 's'}`
   const kindLabel = s.dominantKind
     ? `<span class="badge kind-${escapeHtml(s.dominantKind.kind)}">${escapeHtml(s.dominantKind.kind)}</span>`
     : '<span class="muted">—</span>'
-  const fileLabel = s.worstFile ? escapeHtml(s.worstFile.file.split('/').pop() ?? s.worstFile.file) : '—'
-  const pct = s.recentRunPassRate !== null ? Math.round(s.recentRunPassRate * 100) : null
+  const fileLabel = s.worstFile
+    ? escapeHtml(s.worstFile.file.split('/').pop() ?? s.worstFile.file)
+    : '—'
+  const pct =
+    s.recentRunPassRate !== null ? Math.round(s.recentRunPassRate * 100) : null
 
   return `<section class="summary-grid">
     <div class="summary-card ${flakyTone}">
@@ -279,20 +298,56 @@ function renderSummary(s: Summary): string {
   </section>`
 }
 
+function flakyRowToPattern(row: FlakyRow): FlakyPattern {
+  return {
+    testFile: row.test_file,
+    testName: row.test_name,
+    recentFails: row.fails,
+    priorFails: 0,
+    failureKinds: row.kinds
+      .split(',')
+      .map((kind) => kind.trim()) as FlakyPattern['failureKinds'],
+    lastErrorMessage:
+      row.error_message_raw != null
+        ? stripTimestampPrefix(row.error_message_raw)
+        : null,
+    lastErrorStack:
+      row.error_stack_raw != null
+        ? stripTimestampPrefix(row.error_stack_raw)
+        : null,
+    lastFailed: row.last_failed,
+  }
+}
+
 function renderFlaky(rows: FlakyRow[]): string {
-  if (rows.length === 0) return '<p class="empty">No failures in the last 30 days. Clean house.</p>'
-  const items = rows.map((r) => {
-    const kinds = r.kinds.split(',').map((k) => kindBadge(k.trim())).join(' ')
-    return `<tr>
+  if (rows.length === 0)
+    return '<p class="empty">No failures in the last 30 days. Clean house.</p>'
+  const items = rows
+    .map((r) => {
+      const kinds = r.kinds
+        .split(',')
+        .map((k) => kindBadge(k.trim()))
+        .join(' ')
+      const prompt = generatePrompt(flakyRowToPattern(r), 30)
+      const escapedPrompt = escapeHtml(prompt)
+      return `<tr>
       <td><span class="count ${severityClass(r.fails)}">${r.fails}</span></td>
       <td class="test-name">${escapeHtml(r.test_name)}</td>
       <td class="file-path">${escapeHtml(r.test_file)}</td>
       <td>${kinds}</td>
       <td class="muted">${formatRelative(r.last_failed)}</td>
+      <td class="prompt-actions">
+        <button class="copy-btn" data-prompt="${escapedPrompt}" title="Copy AI prompt">Copy</button>
+        <button class="expand-btn" title="Show prompt">&#9660;</button>
+      </td>
+    </tr>
+    <tr class="prompt-row" hidden>
+      <td colspan="6"><pre class="prompt-text">${escapedPrompt}</pre></td>
     </tr>`
-  }).join('')
+    })
+    .join('')
   return `<table>
-    <thead><tr><th>Fails</th><th>Test</th><th>File</th><th>Kinds</th><th>Last seen</th></tr></thead>
+    <thead><tr><th>Fails</th><th>Test</th><th>File</th><th>Kinds</th><th>Last seen</th><th>AI Prompt</th></tr></thead>
     <tbody>${items}</tbody>
   </table>`
 }
@@ -300,14 +355,16 @@ function renderFlaky(rows: FlakyRow[]): string {
 function renderKinds(rows: KindRow[]): string {
   if (rows.length === 0) return '<p class="empty">No data.</p>'
   const total = rows.reduce((s, r) => s + r.count, 0)
-  return `<div class="kind-grid">${rows.map((r) => {
-    const pct = total === 0 ? 0 : Math.round((r.count / total) * 100)
-    return `<div class="kind-card kind-${escapeHtml(r.failure_kind)}">
+  return `<div class="kind-grid">${rows
+    .map((r) => {
+      const pct = total === 0 ? 0 : Math.round((r.count / total) * 100)
+      return `<div class="kind-card kind-${escapeHtml(r.failure_kind)}">
       <div class="kind-label">${escapeHtml(r.failure_kind)}</div>
       <div class="kind-count">${r.count}</div>
       <div class="kind-pct">${pct}%</div>
     </div>`
-  }).join('')}</div>`
+    })
+    .join('')}</div>`
 }
 
 function statusClass(status: string | null): string {
@@ -318,12 +375,16 @@ function statusClass(status: string | null): string {
 
 function renderRuns(rows: RunRow[]): string {
   if (rows.length === 0) return '<p class="empty">No runs recorded.</p>'
-  const items = rows.map((r) => {
-    const dirty = r.git_dirty === 1 ? '<span class="dirty" title="working tree dirty">●</span>' : ''
-    const passed = r.passed_tests ?? 0
-    const failed = r.failed_tests ?? 0
-    const errs = r.errors_between_tests ?? 0
-    return `<tr>
+  const items = rows
+    .map((r) => {
+      const dirty =
+        r.git_dirty === 1
+          ? '<span class="dirty" title="working tree dirty">●</span>'
+          : ''
+      const passed = r.passed_tests ?? 0
+      const failed = r.failed_tests ?? 0
+      const errs = r.errors_between_tests ?? 0
+      return `<tr>
       <td><span class="status ${statusClass(r.status)}">${r.status ?? 'crashed'}</span></td>
       <td class="muted">${formatRelative(r.started_at)}</td>
       <td>${formatDuration(r.duration_ms)}</td>
@@ -333,22 +394,47 @@ function renderRuns(rows: RunRow[]): string {
       <td>${errs > 0 ? `<span class="fail-count" title="errors outside tests">${errs}</span>` : '0'}</td>
       <td class="muted mono">${shortSha(r.git_sha)}${dirty}</td>
     </tr>`
-  }).join('')
+    })
+    .join('')
   return `<table>
     <thead><tr><th>Status</th><th>When</th><th>Duration</th><th>Total</th><th>Passed</th><th>Failed</th><th>Errors</th><th>SHA</th></tr></thead>
     <tbody>${items}</tbody>
   </table>`
 }
 
-function renderHotFiles(rows: HotFileRow[]): string {
+function renderHotFiles(rows: HotFileRow[], flakyRows: FlakyRow[]): string {
   if (rows.length === 0) return '<p class="empty">No data.</p>'
-  const items = rows.map((r) => `<tr>
-    <td><span class="count ${severityClass(r.fails)}">${r.fails}</span></td>
-    <td>${r.distinct_tests}</td>
-    <td class="file-path">${escapeHtml(r.test_file)}</td>
-  </tr>`).join('')
+  const items = rows
+    .map((r) => {
+      const worstTest = flakyRows.find((f) => f.test_file === r.test_file)
+      let promptCell = ''
+      if (worstTest) {
+        const prompt = generatePrompt(flakyRowToPattern(worstTest), 30)
+        const escapedPrompt = escapeHtml(prompt)
+        promptCell = `<td class="prompt-actions">
+          <button class="copy-btn" data-prompt="${escapedPrompt}" title="Copy AI prompt for worst test">Copy</button>
+          <button class="expand-btn" title="Show prompt">&#9660;</button>
+        </td>`
+        return `<tr>
+      <td><span class="count ${severityClass(r.fails)}">${r.fails}</span></td>
+      <td>${r.distinct_tests}</td>
+      <td class="file-path">${escapeHtml(r.test_file)}</td>
+      ${promptCell}
+    </tr>
+    <tr class="prompt-row" hidden>
+      <td colspan="4"><pre class="prompt-text">${escapedPrompt}</pre></td>
+    </tr>`
+      }
+      return `<tr>
+      <td><span class="count ${severityClass(r.fails)}">${r.fails}</span></td>
+      <td>${r.distinct_tests}</td>
+      <td class="file-path">${escapeHtml(r.test_file)}</td>
+      <td></td>
+    </tr>`
+    })
+    .join('')
   return `<table>
-    <thead><tr><th>Fails</th><th>Distinct tests</th><th>File</th></tr></thead>
+    <thead><tr><th>Fails</th><th>Distinct tests</th><th>File</th><th>AI Prompt</th></tr></thead>
     <tbody>${items}</tbody>
   </table>`
 }
@@ -365,6 +451,7 @@ const STYLES = `
 * { box-sizing: border-box; }
 body { font: 14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem; max-width: 1200px; margin-inline: auto; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
+.header-logo { width: 48px; height: 48px; border-radius: 6px; }
 h1 { margin: 0; font-size: 1.5rem; font-weight: 600; font-family: ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
 h2 { margin: 2rem 0 1rem; font-size: 1.1rem; font-weight: 600; }
 .subtitle { color: var(--text-muted); font-size: 0.85rem; }
@@ -419,9 +506,42 @@ footer a { color: var(--text-muted); text-decoration: none; border-bottom: 1px d
 footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .sep { color: var(--border); margin: 0 0.6rem; }
 .empty { padding: 2rem; text-align: center; color: var(--text-muted); background: var(--surface); border: 1px dashed var(--border); border-radius: 6px; }
+.prompt-actions { white-space: nowrap; }
+.copy-btn, .expand-btn { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.75rem; cursor: pointer; font-family: inherit; }
+.copy-btn:hover, .expand-btn:hover { color: var(--text); border-color: var(--accent); }
+.copy-btn.copied { color: var(--pass); border-color: var(--pass); }
+.prompt-row td { padding: 0; }
+.prompt-row:not([hidden]) td { padding: 0.75rem 0.9rem; background: var(--surface-2); }
+.prompt-text { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; line-height: 1.6; color: var(--text); font-family: ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
+tr.prompt-row:hover td { background: var(--surface-2); }
 `
 
+function loadLogo(): string | null {
+  try {
+    // Walk up from this file to find the logo at the repo root
+    let directory = dirname(new URL(import.meta.url).pathname)
+    for (let i = 0; i < 5; i++) {
+      for (const filename of ['mrflaky-48.png', 'mrflaky.png']) {
+        try {
+          const buffer = readFileSync(resolve(directory, filename))
+          return `data:image/png;base64,${buffer.toString('base64')}`
+        } catch {
+          /* not here */
+        }
+      }
+      directory = dirname(directory)
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function render(data: ReturnType<typeof loadData>): string {
+  const logoDataUri = loadLogo()
+  const logoHtml = logoDataUri
+    ? `<img src="${logoDataUri}" alt="Mr. Flaky" class="header-logo">`
+    : ''
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -432,7 +552,8 @@ function render(data: ReturnType<typeof loadData>): string {
 </head>
 <body>
   <header>
-    <div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      ${logoHtml}
       <h1>flaky-tests</h1>
       <div class="subtitle">Generated ${escapeHtml(new Date().toISOString())} &middot; ${escapeHtml(DB_PATH)}</div>
     </div>
@@ -457,7 +578,7 @@ function render(data: ReturnType<typeof loadData>): string {
 
   <section>
     <h2>Hot spots by file (last 30 days)</h2>
-    ${renderHotFiles(data.hotFiles)}
+    ${renderHotFiles(data.hotFiles, data.flaky)}
   </section>
 
   <section>
@@ -468,6 +589,24 @@ function render(data: ReturnType<typeof loadData>): string {
   <footer>
     Generated by <a href="https://github.com/brewpirate/flaky-tests">flaky-tests</a>
   </footer>
+  <script>
+  document.addEventListener('click', function(event) {
+    var target = event.target;
+    if (target.classList.contains('copy-btn')) {
+      navigator.clipboard.writeText(target.dataset.prompt).then(function() {
+        target.textContent = 'Copied!';
+        target.classList.add('copied');
+        setTimeout(function() { target.textContent = 'Copy'; target.classList.remove('copied'); }, 1500);
+      });
+    }
+    if (target.classList.contains('expand-btn')) {
+      var promptRow = target.closest('tr').nextElementSibling;
+      var isHidden = promptRow.hasAttribute('hidden');
+      promptRow.toggleAttribute('hidden');
+      target.textContent = isHidden ? '\u25B2' : '\u25BC';
+    }
+  });
+  </script>
 </body>
 </html>`
 }
@@ -490,13 +629,17 @@ function openInBrowser(filePath: string): void {
 
 async function main(): Promise<void> {
   if (!(await Bun.file(DB_PATH).exists())) {
-    console.error(`[flaky-tests] DB not found at ${DB_PATH}. Run tests at least once.`)
+    console.error(
+      `[flaky-tests] DB not found at ${DB_PATH}. Run tests at least once.`,
+    )
     process.exit(1)
   }
   const data = loadData()
   const html = render(data)
   await Bun.write(OUT_PATH, html)
-  console.log(`[flaky-tests] Wrote ${OUT_PATH} (${data.totalRuns} runs, ${data.totalFailures} failures)`)
+  console.log(
+    `[flaky-tests] Wrote ${OUT_PATH} (${data.totalRuns} runs, ${data.totalFailures} failures)`,
+  )
   if (process.argv.includes('--open')) openInBrowser(OUT_PATH)
 }
 

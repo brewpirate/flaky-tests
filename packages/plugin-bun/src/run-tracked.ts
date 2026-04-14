@@ -17,7 +17,8 @@
 
 import { SqliteStore } from '@flaky-tests/store-sqlite'
 
-const DB_PATH = process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
+const DB_PATH =
+  process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
 
 async function main(): Promise<number> {
   const runId = crypto.randomUUID()

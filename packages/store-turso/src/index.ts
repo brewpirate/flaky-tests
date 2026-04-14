@@ -1,24 +1,35 @@
-import { createClient } from '@libsql/client'
-import type { Client, InArgs } from '@libsql/client'
-import type {
-  FlakyPattern,
-  GetNewPatternsOptions,
-  InsertFailureInput,
-  InsertRunInput,
-  IStore,
-  UpdateRunInput,
+import {
+  DEFAULT_THRESHOLD,
+  DEFAULT_WINDOW_DAYS,
+  type FlakyPattern,
+  flakyPatternSchema,
+  type GetNewPatternsOptions,
+  getNewPatternsOptionsSchema,
+  type InsertFailureInput,
+  type InsertRunInput,
+  type IStore,
+  insertFailureInputSchema,
+  insertRunInputSchema,
+  MAX_FAILED_TESTS_PER_RUN,
+  MS_PER_DAY,
+  mapRowToPattern,
+  type PatternRow,
+  parse,
+  parseArray,
+  type UpdateRunInput,
+  updateRunInputSchema,
 } from '@flaky-tests/core'
+import type { Client, InArgs } from '@libsql/client'
+import { createClient } from '@libsql/client'
+import { type } from 'arktype'
 
-export interface TursoStoreOptions {
-  /**
-   * Turso database URL.
-   * - Remote:    libsql://your-db.turso.io
-   * - Local dev: file:///path/to/local.db  or  :memory:
-   */
-  url: string
-  /** Turso auth token. Not required for local file/memory URLs. */
-  authToken?: string
-}
+/** Configuration for the Turso (libSQL) store. */
+export const tursoStoreOptionsSchema = type({
+  url: type.string.atLeastLength(1),
+  'authToken?': 'string',
+})
+
+export type TursoStoreOptions = typeof tursoStoreOptionsSchema.infer
 
 // Schema is identical to store-sqlite — Turso is SQLite-compatible.
 const SCHEMA = `
@@ -50,8 +61,10 @@ CREATE TABLE IF NOT EXISTS failures (
   failed_at      TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_failures_test ON failures(test_file, test_name);
-CREATE INDEX IF NOT EXISTS idx_failures_run  ON failures(run_id);
+CREATE INDEX IF NOT EXISTS idx_failures_test      ON failures(test_file, test_name);
+CREATE INDEX IF NOT EXISTS idx_failures_run       ON failures(run_id);
+CREATE INDEX IF NOT EXISTS idx_failures_failed_at ON failures(failed_at);
+CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests);
 `
 
 /**
@@ -62,15 +75,18 @@ export class TursoStore implements IStore {
   private client: Client
 
   constructor(options: TursoStoreOptions) {
+    const validated = parse(tursoStoreOptionsSchema, options)
     this.client = createClient({
-      url: options.url,
-      authToken: options.authToken,
+      url: validated.url,
+      authToken: validated.authToken,
     })
   }
 
   /** Create tables if they don't exist. Call once before first use. */
   async migrate(): Promise<void> {
-    for (const stmt of SCHEMA.trim().split(';').filter((s) => s.trim())) {
+    for (const stmt of SCHEMA.trim()
+      .split(';')
+      .filter((s) => s.trim())) {
       await this.client.execute(stmt)
     }
     // Idempotent column additions for older DBs
@@ -91,6 +107,7 @@ export class TursoStore implements IStore {
 
   /** Persist a new test-run row. Call before any failures are recorded. */
   async insertRun(input: InsertRunInput): Promise<void> {
+    parse(insertRunInputSchema, input)
     await this.client.execute({
       sql: `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
             VALUES (?, ?, ?, ?, ?, ?)`,
@@ -98,7 +115,7 @@ export class TursoStore implements IStore {
         input.runId,
         input.startedAt,
         input.gitSha ?? null,
-        input.gitDirty != null ? (input.gitDirty ? 1 : 0) : null,
+        input.gitDirty != null ? Number(input.gitDirty) : null,
         input.runtimeVersion ?? null,
         input.testArgs ?? null,
       ] as InArgs,
@@ -107,6 +124,7 @@ export class TursoStore implements IStore {
 
   /** Update a run with its final summary (status, counts, duration). */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+    parse(updateRunInputSchema, input)
     await this.client.execute({
       sql: `UPDATE runs
                SET ended_at             = ?,
@@ -132,6 +150,7 @@ export class TursoStore implements IStore {
 
   /** Record a single test failure linked to an existing run. */
   async insertFailure(input: InsertFailureInput): Promise<void> {
+    parse(insertFailureInputSchema, input)
     await this.client.execute({
       sql: `INSERT INTO failures
               (run_id, test_file, test_name, failure_kind,
@@ -150,6 +169,33 @@ export class TursoStore implements IStore {
     })
   }
 
+  /** Insert multiple failures in a single batch transaction. */
+  async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
+    if (inputs.length === 0) return
+    await this.client.batch(
+      inputs.map((input) => {
+        parse(insertFailureInputSchema, input)
+        return {
+          sql: `INSERT INTO failures
+                  (run_id, test_file, test_name, failure_kind,
+                   error_message, error_stack, duration_ms, failed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            input.runId,
+            input.testFile,
+            input.testName,
+            input.failureKind,
+            input.errorMessage ?? null,
+            input.errorStack ?? null,
+            input.durationMs != null ? Math.round(input.durationMs) : null,
+            input.failedAt,
+          ] as InArgs,
+        }
+      }),
+      'write',
+    )
+  }
+
   /**
    * Detect newly-flaky tests: tests that failed >= `threshold` times in the
    * recent window but had zero failures in the prior window of equal length.
@@ -159,12 +205,15 @@ export class TursoStore implements IStore {
    * @param options.threshold  - Minimum recent failures to qualify (default 2).
    * @returns Patterns sorted by recent failure count descending.
    */
-  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
-    const windowDays = options.windowDays ?? 7
-    const threshold = options.threshold ?? 2
+  async getNewPatterns(
+    options: GetNewPatternsOptions = {},
+  ): Promise<FlakyPattern[]> {
+    const validated = parse(getNewPatternsOptionsSchema, options)
+    const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
+    const threshold = validated.threshold ?? DEFAULT_THRESHOLD
     const now = Date.now()
-    const windowStart = new Date(now - windowDays * 86400000).toISOString()
-    const priorStart = new Date(now - windowDays * 2 * 86400000).toISOString()
+    const windowStart = new Date(now - windowDays * MS_PER_DAY).toISOString()
+    const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY).toISOString()
 
     // Identical query to store-sqlite — Turso speaks SQLite
     const result = await this.client.execute({
@@ -174,30 +223,35 @@ export class TursoStore implements IStore {
                SUM(CASE WHEN f.failed_at > ?  THEN 1 ELSE 0 END) AS recent_fails,
                SUM(CASE WHEN f.failed_at <= ? AND f.failed_at > ? THEN 1 ELSE 0 END) AS prior_fails,
                GROUP_CONCAT(DISTINCT f.failure_kind) AS failure_kinds,
-               MAX(CASE WHEN f.failed_at > ? THEN f.error_message END) AS last_error_message,
-               MAX(CASE WHEN f.failed_at > ? THEN f.error_stack   END) AS last_error_stack,
+               MAX(CASE WHEN f.failed_at > ? AND f.error_message IS NOT NULL
+                        THEN f.failed_at || CHAR(1) || f.error_message END) AS last_error_message_raw,
+               MAX(CASE WHEN f.failed_at > ? AND f.error_stack IS NOT NULL
+                        THEN f.failed_at || CHAR(1) || f.error_stack   END) AS last_error_stack_raw,
                MAX(f.failed_at) AS last_failed
              FROM failures f
              JOIN runs r ON r.run_id = f.run_id
-            WHERE r.failed_tests < 10
+            WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
               AND r.ended_at IS NOT NULL
               AND f.failed_at > ?
             GROUP BY f.test_file, f.test_name
             HAVING recent_fails >= ? AND prior_fails = 0
             ORDER BY recent_fails DESC`,
-      args: [windowStart, windowStart, priorStart, windowStart, windowStart, priorStart, threshold] as InArgs,
+      args: [
+        windowStart,
+        windowStart,
+        priorStart,
+        windowStart,
+        windowStart,
+        priorStart,
+        threshold,
+      ] as InArgs,
     })
 
-    return result.rows.map((r) => ({
-      testFile: String(r.test_file),
-      testName: String(r.test_name),
-      recentFails: Number(r.recent_fails),
-      priorFails: Number(r.prior_fails),
-      failureKinds: String(r.failure_kinds).split(','),
-      lastErrorMessage: r.last_error_message != null ? String(r.last_error_message) : null,
-      lastErrorStack: r.last_error_stack != null ? String(r.last_error_stack) : null,
-      lastFailed: String(r.last_failed),
-    }))
+    // libsql Row type doesn't expose named fields — cast through unknown to PatternRow
+    return parseArray(
+      flakyPatternSchema,
+      result.rows.map((r) => mapRowToPattern(r as unknown as PatternRow)),
+    )
   }
 
   /** Close the underlying libSQL connection. */

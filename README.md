@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="mrflaky.png" alt="Mr. Flaky" width="120">
+</p>
+
 # flaky-tests
 
 > Zero-friction flaky test detection for Bun and Vitest.
@@ -105,6 +109,77 @@ jobs:
     auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+---
+
+## Development
+
+### Prerequisites
+
+- [Bun](https://bun.sh) v1.3+
+
+### Setup
+
+```sh
+git clone https://github.com/brewpirate/flaky-tests.git
+cd flaky-tests
+bun install
+```
+
+### Scripts
+
+| Script | Description |
+|--------|-------------|
+| `bun test` | Run unit tests |
+| `bun run test:integration` | Run integration tests (requires databases) |
+| `bun run test:all` | Run all tests (unit + integration) |
+| `bun run test:cli` | Run the CLI against local SQLite DB |
+| `bun run test:report` | Generate and open HTML report |
+| `bun run lint` | Lint with Biome |
+| `bun run check` | Lint + format check |
+| `bun run build` | Build all packages |
+
+### Testing
+
+Unit tests run on every `bun test` — no external services needed.
+
+Integration tests cover the remote stores (Turso, Supabase, Postgres) and are **skipped by default**. To run them:
+
+```sh
+# Turso — uses in-memory, no external service needed
+INTEGRATION=1 bun test packages/store-turso
+
+# Postgres — needs a running instance
+docker run -d --name ft-pg -e POSTGRES_PASSWORD=test -p 5432:5432 postgres:16
+INTEGRATION=1 POSTGRES_TEST_URL=postgres://postgres:test@localhost:5432/postgres bun test packages/store-postgres
+
+# Supabase — needs a project with tables created (see test file for schema)
+INTEGRATION=1 SUPABASE_TEST_URL=https://your-project.supabase.co SUPABASE_TEST_KEY=your-key bun test packages/store-supabase
+```
+
+Integration tests also run in CI on push to main via `.github/workflows/integration.yml`.
+
+### Using packages locally (before publishing)
+
+Link the packages you need from the monorepo:
+
+```sh
+cd packages/plugin-bun && bun link
+cd ../core && bun link
+cd ../store-sqlite && bun link
+```
+
+Then in your project:
+
+```sh
+bun link @flaky-tests/plugin-bun
+bun link @flaky-tests/core
+bun link @flaky-tests/store-sqlite
+```
+
+Edits in the monorepo are reflected immediately. Unlink with `bun unlink @flaky-tests/plugin-bun`.
+
+See also the [dev docs](docs/dev/) for more contributor guides.
 
 ---
 

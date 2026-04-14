@@ -24,7 +24,16 @@
 import * as bunTest from 'bun:test'
 import { afterAll, mock } from 'bun:test'
 import type { IStore } from '@flaky-tests/core'
-import { categorizeError, DescribeStack, extractMessage, extractStack } from '@flaky-tests/core'
+import {
+  categorizeError,
+  DescribeStack,
+  extractMessage,
+  extractStack,
+  insertFailureInputSchema,
+  insertRunInputSchema,
+  parse,
+  updateRunInputSchema,
+} from '@flaky-tests/core'
 import { captureGitInfo } from './git'
 
 type TestCallback = (...args: unknown[]) => unknown | Promise<unknown>
@@ -33,7 +42,9 @@ type DescribeFn = (name: string, body: () => void) => unknown
 
 /** Fire-and-forget an async side-effect that must never throw into the caller. */
 function safeVoid(label: string, effect: () => Promise<void>): void {
-  effect().catch((error: unknown) => console.warn(`[flaky-tests] ${label}:`, error))
+  effect().catch((error: unknown) =>
+    console.warn(`[flaky-tests] ${label}:`, error),
+  )
 }
 
 /**
@@ -41,7 +52,8 @@ function safeVoid(label: string, effect: () => Promise<void>): void {
  * first frame that isn't inside this package. Falls back to `'unknown'`.
  */
 function resolveTestFile(error: unknown): string {
-  if (!(error instanceof Error) || typeof error.stack !== 'string') return 'unknown'
+  if (!(error instanceof Error) || typeof error.stack !== 'string')
+    return 'unknown'
   for (const line of error.stack.split('\n')) {
     const match = line.match(/\(([^)]+\.(?:ts|tsx|js|jsx|mjs|cjs)):\d+:\d+\)/)
     if (!match) continue
@@ -72,14 +84,16 @@ export function createPreload(store: IStore): void {
   const git = captureGitInfo()
 
   safeVoid('insertRun', () =>
-    store.insertRun({
-      runId,
-      startedAt,
-      gitSha: git.sha,
-      gitDirty: git.dirty,
-      runtimeVersion: Bun.version,
-      testArgs: process.argv.slice(2).join(' '),
-    }),
+    store.insertRun(
+      parse(insertRunInputSchema, {
+        runId,
+        startedAt,
+        gitSha: git.sha,
+        gitDirty: git.dirty,
+        runtimeVersion: Bun.version,
+        testArgs: process.argv.slice(2).join(' '),
+      }),
+    ),
   )
 
   let testsRun = 0
@@ -91,16 +105,18 @@ export function createPreload(store: IStore): void {
   const onRunLevelError = (error: unknown): void => {
     errorsBetweenTests++
     safeVoid('insertFailure (between-tests)', () =>
-      store.insertFailure({
-        runId,
-        testFile: resolveTestFile(error),
-        testName: '<between tests>',
-        failureKind: categorizeError(error),
-        errorMessage: extractMessage(error),
-        errorStack: extractStack(error),
-        durationMs: 0,
-        failedAt: new Date().toISOString(),
-      }),
+      store.insertFailure(
+        parse(insertFailureInputSchema, {
+          runId,
+          testFile: resolveTestFile(error),
+          testName: '<between tests>',
+          failureKind: categorizeError(error),
+          errorMessage: extractMessage(error),
+          errorStack: extractStack(error),
+          durationMs: 0,
+          failedAt: new Date().toISOString(),
+        }),
+      ),
     )
   }
   process.on('uncaughtException', onRunLevelError)
@@ -113,16 +129,18 @@ export function createPreload(store: IStore): void {
     durationMs: number
   }): void => {
     safeVoid('insertFailure', () =>
-      store.insertFailure({
-        runId,
-        testFile: opts.testFile,
-        testName: opts.testName,
-        failureKind: categorizeError(opts.error),
-        errorMessage: extractMessage(opts.error),
-        errorStack: extractStack(opts.error),
-        durationMs: Math.round(opts.durationMs),
-        failedAt: new Date().toISOString(),
-      }),
+      store.insertFailure(
+        parse(insertFailureInputSchema, {
+          runId,
+          testFile: opts.testFile,
+          testName: opts.testName,
+          failureKind: categorizeError(opts.error),
+          errorMessage: extractMessage(opts.error),
+          errorStack: extractStack(opts.error),
+          durationMs: Math.round(opts.durationMs),
+          failedAt: new Date().toISOString(),
+        }),
+      ),
     )
   }
 
@@ -155,7 +173,11 @@ export function createPreload(store: IStore): void {
     }
     return new Proxy(originalTest, {
       apply: (_t, _th, args) =>
-        callWrapped(args[0] as string, args[1] as TestCallback, args[2] as number | undefined),
+        callWrapped(
+          args[0] as string,
+          args[1] as TestCallback,
+          args[2] as number | undefined,
+        ),
       // Forward property access (.each, .skip, ...) to the original.
       // Bun's sub-APIs have strict `this` validation — bind to the real target.
       get: (target, prop) => {
@@ -187,6 +209,7 @@ export function createPreload(store: IStore): void {
   try {
     mock.module('bun:test', () => ({
       ...bunTest,
+      // Bun's test/it/describe types don't expose the internal signature we need for wrapping
       test: wrapTest(bunTest.test as unknown as TestFn),
       it: wrapTest(bunTest.it as unknown as TestFn),
       describe: wrapDescribe(bunTest.describe as unknown as DescribeFn),
@@ -203,15 +226,18 @@ export function createPreload(store: IStore): void {
       testsFailed > 0 || errorsBetweenTests > 0 ? 'fail' : 'pass'
 
     await store
-      .updateRun(runId, {
-        endedAt,
-        durationMs,
-        status,
-        totalTests: testsRun,
-        passedTests,
-        failedTests: testsFailed,
-        errorsBetweenTests,
-      })
+      .updateRun(
+        runId,
+        parse(updateRunInputSchema, {
+          endedAt,
+          durationMs,
+          status,
+          totalTests: testsRun,
+          passedTests,
+          failedTests: testsFailed,
+          errorsBetweenTests,
+        }),
+      )
       .catch((e: unknown) => console.warn('[flaky-tests] updateRun failed:', e))
 
     await store

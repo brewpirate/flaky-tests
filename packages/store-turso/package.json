@@ -1,14 +1,39 @@
 {
   "name": "@flaky-tests/store-turso",
   "version": "0.1.0",
-  "description": "Turso (libSQL) store adapter for flaky-tests — remote SQLite, free tier",
+  "description": "Turso (libSQL) store adapter for flaky-tests \u2014 remote SQLite, free tier",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/",
+    "src/",
+    "package.json",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir dist --format esm --target node --external @flaky-tests/core --external arktype --external @libsql/client",
+    "build:types": "tsc --project tsconfig.build.json",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "license": "MIT",
   "dependencies": {
     "@flaky-tests/core": "workspace:*",
-    "@libsql/client": "^0.14.0"
+    "@libsql/client": "^0.14.0",
+    "arktype": "^2.1.0"
   }
 }
