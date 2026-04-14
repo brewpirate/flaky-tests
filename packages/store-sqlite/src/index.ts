@@ -181,14 +181,20 @@ export class SqliteStore implements IStore {
     const windowStart = new Date(now - windowDays * 86400000).toISOString()
     const priorStart = new Date(now - windowDays * 2 * 86400000).toISOString()
 
+    // ISO 8601 timestamps from .toISOString() are always 24 chars and sort
+    // lexicographically. Prefixing values with the timestamp lets MAX() select
+    // the most-recent row's payload; we strip the 25-char prefix (24 + separator)
+    // afterward. CHAR(1) is a control character that won't appear in messages.
+    const TS_LEN = 25 // 24-char timestamp + CHAR(1) separator
+
     type Row = {
       test_file: string
       test_name: string
       recent_fails: number
       prior_fails: number
       failure_kinds: string
-      last_error_message: string | null
-      last_error_stack: string | null
+      last_error_message_raw: string | null
+      last_error_stack_raw: string | null
       last_failed: string
     }
 
@@ -200,8 +206,10 @@ export class SqliteStore implements IStore {
            SUM(CASE WHEN f.failed_at > ?  THEN 1 ELSE 0 END) AS recent_fails,
            SUM(CASE WHEN f.failed_at <= ? AND f.failed_at > ? THEN 1 ELSE 0 END) AS prior_fails,
            GROUP_CONCAT(DISTINCT f.failure_kind) AS failure_kinds,
-           MAX(CASE WHEN f.failed_at > ? THEN f.error_message END) AS last_error_message,
-           MAX(CASE WHEN f.failed_at > ? THEN f.error_stack   END) AS last_error_stack,
+           MAX(CASE WHEN f.failed_at > ? AND f.error_message IS NOT NULL
+                    THEN f.failed_at || CHAR(1) || f.error_message END) AS last_error_message_raw,
+           MAX(CASE WHEN f.failed_at > ? AND f.error_stack IS NOT NULL
+                    THEN f.failed_at || CHAR(1) || f.error_stack   END) AS last_error_stack_raw,
            MAX(f.failed_at) AS last_failed
          FROM failures f
          JOIN runs r ON r.run_id = f.run_id
@@ -220,8 +228,8 @@ export class SqliteStore implements IStore {
       recentFails: r.recent_fails,
       priorFails: r.prior_fails,
       failureKinds: r.failure_kinds.split(','),
-      lastErrorMessage: r.last_error_message,
-      lastErrorStack: r.last_error_stack,
+      lastErrorMessage: r.last_error_message_raw != null ? r.last_error_message_raw.slice(TS_LEN) : null,
+      lastErrorStack: r.last_error_stack_raw != null ? r.last_error_stack_raw.slice(TS_LEN) : null,
       lastFailed: r.last_failed,
     }))
   }
