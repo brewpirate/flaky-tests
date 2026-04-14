@@ -10,25 +10,58 @@
  *   bunx @flaky-tests/cli --window 14 --threshold 3
  *   bunx @flaky-tests/cli --prompt     # print investigation prompts
  *   bunx @flaky-tests/cli --copy       # copy first prompt to clipboard
+ *   bunx @flaky-tests/cli --create-issue
  *   bunx @flaky-tests/cli --html       # write HTML report and open in browser
  *   bunx @flaky-tests/cli --html --out report.html  # write to a specific file
  *
  * Environment variables:
- *   FLAKY_TESTS_DB         Override SQLite DB path
- *   FLAKY_TESTS_WINDOW     Window size in days (default: 7)
- *   FLAKY_TESTS_THRESHOLD  Min failures to flag (default: 2)
+ *   FLAKY_TESTS_STORE             sqlite | turso | supabase | postgres (default: sqlite)
+ *   FLAKY_TESTS_DB                SQLite DB path override
+ *   FLAKY_TESTS_CONNECTION_STRING DB URL for turso/supabase/postgres
+ *   FLAKY_TESTS_AUTH_TOKEN        Auth token for turso/supabase
+ *   FLAKY_TESTS_WINDOW            Window size in days (default: 7)
+ *   FLAKY_TESTS_THRESHOLD         Min failures to flag (default: 2)
  */
 
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
+import type { IStore, FlakyPattern } from '@flaky-tests/core'
+import { copyToClipboard, generatePrompt } from './prompt'
+import { createIssue, findExistingIssue, resolveRepo } from './github'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SqliteStore } from '@flaky-tests/store-sqlite'
 import type { FlakyPattern } from '@flaky-tests/core'
-import { copyToClipboard, generatePrompt } from './prompt'
-import { createIssue, findExistingIssue, resolveRepo } from './github'
 import { generateHtml } from './html'
+
+
+async function resolveStore(): Promise<IStore> {
+  const storeType = process.env.FLAKY_TESTS_STORE ?? 'sqlite'
+  const connStr = process.env.FLAKY_TESTS_CONNECTION_STRING
+  const authToken = process.env.FLAKY_TESTS_AUTH_TOKEN
+
+  switch (storeType) {
+    case 'turso': {
+      if (!connStr) throw new Error('FLAKY_TESTS_CONNECTION_STRING is required for store=turso')
+      const { TursoStore } = await import('@flaky-tests/store-turso')
+      return new TursoStore({ url: connStr, authToken })
+    }
+    case 'supabase': {
+      if (!connStr || !authToken) throw new Error('FLAKY_TESTS_CONNECTION_STRING and FLAKY_TESTS_AUTH_TOKEN are required for store=supabase')
+      const { SupabaseStore } = await import('@flaky-tests/store-supabase')
+      return new SupabaseStore({ url: connStr, key: authToken })
+    }
+    case 'postgres': {
+      const { PostgresStore } = await import('@flaky-tests/store-postgres')
+      return new PostgresStore({ connectionString: connStr })
+    }
+    default: {
+      const { SqliteStore } = await import('@flaky-tests/store-sqlite')
+      return new SqliteStore({ dbPath: process.env.FLAKY_TESTS_DB ?? undefined })
+    }
+  }
+}
 
 // --- Argument parsing (no deps, just process.argv) -----------------------
 
@@ -54,9 +87,7 @@ const htmlOut = option('out')
 // --- Main ----------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const store = new SqliteStore({
-    dbPath: process.env.FLAKY_TESTS_DB ?? undefined,
-  })
+  const store = await resolveStore()
 
   let patterns: FlakyPattern[]
   try {
