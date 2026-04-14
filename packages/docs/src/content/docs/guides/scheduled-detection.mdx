@@ -1,0 +1,98 @@
+---
+title: Scheduled detection
+description: Run pattern detection automatically on a schedule and get notified when new flaky tests appear.
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+Instead of checking for patterns manually, you can schedule a GitHub Action to run detection automatically and open issues when new patterns are found.
+
+## How scheduled detection works
+
+1. A cron job runs weekly (or on your schedule)
+2. The action calls `flaky-tests check` against your shared store
+3. If new patterns are found, a GitHub issue is opened automatically with an AI investigation prompt embedded in the body
+4. If the same pattern is already open as an issue, a new one is not created (deduplication by test name)
+
+## Setting up the workflow
+
+Add this workflow to your repository:
+
+```yaml title=".github/workflows/flaky-check.yml"
+name: Flaky test detection
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # Monday at 9am UTC
+  workflow_dispatch:        # Allow manual runs
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: brewpirate/flaky-tests@v1
+        with:
+          store: turso
+          connection-string: ${{ secrets.TURSO_URL }}
+          auth-token: ${{ secrets.TURSO_AUTH_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          window-days: '7'
+          threshold: '2'
+          create-issues: 'true'
+```
+
+## Customizing the schedule
+
+The `cron` field uses standard cron syntax. Some examples:
+
+| Schedule | Cron expression |
+|---|---|
+| Every Monday at 9am UTC | `0 9 * * 1` |
+| Every day at midnight | `0 0 * * *` |
+| Every 6 hours | `0 */6 * * *` |
+| First of the month | `0 9 1 * *` |
+
+<Aside type="tip">
+Weekly detection with a 7-day window is a good default — it gives enough time to accumulate meaningful data while still catching problems quickly.
+</Aside>
+
+## What the issue looks like
+
+When a new pattern is detected, the action opens an issue like this:
+
+```
+Title: Flaky test: auth > login > should redirect on success
+
+Body:
+**File:** tests/auth.test.ts
+**Failures:** 8 in the last 7 days (0 in the prior 7 days)
+**Error type:** timeout
+
+<details>
+<summary>Investigation prompt</summary>
+
+The following test has started failing intermittently...
+[full structured prompt for Claude/Cursor/Copilot]
+</details>
+```
+
+## Deduplication
+
+Before opening a new issue, the action searches for existing open issues with the same title. If one is found, no duplicate is created. Close the issue when the problem is resolved — the next detection run will open a fresh one if it reappears.
+
+## Running detection manually
+
+You can trigger the workflow manually from GitHub's Actions tab without waiting for the schedule. This is useful when you want to check for patterns immediately after deploying a change.
+
+Or run locally:
+
+```sh
+FLAKY_TESTS_STORE=turso \
+  TURSO_URL=libsql://... \
+  TURSO_AUTH_TOKEN=... \
+  bunx @flaky-tests/cli --create-issue \
+  --repo your-org/your-repo \
+  --window 7 \
+  --threshold 2
+```

@@ -1,0 +1,84 @@
+---
+title: Setting up with Vitest
+description: Add the Vitest reporter to capture test failures in Vitest projects.
+---
+
+import { Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components'
+
+The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using the standard reporter API and writes failures to your chosen store.
+
+## Installation
+
+<Steps>
+
+1. **Install the plugin and a store**
+
+   ```sh
+   # npm / pnpm / yarn
+   npm install -D @flaky-tests/plugin-vitest @flaky-tests/store-sqlite
+   ```
+
+   ```sh
+   # bun
+   bun add -D @flaky-tests/plugin-vitest @flaky-tests/store-sqlite
+   ```
+
+2. **Add the reporter to `vitest.config.ts`**
+
+   ```ts title="vitest.config.ts"
+   import { defineConfig } from 'vitest/config'
+   import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+
+   export default defineConfig({
+     test: {
+       reporters: ['default', new FlakyTestsReporter()],
+     },
+   })
+   ```
+
+3. **Run your tests**
+
+   ```sh
+   npx vitest run
+   ```
+
+   Failures are written to `node_modules/.cache/flaky-tests/failures.db`.
+
+</Steps>
+
+## Using a custom store
+
+Pass any store that implements `IStore` to the reporter constructor:
+
+```ts title="vitest.config.ts"
+import { defineConfig } from 'vitest/config'
+import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+import { TursoStore } from '@flaky-tests/store-turso'
+
+const store = new TursoStore({
+  url: process.env.TURSO_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+await store.migrate()
+
+export default defineConfig({
+  test: {
+    reporters: ['default', new FlakyTestsReporter({ store })],
+  },
+})
+```
+
+## Compatibility
+
+The reporter is duck-typed and works with **Vitest v1, v2, and v3** without any peer dependency version pinning. It only uses the subset of the reporter API that has been stable since v1: `onInit` and `onFinished`.
+
+<Aside type="note">
+When using the `reporters` array with a custom reporter instance, make sure to also include `'default'` (or `'verbose'`) so you still see test output in your terminal.
+</Aside>
+
+## Environment variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `FLAKY_TESTS_DISABLED` | Set to `1` to skip all capture | — |
+| `FLAKY_TESTS_SQLITE_PATH` | Override the SQLite file path | `node_modules/.cache/flaky-tests/failures.db` |

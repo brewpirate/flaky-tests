@@ -1,0 +1,103 @@
+---
+title: Supabase
+description: Store test failures in Supabase using the JavaScript client.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components'
+
+The Supabase store uses the [`@supabase/supabase-js`](https://supabase.com/docs/reference/javascript) client to write failures and detect patterns via PostgREST.
+
+**Free tier:** 500 MB database, unlimited projects (paused after 1 week of inactivity).
+
+## Installation
+
+```sh
+bun add -D @flaky-tests/store-supabase
+# or: npm install -D @flaky-tests/store-supabase
+```
+
+## Setup
+
+<Steps>
+
+1. **Create a Supabase project** at [supabase.com](https://supabase.com)
+
+2. **Create the tables** — go to the SQL editor and run:
+
+   ```sql
+   create table if not exists runs (
+     id text primary key,
+     started_at timestamptz not null,
+     finished_at timestamptz,
+     exit_code integer
+   );
+
+   create table if not exists failures (
+     id text primary key,
+     run_id text not null references runs(id),
+     test_file text not null,
+     test_name text not null,
+     failure_kind text not null,
+     error_message text,
+     error_stack text,
+     failed_at timestamptz not null
+   );
+   ```
+
+3. **Get your project URL and anon key** from **Settings → API**
+
+4. **Add to your environment**
+
+   ```sh
+   SUPABASE_URL=https://abcdefghijklmnop.supabase.co
+   SUPABASE_KEY=eyJhbGci...
+   ```
+
+</Steps>
+
+## Usage
+
+```ts
+import { SupabaseStore } from '@flaky-tests/store-supabase'
+
+const store = new SupabaseStore({
+  url: process.env.SUPABASE_URL!,
+  key: process.env.SUPABASE_KEY!,
+})
+```
+
+## Constructor options
+
+```ts
+interface SupabaseStoreOptions {
+  /** Your Supabase project URL */
+  url: string
+  /** Your anon or service role key */
+  key: string
+}
+```
+
+## CLI usage
+
+```sh
+FLAKY_TESTS_STORE=supabase \
+  SUPABASE_URL=https://... \
+  SUPABASE_KEY=eyJhbGci... \
+  bunx @flaky-tests/cli
+```
+
+## Limitations
+
+<Aside type="caution">
+**Pattern detection makes two round-trip fetches.** PostgREST (the layer Supabase uses for the JS client) doesn't support the conditional aggregates that `getNewPatterns` needs. The store fetches recent and prior failures separately and groups them in JavaScript. For typical failure volumes this is fine, but it's less efficient than a direct Postgres connection.
+
+If performance is a concern, use the [Postgres store](/stores/postgres/) with a Supabase connection string instead.
+</Aside>
+
+## Using the service role key
+
+The anon key works with default RLS policies disabled. If you have RLS enabled on your tables, use the **service role key** instead (keep it in server-side secrets only, never expose to browsers).
+
+```sh
+SUPABASE_KEY=your-service-role-key  # from Settings → API → service_role
+```

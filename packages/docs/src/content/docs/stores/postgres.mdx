@@ -1,0 +1,109 @@
+---
+title: Postgres / Neon
+description: Store test failures in any PostgreSQL-compatible database.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components'
+
+The Postgres store uses the [`postgres`](https://github.com/porsager/postgres) package with tagged-template SQL. It works with any standard PostgreSQL server and Postgres-compatible services including [Neon](https://neon.tech), [Railway](https://railway.app), and Supabase direct connections.
+
+## Installation
+
+```sh
+bun add -D @flaky-tests/store-postgres
+# or: npm install -D @flaky-tests/store-postgres
+```
+
+## Setup
+
+<Steps>
+
+1. **Get a Postgres connection string**
+
+   - **Neon** (free tier, serverless): create a project at [neon.tech](https://neon.tech), copy the connection string
+   - **Railway**: provision a Postgres plugin, copy the `DATABASE_URL`
+   - **Self-hosted**: `postgres://user:password@host:5432/dbname`
+
+2. **Run migrations** — the store creates tables automatically on first use:
+
+   ```ts
+   import { PostgresStore } from '@flaky-tests/store-postgres'
+
+   const store = new PostgresStore({ url: process.env.POSTGRES_URL! })
+   await store.migrate()
+   ```
+
+3. **Add to your environment**
+
+   ```sh
+   POSTGRES_URL=postgres://user:password@host:5432/dbname
+   ```
+
+</Steps>
+
+## Usage
+
+```ts
+import { PostgresStore } from '@flaky-tests/store-postgres'
+
+const store = new PostgresStore({
+  url: process.env.POSTGRES_URL!,
+})
+await store.migrate()
+```
+
+## Constructor options
+
+```ts
+interface PostgresStoreOptions {
+  /** PostgreSQL connection string */
+  url: string
+}
+```
+
+## CLI usage
+
+```sh
+FLAKY_TESTS_STORE=postgres \
+  POSTGRES_URL=postgres://... \
+  bunx @flaky-tests/cli
+```
+
+## Pattern detection
+
+The Postgres store uses `COUNT(*) FILTER (WHERE ...)` — a single-pass aggregate that's more efficient than the Supabase two-fetch approach:
+
+```sql
+SELECT
+  test_file,
+  test_name,
+  COUNT(*) FILTER (WHERE failed_at >= $recent_start) AS recent_fails,
+  COUNT(*) FILTER (WHERE failed_at < $recent_start AND failed_at >= $prior_start) AS prior_fails
+FROM failures
+WHERE failed_at >= $prior_start
+GROUP BY test_file, test_name
+HAVING COUNT(*) FILTER (WHERE failed_at >= $recent_start) >= $threshold
+  AND COUNT(*) FILTER (WHERE failed_at < $recent_start AND failed_at >= $prior_start) = 0
+```
+
+## Using with Neon
+
+Neon's free tier includes 0.5 GB storage, 5 branches, and auto-suspend after inactivity (which may add cold-start latency on the first query after a pause).
+
+```sh
+# Neon connection string format
+POSTGRES_URL=postgres://user:password@ep-something-12345.us-east-2.aws.neon.tech/neondb?sslmode=require
+```
+
+<Aside type="tip">
+The `?sslmode=require` parameter is important for Neon. The `postgres` package enables SSL automatically when it sees this parameter.
+</Aside>
+
+## Using with Supabase direct connection
+
+If you're already on Supabase and want better query performance than the JS client provides, use the Postgres store with Supabase's direct connection string:
+
+```sh
+# Supabase → Settings → Database → Connection string → URI
+POSTGRES_URL=postgres://postgres.abcdef:password@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+```

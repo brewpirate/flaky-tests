@@ -1,0 +1,135 @@
+---
+title: IStore interface
+description: The storage interface that all store adapters implement.
+---
+
+All store packages implement a common `IStore` interface from `@flaky-tests/core`. This means you can swap backends without changing any other code.
+
+## Interface definition
+
+```ts
+import type { IStore, InsertRunInput, UpdateRunInput, InsertFailureInput, GetNewPatternsOptions, FlakyPattern } from '@flaky-tests/core'
+```
+
+```ts
+interface IStore {
+  insertRun(input: InsertRunInput): Promise<void>
+  updateRun(runId: string, input: UpdateRunInput): Promise<void>
+  insertFailure(input: InsertFailureInput): Promise<void>
+  getNewPatterns(options?: GetNewPatternsOptions): Promise<FlakyPattern[]>
+  close(): Promise<void>
+}
+```
+
+All methods return `Promise<void>` (or `Promise<FlakyPattern[]>`) so that both synchronous stores (SQLite, wrapped in async) and truly async stores (Turso, Supabase, Postgres) implement the same interface.
+
+## Types
+
+### `InsertRunInput`
+
+```ts
+interface InsertRunInput {
+  id: string          // UUID v4
+  startedAt: string   // ISO 8601 timestamp
+}
+```
+
+### `UpdateRunInput`
+
+```ts
+interface UpdateRunInput {
+  finishedAt: string   // ISO 8601 timestamp
+  exitCode: number
+}
+```
+
+### `InsertFailureInput`
+
+```ts
+interface InsertFailureInput {
+  id: string              // UUID v4
+  runId: string
+  testFile: string        // relative path to test file
+  testName: string        // full test name including describe blocks, e.g. "auth > login > should redirect"
+  failureKind: FailureKind
+  errorMessage: string | null
+  errorStack: string | null
+  failedAt: string        // ISO 8601 timestamp
+}
+```
+
+### `FailureKind`
+
+```ts
+type FailureKind = 'assertion' | 'timeout' | 'uncaught' | 'unknown'
+```
+
+Determined by `categorizeError(error)` in `@flaky-tests/core`.
+
+### `GetNewPatternsOptions`
+
+```ts
+interface GetNewPatternsOptions {
+  /**
+   * Length of each detection window in days.
+   * The current window is [now - windowDays, now].
+   * The prior window is [now - 2*windowDays, now - windowDays].
+   * Default: 7
+   */
+  windowDays?: number
+  /**
+   * Minimum failures in the current window to flag as a new pattern.
+   * Default: 2
+   */
+  threshold?: number
+}
+```
+
+### `FlakyPattern`
+
+```ts
+interface FlakyPattern {
+  testFile: string
+  testName: string
+  recentFails: number         // failures in the current window
+  priorFails: number          // failures in the prior window (always 0 for new patterns)
+  failureKinds: string[]      // distinct FailureKind values seen recently
+  lastErrorMessage: string | null
+  lastErrorStack: string | null
+  lastFailed: string          // ISO 8601 timestamp of most recent failure
+}
+```
+
+## Writing a custom store
+
+To implement a custom store, create a class that satisfies `IStore`:
+
+```ts
+import type { IStore, InsertRunInput, UpdateRunInput, InsertFailureInput, GetNewPatternsOptions, FlakyPattern } from '@flaky-tests/core'
+
+export class MyCustomStore implements IStore {
+  async insertRun(input: InsertRunInput): Promise<void> {
+    // ...
+  }
+
+  async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+    // ...
+  }
+
+  async insertFailure(input: InsertFailureInput): Promise<void> {
+    // ...
+  }
+
+  async getNewPatterns(options?: GetNewPatternsOptions): Promise<FlakyPattern[]> {
+    const { windowDays = 7, threshold = 2 } = options ?? {}
+    // implement detection logic
+    return []
+  }
+
+  async close(): Promise<void> {
+    // close connections, flush buffers, etc.
+  }
+}
+```
+
+The store can then be passed directly to `createPreload`, `FlakyTestsReporter`, or the CLI's `resolveStore`.
