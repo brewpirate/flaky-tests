@@ -22,6 +22,7 @@
 import { SqliteStore } from '@flaky-tests/store-sqlite'
 import type { FlakyPattern } from '@flaky-tests/core'
 import { copyToClipboard, generatePrompt } from './prompt'
+import { createIssue, findExistingIssue, resolveRepo } from './github'
 
 // --- Argument parsing (no deps, just process.argv) -----------------------
 
@@ -40,6 +41,7 @@ const windowDays = Number(option('window', 'FLAKY_TESTS_WINDOW') ?? 7)
 const threshold = Number(option('threshold', 'FLAKY_TESTS_THRESHOLD') ?? 2)
 const showPrompts = flag('prompt') || flag('copy')
 const doCopy = flag('copy')
+const doCreateIssue = flag('create-issue')
 
 // --- Main ----------------------------------------------------------------
 
@@ -83,8 +85,9 @@ async function main(): Promise<void> {
     }
     console.log()
   } else {
-    console.log(`  Run with --prompt to print investigation prompts`)
-    console.log(`  Run with --copy   to copy the first prompt to clipboard`)
+    console.log(`  Run with --prompt        to print investigation prompts`)
+    console.log(`  Run with --copy          to copy the first prompt to clipboard`)
+    console.log(`  Run with --create-issue  to open a GitHub issue for each pattern`)
     console.log()
   }
 
@@ -98,7 +101,43 @@ async function main(): Promise<void> {
     }
   }
 
+  if (doCreateIssue) {
+    await openGitHubIssues(patterns, windowDays)
+  }
+
   process.exit(1)
+}
+
+async function openGitHubIssues(patterns: FlakyPattern[], windowDays: number): Promise<void> {
+  const token = process.env.GITHUB_TOKEN
+  if (!token) {
+    console.log('⚠ --create-issue requires GITHUB_TOKEN to be set\n')
+    return
+  }
+
+  const repoInfo = resolveRepo()
+  if (!repoInfo) {
+    console.log('⚠ --create-issue: could not determine owner/repo. Set GITHUB_REPOSITORY or pass --repo owner/repo\n')
+    return
+  }
+
+  const config = { token, ...repoInfo }
+  console.log(`Opening issues in ${repoInfo.owner}/${repoInfo.repo}...\n`)
+
+  for (const pattern of patterns) {
+    try {
+      const existing = await findExistingIssue(config, pattern.testName)
+      if (existing !== null) {
+        console.log(`  ↩ #${existing} already open for: ${pattern.testName}`)
+        continue
+      }
+      const url = await createIssue(config, pattern, windowDays)
+      console.log(`  ✓ Opened: ${url}`)
+    } catch (error) {
+      console.log(`  ✗ Failed for "${pattern.testName}": ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  console.log()
 }
 
 await main()
