@@ -4,3 +4,4 @@ dist/
 test-report.html
 .cache/
 bun.lockb
+.astro/
