@@ -1,0 +1,16 @@
+{
+  "name": "@flaky-tests/plugin-vitest",
+  "version": "0.1.0",
+  "description": "Vitest reporter plugin for flaky-tests",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@flaky-tests/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "vitest": ">=1.0.0"
+  }
+}

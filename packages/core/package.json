@@ -1,0 +1,10 @@
+{
+  "name": "@flaky-tests/core",
+  "version": "0.1.0",
+  "description": "Storage-agnostic core types and utilities for flaky-tests",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT"
+}
