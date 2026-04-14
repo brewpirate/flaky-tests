@@ -14,6 +14,11 @@
     "@flaky-tests/core": "workspace:*",
     "@flaky-tests/store-sqlite": "workspace:*"
   },
+  "optionalDependencies": {
+    "@flaky-tests/store-turso": "workspace:*",
+    "@flaky-tests/store-supabase": "workspace:*",
+    "@flaky-tests/store-postgres": "workspace:*"
+  },
   "devDependencies": {
     "bun-types": "latest"
   },

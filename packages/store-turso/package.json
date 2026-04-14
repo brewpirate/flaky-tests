@@ -1,0 +1,14 @@
+{
+  "name": "@flaky-tests/store-turso",
+  "version": "0.1.0",
+  "description": "Turso (libSQL) store adapter for flaky-tests — remote SQLite, free tier",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@flaky-tests/core": "workspace:*",
+    "@libsql/client": "^0.14.0"
+  }
+}
