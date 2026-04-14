@@ -1,0 +1,23 @@
+{
+  "name": "@flaky-tests/cli",
+  "version": "0.1.0",
+  "description": "CLI for flaky-tests pattern detection and prompt generation",
+  "type": "module",
+  "bin": {
+    "flaky-tests": "./src/check.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@flaky-tests/core": "workspace:*",
+    "@flaky-tests/store-sqlite": "workspace:*"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  }
+}
