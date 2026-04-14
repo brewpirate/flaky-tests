@@ -1,0 +1,32 @@
+name: Flaky test check
+
+on:
+  schedule:
+    # Every Monday at 9am UTC
+    - cron: '0 9 * * 1'
+  # Allow manual trigger from the Actions tab
+  workflow_dispatch:
+    inputs:
+      window-days:
+        description: 'Lookback window in days'
+        default: '7'
+      threshold:
+        description: 'Minimum failures to flag'
+        default: '2'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write   # needed to open issues
+
+    steps:
+      - uses: brewpirate/flaky-tests@v1
+        with:
+          store: turso
+          connection-string: ${{ secrets.FLAKY_TESTS_TURSO_URL }}
+          auth-token: ${{ secrets.FLAKY_TESTS_TURSO_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          window-days: ${{ inputs.window-days || '7' }}
+          threshold: ${{ inputs.threshold || '2' }}
+          create-issues: 'true'
