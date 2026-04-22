@@ -2,10 +2,12 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import {
   type Config,
+  CREATE_SCHEMA_VERSION_TABLE,
   createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   definePlugin,
+  detectBaselineVersion,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -21,8 +23,13 @@ import {
   mapRowToPattern,
   parse,
   parseArray,
+  pendingMigrations,
   type RecentRun,
   type RunStatus,
+  SCHEMA_VERSION_TABLE,
+  type SchemaInspector,
+  SQLITE_MIGRATIONS,
+  type SqliteMigration,
   type UpdateRunInput,
   updateRunInputSchema,
 } from '@flaky-tests/core'
@@ -40,41 +47,43 @@ export type SqliteStoreOptions = typeof sqliteStoreOptionsSchema.infer
 
 const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS runs (
-  run_id                TEXT PRIMARY KEY,
-  project               TEXT,
-  started_at            TEXT NOT NULL,
-  ended_at              TEXT,
-  duration_ms           INTEGER,
-  status                TEXT,
-  total_tests           INTEGER,
-  passed_tests          INTEGER,
-  failed_tests          INTEGER,
-  errors_between_tests  INTEGER,
-  git_sha               TEXT,
-  git_dirty             INTEGER,
-  runtime_version       TEXT,
-  test_args             TEXT
-);
+/** Row shape in the bookkeeping `schema_version` table. */
+interface SchemaVersionRow {
+  version: number
+  applied_at: string
+}
 
-CREATE TABLE IF NOT EXISTS failures (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  run_id         TEXT NOT NULL REFERENCES runs(run_id),
-  test_file      TEXT NOT NULL,
-  test_name      TEXT NOT NULL,
-  failure_kind   TEXT NOT NULL,
-  error_message  TEXT,
-  error_stack    TEXT,
-  duration_ms    INTEGER,
-  failed_at      TEXT NOT NULL
-);
+/** Row shape returned by SQLite's `PRAGMA table_info(...)`. */
+interface PragmaTableInfoRow {
+  cid: number
+  name: string
+  type: string
+  notnull: number
+  dflt_value: string | null
+  pk: number
+}
 
-CREATE INDEX IF NOT EXISTS idx_failures_test      ON failures(test_file, test_name);
-CREATE INDEX IF NOT EXISTS idx_failures_run       ON failures(run_id);
-CREATE INDEX IF NOT EXISTS idx_failures_failed_at ON failures(failed_at);
-CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests);
-`
+/** Build a {@link SchemaInspector} backed by SQLite `PRAGMA` introspection. */
+function makeSqliteInspector(db: Database): SchemaInspector {
+  return {
+    tableExists: (name) => {
+      const row = db
+        .query<{ name: string }, [string]>(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1",
+        )
+        .get(name)
+      return row !== null
+    },
+    columnExists: (table, column) => {
+      // PRAGMA doesn't accept bind parameters; `table` is a trusted constant
+      // from our migration list, not user input, so interpolation is safe.
+      const rows = db
+        .query<PragmaTableInfoRow, []>(`PRAGMA table_info(${table})`)
+        .all()
+      return rows.some((row) => row.name === column)
+    },
+  }
+}
 
 /** Create the parent directory for the DB file if missing so SQLite can open it. */
 function ensureDirectory(dbPath: string): void {
@@ -110,31 +119,76 @@ export class SqliteStore implements IStore {
     ensureDirectory(dbPath)
     this.db = new Database(dbPath, { create: true })
     this.db.exec('PRAGMA journal_mode = WAL')
-    this.db.exec(SCHEMA)
     // `migrate` is sync under bun:sqlite (only exec calls) but declared async
     // by the IStore contract; constructors can't await so we fire-and-forget.
     void this.migrate()
   }
 
   /**
-   * Create tables and run idempotent column additions for older databases.
-   * Called automatically in the constructor — safe to call again.
+   * Bring the database to the current schema version by applying pending
+   * migrations from {@link SQLITE_MIGRATIONS}. Safe to call on every startup:
+   * tracks applied versions in the `schema_version` table, and for databases
+   * created before versioning existed, seeds a baseline by probing which
+   * columns already exist — so we never re-run DDL that would fail.
    */
   async migrate(): Promise<void> {
-    const migrations = [
-      'ALTER TABLE runs ADD COLUMN passed_tests INTEGER',
-      'ALTER TABLE runs ADD COLUMN errors_between_tests INTEGER',
-      'ALTER TABLE runs ADD COLUMN runtime_version TEXT',
-      'ALTER TABLE runs ADD COLUMN test_args TEXT',
-      'ALTER TABLE runs ADD COLUMN project TEXT',
-    ]
-    for (const stmt of migrations) {
-      try {
-        this.db.exec(stmt)
-      } catch {
-        // Column already present.
-      }
+    this.db.exec(CREATE_SCHEMA_VERSION_TABLE)
+    const current = this.getCurrentVersion()
+    const baseline =
+      current > 0
+        ? current
+        : detectBaselineVersion(SQLITE_MIGRATIONS, makeSqliteInspector(this.db))
+    if (baseline > current) {
+      // Seed rows for migrations whose effects already live in the schema —
+      // without running their DDL again.
+      const now = new Date().toISOString()
+      const seed = this.db.prepare(
+        `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`,
+      )
+      this.db.transaction(() => {
+        for (let version = current + 1; version <= baseline; version++) {
+          seed.run(version, now)
+        }
+      })()
     }
+    for (const migration of pendingMigrations(SQLITE_MIGRATIONS, baseline)) {
+      this.applyMigration(migration)
+    }
+  }
+
+  private getCurrentVersion(): number {
+    const row = this.db
+      .query<{ version: number | null }, []>(
+        `SELECT MAX(version) AS version FROM ${SCHEMA_VERSION_TABLE}`,
+      )
+      .get()
+    return row?.version ?? 0
+  }
+
+  /** Apply one migration's `up` statements and record the version atomically. */
+  private applyMigration(migration: SqliteMigration): void {
+    const now = new Date().toISOString()
+    this.db.transaction(() => {
+      for (const statement of migration.up) {
+        this.db.exec(statement)
+      }
+      this.db.run(
+        `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`,
+        [migration.version, now],
+      )
+    })()
+    log.debug(
+      `applied migration v${migration.version}: ${migration.description}`,
+    )
+  }
+
+  /** Expose the applied-migration ledger for tooling/tests. */
+  getAppliedMigrations(): SchemaVersionRow[] {
+    return this.db
+      .query<SchemaVersionRow, []>(
+        `SELECT version, applied_at FROM ${SCHEMA_VERSION_TABLE} ORDER BY version ASC`,
+      )
+      .all()
   }
 
   /**

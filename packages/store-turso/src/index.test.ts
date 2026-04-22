@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { StoreError } from '@flaky-tests/core'
+import { SQLITE_MIGRATIONS, StoreError } from '@flaky-tests/core'
 import { TursoStore } from './index'
 
 // Unit-tier: uses `file::memory:` so nothing touches a remote libSQL service.
@@ -39,6 +39,34 @@ describe('TursoStore — fresh-database path', () => {
       })
       const patterns = await store.getNewPatterns()
       expect(patterns).toEqual([])
+    } finally {
+      await store.close()
+    }
+  })
+})
+
+describe('TursoStore — schema_version migrations', () => {
+  test('fresh DB records every migration in schema_version', async () => {
+    const store = new TursoStore({ url: 'file::memory:' })
+    try {
+      await store.migrate()
+      const applied = await store.getAppliedMigrations()
+      expect(applied.map((row) => row.version)).toEqual(
+        SQLITE_MIGRATIONS.map((migration) => migration.version),
+      )
+    } finally {
+      await store.close()
+    }
+  })
+
+  test('migrate() is idempotent — a second call adds no new rows', async () => {
+    const store = new TursoStore({ url: 'file::memory:' })
+    try {
+      await store.migrate()
+      const first = await store.getAppliedMigrations()
+      await store.migrate()
+      const second = await store.getAppliedMigrations()
+      expect(second).toEqual(first)
     } finally {
       await store.close()
     }
