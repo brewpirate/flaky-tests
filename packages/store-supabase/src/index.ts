@@ -18,7 +18,9 @@ import {
   MS_PER_DAY,
   parse,
   parseArray,
+  type FailureKind,
   type RecentRun,
+  type RunFailureRecord,
   type RunStatus,
   StoreError,
   type UpdateRunInput,
@@ -356,6 +358,47 @@ export class SupabaseStore implements IStore {
       errorsBetweenTests: row.errors_between_tests,
       gitSha: row.git_sha,
       gitDirty: row.git_dirty,
+    }))
+  }
+
+  /**
+   * Return all failures whose `run_id` is in `runIds`, ordered by `failed_at`
+   * ASC. Short-circuits to `[]` when `runIds` is empty so we never issue a
+   * request with a zero-length `in` filter.
+   */
+  async getFailuresForRuns(
+    runIds: readonly string[],
+  ): Promise<RunFailureRecord[]> {
+    if (runIds.length === 0) return []
+    const { data, error } = await this.client
+      .from(this.failuresTable)
+      .select(
+        'run_id, test_name, test_file, failure_kind, error_message, failed_at',
+      )
+      .in('run_id', runIds as string[])
+      .order('failed_at', { ascending: true })
+    if (error)
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'getFailuresForRuns',
+        message: error.message,
+        cause: error,
+      })
+    type Row = {
+      run_id: string
+      test_name: string
+      test_file: string
+      failure_kind: string
+      error_message: string | null
+      failed_at: string
+    }
+    return ((data ?? []) as unknown as Row[]).map((row) => ({
+      runId: row.run_id,
+      testName: row.test_name,
+      testFile: row.test_file,
+      failureKind: row.failure_kind as FailureKind,
+      errorMessage: row.error_message,
+      failedAt: row.failed_at,
     }))
   }
 

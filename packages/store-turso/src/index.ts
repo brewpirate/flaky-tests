@@ -21,7 +21,9 @@ import {
   type PatternRow,
   parse,
   parseArray,
+  type FailureKind,
   type RecentRun,
+  type RunFailureRecord,
   type RunStatus,
   StoreError,
   type UpdateRunInput,
@@ -347,6 +349,38 @@ export class TursoStore implements IStore {
             : Number(r.errors_between_tests),
         gitSha: r.git_sha == null ? null : String(r.git_sha),
         gitDirty: r.git_dirty == null ? null : Number(r.git_dirty) !== 0,
+      }
+    })
+  }
+
+  /**
+   * Return all failures whose `run_id` is in `runIds`, ordered by `failed_at`
+   * ASC. Short-circuits to `[]` when `runIds` is empty so we never send a
+   * malformed empty `IN ()` clause.
+   */
+  async getFailuresForRuns(
+    runIds: readonly string[],
+  ): Promise<RunFailureRecord[]> {
+    if (runIds.length === 0) return []
+    const placeholders = runIds.map(() => '?').join(', ')
+    const result = await this.wrap('getFailuresForRuns', () =>
+      this.client.execute({
+        sql: `SELECT run_id, test_name, test_file, failure_kind, error_message, failed_at
+                FROM failures
+               WHERE run_id IN (${placeholders})
+               ORDER BY failed_at ASC`,
+        args: runIds as unknown as InArgs,
+      }),
+    )
+    return result.rows.map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      return {
+        runId: String(r.run_id),
+        testName: String(r.test_name),
+        testFile: String(r.test_file),
+        failureKind: String(r.failure_kind) as FailureKind,
+        errorMessage: r.error_message == null ? null : String(r.error_message),
+        failedAt: String(r.failed_at),
       }
     })
   }

@@ -5,6 +5,7 @@ import {
   type HotFile,
   type KindBreakdown,
   type RecentRun,
+  type RunFailure,
 } from './html'
 
 const pattern: FlakyPattern = {
@@ -115,6 +116,48 @@ describe('generateHtml', () => {
     expect(html).toContain('timeout')
     expect(html).toContain('tests/flaky.ts')
     expect(html).toContain('abc123d')
+  })
+
+  test('renders per-run failure drill-down when failuresByRun is populated', () => {
+    const recentRuns: RecentRun[] = [
+      {
+        runId: 'run-with-fails',
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        durationMs: 1200,
+        status: 'fail',
+        totalTests: 3,
+        passedTests: 2,
+        failedTests: 1,
+        errorsBetweenTests: 0,
+        gitSha: 'deadbee',
+        gitDirty: false,
+      },
+    ]
+    const failures: RunFailure[] = [
+      {
+        testName: 'auth > redirects to dashboard',
+        testFile: 'tests/auth.test.ts',
+        failureKind: 'timeout',
+        errorMessage: 'Expected redirect within 2000ms',
+        failedAt: new Date().toISOString(),
+      },
+    ]
+    const failuresByRun = new Map<string, RunFailure[]>([
+      ['run-with-fails', failures],
+    ])
+    const html = generateHtml([pattern], 7, {
+      kindBreakdown: [],
+      hotFiles: [],
+      recentRuns,
+      failuresByRun,
+    })
+    expect(html).toContain('run-failures')
+    expect(html).toContain('auth &gt; redirects to dashboard')
+    expect(html).toContain('tests/auth.test.ts')
+    // kind badge surfaces the failure type inside the expanded row
+    expect(html).toContain('kind-badge')
+    expect(html).toContain('timeout')
   })
 
   test('renders "n/a" status for runs without a status', () => {

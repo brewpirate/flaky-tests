@@ -20,7 +20,9 @@ import {
   mapRowToPattern,
   parse,
   parseArray,
+  type FailureKind,
   type RecentRun,
+  type RunFailureRecord,
   type RunStatus,
   StoreError,
   type UpdateRunInput,
@@ -361,6 +363,48 @@ export class PostgresStore implements IStore {
       errorsBetweenTests: row.errors_between_tests,
       gitSha: row.git_sha,
       gitDirty: row.git_dirty,
+    }))
+  }
+
+  /**
+   * Return all failures whose `run_id` is in `runIds`, ordered by `failed_at`
+   * ASC. Short-circuits to `[]` when `runIds` is empty to avoid an empty
+   * `ANY(ARRAY[]::text[])` round trip.
+   */
+  async getFailuresForRuns(
+    runIds: readonly string[],
+  ): Promise<RunFailureRecord[]> {
+    if (runIds.length === 0) return []
+    const failures = this.failuresTable
+    const ids = runIds as readonly string[]
+    const rows = await this.wrap(
+      'getFailuresForRuns',
+      () =>
+        this.sql<
+          Array<{
+            run_id: string
+            test_name: string
+            test_file: string
+            failure_kind: string
+            error_message: string | null
+            failed_at: Date | string
+          }>
+        >`
+        SELECT run_id, test_name, test_file, failure_kind, error_message, failed_at
+          FROM ${this.sql(failures)}
+         WHERE run_id = ANY(${ids}::text[])
+         ORDER BY failed_at ASC
+      `,
+    )
+    const toIso = (value: Date | string): string =>
+      value instanceof Date ? value.toISOString() : String(value)
+    return rows.map((row) => ({
+      runId: row.run_id,
+      testName: row.test_name,
+      testFile: row.test_file,
+      failureKind: row.failure_kind as FailureKind,
+      errorMessage: row.error_message,
+      failedAt: toIso(row.failed_at),
     }))
   }
 

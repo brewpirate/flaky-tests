@@ -47,7 +47,7 @@ import {
   gitHubConfigSchema,
   resolveRepo,
 } from './github'
-import { generateHtml } from './html'
+import { generateHtml, type RunFailure } from './html'
 import { copyToClipboard, generatePrompt } from './prompt'
 
 const log = createLogger('cli')
@@ -127,6 +127,7 @@ async function main(
 
   let patterns: FlakyPattern[]
   let recentRuns: Awaited<ReturnType<typeof store.getRecentRuns>> = []
+  let failuresByRun = new Map<string, RunFailure[]>()
   try {
     patterns = await store.getNewPatterns(
       parse(getNewPatternsOptionsSchema, {
@@ -143,6 +144,7 @@ async function main(
         limit: RECENT_RUNS_LIMIT,
         project: runtimeConfig.project ?? null,
       })
+      failuresByRun = await loadFailuresByRun(store, recentRuns)
     }
   } finally {
     await store.close()
@@ -157,6 +159,7 @@ async function main(
         patterns,
         windowDays,
         recentRuns,
+        failuresByRun,
         outPath: cliConfig.htmlOut,
       })
     }
@@ -220,6 +223,7 @@ async function main(
       patterns,
       windowDays,
       recentRuns,
+      failuresByRun,
       outPath: cliConfig.htmlOut,
     })
   }
@@ -234,7 +238,33 @@ interface WriteAndOpenHtmlReportOpts {
   patterns: FlakyPattern[]
   windowDays: number
   recentRuns: Awaited<ReturnType<IStore['getRecentRuns']>>
+  failuresByRun: Map<string, RunFailure[]>
   outPath: string | undefined
+}
+
+/** Fetch every failure attached to the recent runs we're about to render and
+ *  bucket them by `runId`. Used to populate the HTML report's per-run
+ *  expandable drill-down. */
+async function loadFailuresByRun(
+  store: IStore,
+  recentRuns: Awaited<ReturnType<IStore['getRecentRuns']>>,
+): Promise<Map<string, RunFailure[]>> {
+  const runIds = recentRuns.map((run) => run.runId)
+  const failures = await store.getFailuresForRuns(runIds)
+  const byRun = new Map<string, RunFailure[]>()
+  for (const failure of failures) {
+    const bucket = byRun.get(failure.runId)
+    const entry: RunFailure = {
+      testName: failure.testName,
+      testFile: failure.testFile,
+      failureKind: failure.failureKind,
+      errorMessage: failure.errorMessage,
+      failedAt: failure.failedAt,
+    }
+    if (bucket) bucket.push(entry)
+    else byRun.set(failure.runId, [entry])
+  }
+  return byRun
 }
 
 /** Render the HTML report with whatever patterns and recent runs we have,
@@ -242,12 +272,12 @@ interface WriteAndOpenHtmlReportOpts {
  *  call — empty `patterns` produces a report that still shows the run
  *  history, which is what users want after a clean run. */
 function writeAndOpenHtmlReport(opts: WriteAndOpenHtmlReportOpts): void {
-  const { patterns, windowDays, recentRuns, outPath } = opts
+  const { patterns, windowDays, recentRuns, failuresByRun, outPath } = opts
   const html = generateHtml(patterns, windowDays, {
     recentRuns,
     kindBreakdown: [],
     hotFiles: [],
-    failuresByRun: new Map(),
+    failuresByRun,
   })
   const resolvedPath =
     outPath ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)

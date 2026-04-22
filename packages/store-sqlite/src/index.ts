@@ -22,7 +22,9 @@ import {
   parse,
   parseArray,
   type RecentRun,
+  type RunFailureRecord,
   type RunStatus,
+  type FailureKind,
   type UpdateRunInput,
   updateRunInputSchema,
 } from '@flaky-tests/core'
@@ -386,6 +388,41 @@ export class SqliteStore implements IStore {
       errorsBetweenTests: row.errors_between_tests,
       gitSha: row.git_sha,
       gitDirty: row.git_dirty === null ? null : row.git_dirty !== 0,
+    }))
+  }
+
+  /**
+   * Return all failures whose `run_id` is in `runIds`, ordered by `failed_at`
+   * ASC. Short-circuits to `[]` without hitting the DB when `runIds` is empty.
+   */
+  async getFailuresForRuns(
+    runIds: readonly string[],
+  ): Promise<RunFailureRecord[]> {
+    if (runIds.length === 0) return []
+    type Row = {
+      run_id: string
+      test_name: string
+      test_file: string
+      failure_kind: string
+      error_message: string | null
+      failed_at: string
+    }
+    const placeholders = runIds.map(() => '?').join(', ')
+    const rows = this.db
+      .query<Row, string[]>(
+        `SELECT run_id, test_name, test_file, failure_kind, error_message, failed_at
+           FROM failures
+          WHERE run_id IN (${placeholders})
+          ORDER BY failed_at ASC`,
+      )
+      .all(...(runIds as string[]))
+    return rows.map((row) => ({
+      runId: row.run_id,
+      testName: row.test_name,
+      testFile: row.test_file,
+      failureKind: row.failure_kind as FailureKind,
+      errorMessage: row.error_message,
+      failedAt: row.failed_at,
     }))
   }
 
