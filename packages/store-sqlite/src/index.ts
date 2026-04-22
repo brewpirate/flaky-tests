@@ -27,6 +27,7 @@ export const sqliteStoreOptionsSchema = type({
   'dbPath?': 'string | undefined',
 })
 
+/** Inferred options type for {@link SqliteStore}; accepted by its constructor. */
 export type SqliteStoreOptions = typeof sqliteStoreOptionsSchema.infer
 
 const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'
@@ -66,6 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_failures_failed_at ON failures(failed_at);
 CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests);
 `
 
+/** Create the parent directory for the DB file if missing so SQLite can open it. */
 function ensureDirectory(dbPath: string): void {
   const lastSlash = dbPath.lastIndexOf('/')
   if (lastSlash <= 0) return

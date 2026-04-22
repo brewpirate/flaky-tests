@@ -30,19 +30,22 @@ export const supabaseStoreOptionsSchema = type({
   'tablePrefix?': 'string',
 })
 
+/** Validated options accepted by {@link SupabaseStore}. Inferred from the ArkType schema so runtime and compile-time stay aligned. */
 export type SupabaseStoreOptions = typeof supabaseStoreOptionsSchema.infer
 
-/**
- * Supabase-backed implementation of the {@link IStore} interface.
- * Persists test runs and failures to two Supabase tables.
- */
 const PACKAGE = '@flaky-tests/store-supabase'
 
+/**
+ * Supabase-backed {@link IStore} implementation. Uses the supabase-js client against a
+ * hosted Supabase/Postgres instance, so a project URL and API key (anon or service role)
+ * must be supplied via config/env. Persists runs and failures to two prefixed tables.
+ */
 export class SupabaseStore implements IStore {
   private client: SupabaseClient
   private runsTable: string
   private failuresTable: string
 
+  /** Validate options, construct a supabase-js client, and resolve the runs/failures table names from `tablePrefix` (default `flaky_test`). */
   constructor(options: SupabaseStoreOptions) {
     const validated = parse(supabaseStoreOptionsSchema, options)
     this.client = createClient(validated.url, validated.key)
@@ -73,7 +76,7 @@ export class SupabaseStore implements IStore {
     }
   }
 
-  /** Insert a new test run record. Throws on Supabase errors. */
+  /** Insert a new run row at the start of a test session so failures can reference it via `run_id`. */
   async insertRun(input: InsertRunInput): Promise<void> {
     parse(insertRunInputSchema, input)
     const { error } = await this.client.from(this.runsTable).insert({
@@ -280,6 +283,7 @@ export class SupabaseStore implements IStore {
     )
   }
 
+  /** No-op: the supabase-js client manages its HTTP connections internally and needs no teardown. Present to satisfy {@link IStore}. */
   async close(): Promise<void> {
     // Supabase JS client has no explicit close; connections are managed internally.
   }

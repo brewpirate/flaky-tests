@@ -29,6 +29,7 @@ export const tursoStoreOptionsSchema = type({
   'authToken?': 'string',
 })
 
+/** Inferred options type for {@link TursoStore}: libSQL URL plus optional HTTP auth token. */
 export type TursoStoreOptions = typeof tursoStoreOptionsSchema.infer
 
 // Schema is identical to store-sqlite — Turso is SQLite-compatible.
@@ -68,12 +69,14 @@ CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests
 `
 
 /**
- * Flaky-test store backed by Turso (libSQL). Wire-compatible with
- * the SQLite store — swap the connection URL to go local or remote.
+ * `IStore` implementation targeting libSQL/Turso over HTTP with bearer-token auth.
+ * Mirrors the store-sqlite schema and queries verbatim so local and hosted
+ * backends stay interchangeable — only the connection URL differs.
  */
 export class TursoStore implements IStore {
   private client: Client
 
+  /** Builds the libSQL client from a validated URL and optional auth token. */
   constructor(options: TursoStoreOptions) {
     const validated = parse(tursoStoreOptionsSchema, options)
     this.client = createClient({

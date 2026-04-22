@@ -72,6 +72,7 @@ interface Summary {
   recentRunPassRate: number | null
 }
 
+/** Read all summary/detail rowsets from the SQLite DB in a single read-only session. */
 function loadData(): {
   summary: Summary
   flaky: FlakyRow[]
@@ -217,6 +218,7 @@ function loadData(): {
   }
 }
 
+/** Bucket a failure count into a CSS severity class so the UI can colour-code it. */
 function severityClass(count: number): string {
   if (count >= 10) return 'sev-high'
   if (count >= 5) return 'sev-med'
@@ -224,11 +226,13 @@ function severityClass(count: number): string {
   return 'sev-single'
 }
 
+/** Render a failure-kind label as an escaped, class-tagged HTML badge. */
 function kindBadge(kind: string): string {
   const safe = escapeHtml(kind)
   return `<span class="badge kind-${safe}">${safe}</span>`
 }
 
+/** Humanize a millisecond duration as ms/s/min so run rows stay scannable. */
 function formatDuration(ms: number | null): string {
   if (ms === null) return '—'
   if (ms < 1000) return `${ms}ms`
@@ -237,11 +241,13 @@ function formatDuration(ms: number | null): string {
   return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`
 }
 
+/** Trim a git SHA to the conventional 7-char prefix for compact display. */
 function shortSha(sha: string | null): string {
   if (sha === null) return '—'
   return sha.slice(0, 7)
 }
 
+/** Convert an ISO timestamp to a coarse "Xs/m/h/d ago" string for at-a-glance recency. */
 function formatRelative(iso: string): string {
   const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
   if (diffSec < 60) return `${diffSec}s ago`
@@ -250,6 +256,7 @@ function formatRelative(iso: string): string {
   return `${Math.floor(diffSec / 86400)}d ago`
 }
 
+/** Map a pass-rate percentage to a tone class so the summary card reflects health at a glance. */
 function passRateTone(pct: number | null): string {
   if (pct === null) return 'tone-muted'
   if (pct >= 95) return 'tone-good'
@@ -257,6 +264,7 @@ function passRateTone(pct: number | null): string {
   return 'tone-bad'
 }
 
+/** Render the four top-of-page summary cards (flaky count, pass rate, dominant kind, worst file). */
 function renderSummary(s: Summary): string {
   let flakyTone = 'tone-bad'
   if (s.activeFlakyTests === 0) flakyTone = 'tone-good'
@@ -298,6 +306,7 @@ function renderSummary(s: Summary): string {
   </section>`
 }
 
+/** Adapt a raw SQL row into the shared FlakyPattern shape so the prompt generator can consume it. */
 function flakyRowToPattern(row: FlakyRow): FlakyPattern {
   return {
     testFile: row.test_file,
@@ -319,6 +328,7 @@ function flakyRowToPattern(row: FlakyRow): FlakyPattern {
   }
 }
 
+/** Render the flaky-tests table with per-row copyable AI prompts for triage. */
 function renderFlaky(rows: FlakyRow[]): string {
   if (rows.length === 0)
     return '<p class="empty">No failures in the last 30 days. Clean house.</p>'
@@ -352,6 +362,7 @@ function renderFlaky(rows: FlakyRow[]): string {
   </table>`
 }
 
+/** Render the failure-kind distribution grid with absolute counts and percentages. */
 function renderKinds(rows: KindRow[]): string {
   if (rows.length === 0) return '<p class="empty">No data.</p>'
   const total = rows.reduce((s, r) => s + r.count, 0)
@@ -367,12 +378,14 @@ function renderKinds(rows: KindRow[]): string {
     .join('')}</div>`
 }
 
+/** Map a run status to its badge CSS class; null is treated as a crash. */
 function statusClass(status: string | null): string {
   if (status === 'pass') return 'status-pass'
   if (status === 'fail') return 'status-fail'
   return 'status-crashed'
 }
 
+/** Render the recent-runs table showing status, timing, counts, and git context. */
 function renderRuns(rows: RunRow[]): string {
   if (rows.length === 0) return '<p class="empty">No runs recorded.</p>'
   const items = rows
@@ -402,6 +415,7 @@ function renderRuns(rows: RunRow[]): string {
   </table>`
 }
 
+/** Render the per-file hot-spot table, attaching the flakiest test's AI prompt when available. */
 function renderHotFiles(rows: HotFileRow[], flakyRows: FlakyRow[]): string {
   if (rows.length === 0) return '<p class="empty">No data.</p>'
   const items = rows
@@ -516,6 +530,7 @@ footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
 tr.prompt-row:hover td { background: var(--surface-2); }
 `
 
+/** Locate the Mr. Flaky logo by walking up from this file and inline it as a data URI for portability. */
 function loadLogo(): string | null {
   try {
     // Walk up from this file to find the logo at the repo root
@@ -537,6 +552,7 @@ function loadLogo(): string | null {
   }
 }
 
+/** Assemble the full self-contained HTML document from the loaded dataset. */
 function render(data: ReturnType<typeof loadData>): string {
   const logoDataUri = loadLogo()
   const logoHtml = logoDataUri
@@ -611,6 +627,7 @@ function render(data: ReturnType<typeof loadData>): string {
 </html>`
 }
 
+/** Spawn a detached platform-appropriate opener for the generated report; failures are non-fatal. */
 function openInBrowser(filePath: string): void {
   const abs = Bun.fileURLToPath(new URL(filePath, `file://${process.cwd()}/`))
   const url = `file://${abs}`
@@ -627,6 +644,7 @@ function openInBrowser(filePath: string): void {
   }
 }
 
+/** CLI entry point: verify the DB exists, load data, write the HTML report, optionally open it. */
 async function main(): Promise<void> {
   if (!(await Bun.file(DB_PATH).exists())) {
     console.error(

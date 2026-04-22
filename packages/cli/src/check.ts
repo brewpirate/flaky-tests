@@ -46,6 +46,8 @@ import {
 import { generateHtml } from './html'
 import { copyToClipboard, generatePrompt } from './prompt'
 
+/** Load the store implementation chosen by `FLAKY_TESTS_STORE`, deferring
+ *  the import so users pay the dependency cost only for the backend they use. */
 async function resolveStore(): Promise<IStore> {
   const storeType = process.env.FLAKY_TESTS_STORE ?? 'sqlite'
   const connStr = process.env.FLAKY_TESTS_CONNECTION_STRING
@@ -126,6 +128,9 @@ Examples:
 
 // --- Main ----------------------------------------------------------------
 
+/** CLI entry point: runs detection, prints a human summary, and optionally
+ *  prints prompts, copies to clipboard, opens GitHub issues, or writes an
+ *  HTML report. Exits 1 when patterns are found so CI can gate on it. */
 async function main(config: CliConfig): Promise<void> {
   const { windowDays, threshold, showPrompts, doCopy, doCreateIssue, doHtml } =
     config
@@ -221,6 +226,9 @@ async function main(config: CliConfig): Promise<void> {
   process.exit(1)
 }
 
+/** Open a GitHub issue per pattern, skipping any whose title already
+ *  exists so reruns do not spam. Noop-with-warning when `GITHUB_TOKEN`
+ *  or the repo cannot be resolved — the CLI should keep working offline. */
 async function openGitHubIssues(
   patterns: FlakyPattern[],
   windowDays: number,

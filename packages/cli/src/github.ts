@@ -9,6 +9,46 @@ import type { FlakyPattern } from '@flaky-tests/core'
 import { type } from 'arktype'
 import { generatePrompt } from './prompt'
 
+/** Default network timeout for GitHub API calls. */
+const FETCH_TIMEOUT_MS = 15_000
+
+/** Max characters for an issue body — GitHub's documented hard limit is 65536. */
+const MAX_ISSUE_BODY_CHARS = 60_000
+
+/** Max characters echoed from an error response body — guards against leaking secrets via error messages. */
+const MAX_ERROR_BODY_CHARS = 500
+
+/**
+ * Valid GitHub owner/repo slug. Prevents path injection in
+ * `/repos/${owner}/${repo}/issues` — without validation, a crafted
+ * --repo argument could rewrite the request path.
+ */
+const OWNER_REPO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/
+
+function isValidSlug(value: string): boolean {
+  return OWNER_REPO_PATTERN.test(value)
+}
+
+/** Fetch with an AbortSignal-based timeout. Rejects on timeout with a clear message. */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number = FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`GitHub request timed out after ${timeoutMs}ms: ${url}`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Authentication and target repository for GitHub API calls. */
 export const gitHubConfigSchema = type({
   token: type.string.atLeastLength(1),
@@ -16,6 +56,7 @@ export const gitHubConfigSchema = type({
   repo: type.string.atLeastLength(1),
 })
 
+/** Validated GitHub API credentials and repository target. */
 export type GitHubConfig = typeof gitHubConfigSchema.infer
 
 /**
@@ -29,7 +70,8 @@ export function resolveRepo(): { owner: string; repo: string } | null {
   const envRepo = process.env.GITHUB_REPOSITORY
   if (envRepo) {
     const [owner, repo] = envRepo.split('/')
-    if (owner && repo) return { owner, repo }
+    if (owner && repo && isValidSlug(owner) && isValidSlug(repo))
+      return { owner, repo }
   }
 
   // --repo flag
@@ -38,7 +80,8 @@ export function resolveRepo(): { owner: string; repo: string } | null {
     const value = process.argv[idx + 1]
     if (!value) return null
     const [owner, repo] = value.split('/')
-    if (owner && repo) return { owner, repo }
+    if (owner && repo && isValidSlug(owner) && isValidSlug(repo))
+      return { owner, repo }
   }
 
   // Parse git remote
@@ -52,7 +95,10 @@ export function resolveRepo(): { owner: string; repo: string } | null {
       const url = new TextDecoder().decode(result.stdout).trim()
       // https://github.com/owner/repo.git  or  git@github.com:owner/repo.git
       const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/)
-      if (match?.[1] && match[2]) return { owner: match[1], repo: match[2] }
+      const owner = match?.[1]
+      const repo = match?.[2]
+      if (owner && repo && isValidSlug(owner) && isValidSlug(repo))
+        return { owner, repo }
     }
   } catch {
     // git not available
@@ -61,6 +107,8 @@ export function resolveRepo(): { owner: string; repo: string } | null {
   return null
 }
 
+/** Standard header bundle for GitHub's REST v3 API — pinned API version
+ *  shields us from silent behavior changes when GitHub rolls a new default. */
 function githubHeaders(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
@@ -80,7 +128,7 @@ export async function findExistingIssue(
   const q = encodeURIComponent(
     `repo:${config.owner}/${config.repo} is:issue is:open "${title}" in:title`,
   )
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://api.github.com/search/issues?q=${q}&per_page=1`,
     {
       headers: githubHeaders(config.token),
@@ -97,21 +145,29 @@ export async function createIssue(
   pattern: FlakyPattern,
   windowDays: number,
 ): Promise<string> {
-  const res = await fetch(
+  if (!isValidSlug(config.owner) || !isValidSlug(config.repo)) {
+    throw new Error(`Invalid owner/repo slug: ${config.owner}/${config.repo}`)
+  }
+  const rawBody = issueBody(pattern, windowDays)
+  const body =
+    rawBody.length > MAX_ISSUE_BODY_CHARS
+      ? `${rawBody.slice(0, MAX_ISSUE_BODY_CHARS)}\n\n…(truncated)`
+      : rawBody
+  const res = await fetchWithTimeout(
     `https://api.github.com/repos/${config.owner}/${config.repo}/issues`,
     {
       method: 'POST',
       headers: githubHeaders(config.token),
       body: JSON.stringify({
         title: issueTitle(pattern.testName),
-        body: issueBody(pattern, windowDays),
+        body,
         labels: ['flaky-test'],
       }),
     },
   )
 
   if (!res.ok) {
-    const text = await res.text()
+    const text = (await res.text()).slice(0, MAX_ERROR_BODY_CHARS)
     throw new Error(`GitHub API error ${res.status}: ${text}`)
   }
 
@@ -119,10 +175,14 @@ export async function createIssue(
   return data.html_url
 }
 
+/** Deterministic issue title so the duplicate-detection search is an
+ *  exact-title match rather than fuzzy keyword lookup. */
 function issueTitle(testName: string): string {
   return `[flaky-test] ${testName}`
 }
 
+/** Renders the issue body: the investigation prompt in a code block so
+ *  reviewers can paste it straight into an AI assistant. */
 function issueBody(pattern: FlakyPattern, windowDays: number): string {
   const prompt = generatePrompt(pattern, windowDays)
 

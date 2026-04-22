@@ -5,16 +5,20 @@
  * Used by the Bun preload which must monkey-patch `describe` to track nesting.
  * Vitest and other frameworks expose suite paths natively.
  */
+/** Guard against accidental recursion pushing frames indefinitely. */
+export const MAX_DESCRIBE_DEPTH = 256
+
 export class DescribeStack {
   private frames: string[] = []
 
   /**
-   * Snapshot of the current frames. Used by the `describe` wrapper to capture
-   * the path at describe-call time (synchronous w.r.t. the outer body), then
-   * replay it via `runWithFrames` whenever the runtime executes the nested body.
+   * Frozen snapshot of the current frames. Used by the `describe` wrapper to
+   * capture the path at describe-call time (synchronous w.r.t. the outer body),
+   * then replay it via `runWithFrames` whenever the runtime executes the nested
+   * body. Returning a frozen copy prevents callers from mutating internal state.
    */
   get snapshot(): readonly string[] {
-    return this.frames
+    return Object.freeze([...this.frames])
   }
 
   /**
@@ -22,6 +26,11 @@ export class DescribeStack {
    * try/finally so a thrown describe body does not leave a dangling frame.
    */
   run<T>(name: string, body: () => T): T {
+    if (this.frames.length >= MAX_DESCRIBE_DEPTH) {
+      throw new RangeError(
+        `DescribeStack exceeded ${MAX_DESCRIBE_DEPTH} frames — likely accidental recursion`,
+      )
+    }
     this.frames.push(name)
     try {
       return body()
@@ -36,6 +45,11 @@ export class DescribeStack {
    * time, since Bun defers nested describe body execution.
    */
   runWithFrames<T>(frames: readonly string[], body: () => T): T {
+    if (frames.length > MAX_DESCRIBE_DEPTH) {
+      throw new RangeError(
+        `DescribeStack.runWithFrames exceeded ${MAX_DESCRIBE_DEPTH} frames`,
+      )
+    }
     const saved = this.frames
     this.frames = [...frames]
     try {
@@ -53,6 +67,7 @@ export class DescribeStack {
     return `${this.frames.join(' > ')} > ${testName}`
   }
 
+  /** Current nesting depth, used by preloads to decide whether a test is top-level. */
   get depth(): number {
     return this.frames.length
   }
