@@ -1,4 +1,5 @@
 import {
+  createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   type FlakyPattern,
@@ -21,6 +22,8 @@ import {
 } from '@flaky-tests/core'
 import { type } from 'arktype'
 import postgres from 'postgres'
+
+const log = createLogger('store-postgres')
 
 /** Configuration for the PostgreSQL store. */
 export const postgresStoreOptionsSchema = type({
@@ -246,7 +249,11 @@ export class PostgresStore implements IStore {
       ORDER BY recent_fails DESC
     `
 
-    return parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
+    const patterns = parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
+    log.debug(
+      `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
+    )
+    return patterns
   }
 
   /** Gracefully close the underlying PostgreSQL connection pool. */

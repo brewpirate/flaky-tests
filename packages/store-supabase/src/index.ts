@@ -1,4 +1,5 @@
 import {
+  createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   type FlakyPattern,
@@ -22,6 +23,8 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@supabase/supabase-js'
 import { type } from 'arktype'
+
+const log = createLogger('store-supabase')
 
 /** Configuration for the Supabase store. */
 export const supabaseStoreOptionsSchema = type({
@@ -265,22 +268,28 @@ export class SupabaseStore implements IStore {
       }
     }
 
-    return parseArray(
+    const patterns = parseArray(
       flakyPatternSchema,
       [...map.values()]
-        .filter((e) => e.recentFails >= threshold && e.priorFails === 0)
+        .filter(
+          (entry) => entry.recentFails >= threshold && entry.priorFails === 0,
+        )
         .sort((a, b) => b.recentFails - a.recentFails)
-        .map((e) => ({
-          testFile: e.testFile,
-          testName: e.testName,
-          recentFails: e.recentFails,
-          priorFails: e.priorFails,
-          failureKinds: [...e.kinds],
-          lastErrorMessage: e.lastMsg,
-          lastErrorStack: e.lastStack,
-          lastFailed: e.lastFailed,
+        .map((entry) => ({
+          testFile: entry.testFile,
+          testName: entry.testName,
+          recentFails: entry.recentFails,
+          priorFails: entry.priorFails,
+          failureKinds: [...entry.kinds],
+          lastErrorMessage: entry.lastMsg,
+          lastErrorStack: entry.lastStack,
+          lastFailed: entry.lastFailed,
         })),
     )
+    log.debug(
+      `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
+    )
+    return patterns
   }
 
   /** No-op: the supabase-js client manages its HTTP connections internally and needs no teardown. Present to satisfy {@link IStore}. */

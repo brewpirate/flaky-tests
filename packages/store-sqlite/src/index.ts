@@ -98,6 +98,9 @@ export class SqliteStore implements IStore {
   constructor(options: SqliteStoreOptions = {}) {
     const validated = parse(sqliteStoreOptionsSchema, options)
     const dbPath = validated.dbPath ?? DEFAULT_DB_PATH
+    log.debug(
+      `SqliteStore: dbPath=${dbPath} (source=${validated.dbPath ? 'options' : 'default'})`,
+    )
     ensureDirectory(dbPath)
     this.db = new Database(dbPath, { create: true })
     this.db.exec('PRAGMA journal_mode = WAL')
@@ -314,7 +317,11 @@ export class SqliteStore implements IStore {
         threshold,
       )
 
-    return parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
+    const patterns = parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
+    log.debug(
+      `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
+    )
+    return patterns
   }
 
   /** Close the underlying SQLite connection. */
