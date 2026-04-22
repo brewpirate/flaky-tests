@@ -35,6 +35,8 @@ import {
   MAX_CLI_ERROR_MESSAGE_LENGTH,
   parse,
 } from '@flaky-tests/core'
+import { type CliConfig, parseCliConfig } from './args'
+import { CliError } from './errors'
 import {
   createIssue,
   findExistingIssue,
@@ -86,26 +88,6 @@ async function resolveStore(): Promise<IStore> {
   }
 }
 
-// --- Argument parsing (no deps, just process.argv) -----------------------
-
-/** Presence check for `--name` or its short form `-n`. Tiny homegrown
- *  parser keeps the CLI dependency-free. */
-function flag(name: string): boolean {
-  return (
-    process.argv.includes(`--${name}`) ||
-    process.argv.includes(`-${name.charAt(0)}`)
-  )
-}
-
-/** Read `--name <value>` from argv, falling back to the named env var.
- *  Returns undefined when neither source is set. */
-function option(name: string, fallbackEnv?: string): string | undefined {
-  const idx = process.argv.indexOf(`--${name}`)
-  if (idx !== -1 && idx + 1 < process.argv.length) return process.argv[idx + 1]
-  if (fallbackEnv) return process.env[fallbackEnv]
-  return undefined
-}
-
 const VERSION = '0.1.0'
 
 const HELP_TEXT = `flaky-tests v${VERSION}
@@ -144,46 +126,14 @@ Examples:
   flaky-tests --create-issue            # open GitHub issues
   flaky-tests --html --out report.html  # generate HTML report`
 
-if (flag('help') || process.argv.includes('-h')) {
-  console.log(HELP_TEXT)
-  process.exit(0)
-}
-
-if (flag('version') || process.argv.includes('-v')) {
-  console.log(VERSION)
-  process.exit(0)
-}
-
-const rawWindow = option('window', 'FLAKY_TESTS_WINDOW') ?? '7'
-const rawThreshold = option('threshold', 'FLAKY_TESTS_THRESHOLD') ?? '2'
-
-const windowDays = Number(rawWindow)
-const threshold = Number(rawThreshold)
-
-if (Number.isNaN(windowDays) || windowDays <= 0) {
-  console.error(`error: --window must be a positive number, got "${rawWindow}"`)
-  process.exit(2)
-}
-
-if (Number.isNaN(threshold) || threshold <= 0 || !Number.isInteger(threshold)) {
-  console.error(
-    `error: --threshold must be a positive integer, got "${rawThreshold}"`,
-  )
-  process.exit(2)
-}
-
-const showPrompts = flag('prompt') || flag('copy')
-const doCopy = flag('copy')
-const doCreateIssue = flag('create-issue')
-const doHtml = flag('html')
-const htmlOut = option('out')
-
 // --- Main ----------------------------------------------------------------
 
 /** CLI entry point: runs detection, prints a human summary, and optionally
  *  prints prompts, copies to clipboard, opens GitHub issues, or writes an
  *  HTML report. Exits 1 when patterns are found so CI can gate on it. */
-async function main(): Promise<void> {
+async function main(config: CliConfig): Promise<void> {
+  const { windowDays, threshold, showPrompts, doCopy, doCreateIssue, doHtml } =
+    config
   const store = await resolveStore()
 
   let patterns: FlakyPattern[]
@@ -256,7 +206,8 @@ async function main(): Promise<void> {
 
   if (doHtml) {
     const html = generateHtml(patterns, windowDays)
-    const outPath = htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
+    const outPath =
+      config.htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
     writeFileSync(outPath, html, 'utf8')
     console.log(`✓ Report written to ${outPath}`)
 
@@ -317,4 +268,25 @@ async function openGitHubIssues(
   console.log()
 }
 
-await main()
+// --- Entry point ---------------------------------------------------------
+
+try {
+  const config = parseCliConfig({ argv: process.argv, env: process.env })
+
+  if (config.help) {
+    console.log(HELP_TEXT)
+    process.exit(0)
+  }
+  if (config.version) {
+    console.log(VERSION)
+    process.exit(0)
+  }
+
+  await main(config)
+} catch (error) {
+  if (error instanceof CliError) {
+    console.error(`error: ${error.message}`)
+    process.exit(error.exitCode)
+  }
+  throw error
+}
