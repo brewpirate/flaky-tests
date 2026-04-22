@@ -1,9 +1,11 @@
 import {
   type Config,
+  CREATE_SCHEMA_VERSION_TABLE,
   createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   definePlugin,
+  detectBaselineVersion,
   extractMessage,
   type FlakyPattern,
   flakyPatternSchema,
@@ -21,9 +23,14 @@ import {
   type PatternRow,
   parse,
   parseArray,
+  pendingMigrations,
   type RecentRun,
   type RunStatus,
   raceAbort,
+  SCHEMA_VERSION_TABLE,
+  type SchemaInspector,
+  SQLITE_MIGRATIONS,
+  type SqliteMigration,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
@@ -44,42 +51,11 @@ export const tursoStoreOptionsSchema = type({
 /** Inferred options type for {@link TursoStore}: libSQL URL plus optional HTTP auth token. */
 export type TursoStoreOptions = typeof tursoStoreOptionsSchema.infer
 
-// Schema is identical to store-sqlite — Turso is SQLite-compatible.
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS runs (
-  run_id                TEXT PRIMARY KEY,
-  project               TEXT,
-  started_at            TEXT NOT NULL,
-  ended_at              TEXT,
-  duration_ms           INTEGER,
-  status                TEXT,
-  total_tests           INTEGER,
-  passed_tests          INTEGER,
-  failed_tests          INTEGER,
-  errors_between_tests  INTEGER,
-  git_sha               TEXT,
-  git_dirty             INTEGER,
-  runtime_version       TEXT,
-  test_args             TEXT
-);
-
-CREATE TABLE IF NOT EXISTS failures (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  run_id         TEXT NOT NULL REFERENCES runs(run_id),
-  test_file      TEXT NOT NULL,
-  test_name      TEXT NOT NULL,
-  failure_kind   TEXT NOT NULL,
-  error_message  TEXT,
-  error_stack    TEXT,
-  duration_ms    INTEGER,
-  failed_at      TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_failures_test      ON failures(test_file, test_name);
-CREATE INDEX IF NOT EXISTS idx_failures_run       ON failures(run_id);
-CREATE INDEX IF NOT EXISTS idx_failures_failed_at ON failures(failed_at);
-CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests);
-`
+/** Shape of a row in the bookkeeping `schema_version` table. */
+interface SchemaVersionRow {
+  version: number
+  applied_at: string
+}
 
 /**
  * `IStore` implementation targeting libSQL/Turso over HTTP with bearer-token auth.
@@ -114,29 +90,113 @@ export class TursoStore implements IStore {
     }
   }
 
-  /** Create tables if they don't exist. Call once before first use. */
+  /**
+   * Bring the remote libSQL database to the current schema version by
+   * applying pending migrations from {@link SQLITE_MIGRATIONS}. Tracks
+   * applied versions in a `schema_version` table and seeds a baseline for
+   * databases created before versioning landed by probing the live schema.
+   */
   async migrate(): Promise<void> {
     await this.wrap('migrate', async () => {
-      for (const stmt of SCHEMA.trim()
-        .split(';')
-        .filter((s) => s.trim())) {
-        await this.client.execute(stmt)
-      }
-      // Idempotent column additions for older DBs
-      const migrations = [
-        'ALTER TABLE runs ADD COLUMN passed_tests INTEGER',
-        'ALTER TABLE runs ADD COLUMN errors_between_tests INTEGER',
-        'ALTER TABLE runs ADD COLUMN runtime_version TEXT',
-        'ALTER TABLE runs ADD COLUMN test_args TEXT',
-        'ALTER TABLE runs ADD COLUMN project TEXT',
-      ]
-      for (const stmt of migrations) {
-        try {
-          await this.client.execute(stmt)
-        } catch {
-          // Column already present — swallowed intentionally inside the
-          // wrap boundary; migrate() itself still reports other failures.
+      await this.client.execute(CREATE_SCHEMA_VERSION_TABLE)
+      const current = await this.getCurrentVersion()
+      const inspector = await this.buildSchemaInspector()
+      const baseline =
+        current > 0
+          ? current
+          : detectBaselineVersion(SQLITE_MIGRATIONS, inspector)
+      if (baseline > current) {
+        const now = new Date().toISOString()
+        const seedStatements = []
+        for (let version = current + 1; version <= baseline; version++) {
+          seedStatements.push({
+            sql: `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`,
+            args: [version, now] as InArgs,
+          })
         }
+        if (seedStatements.length > 0) {
+          await this.client.batch(seedStatements, 'write')
+        }
+      }
+      for (const migration of pendingMigrations(SQLITE_MIGRATIONS, baseline)) {
+        await this.applyMigration(migration)
+      }
+    })
+  }
+
+  private async getCurrentVersion(): Promise<number> {
+    const result = await this.client.execute(
+      `SELECT MAX(version) AS version FROM ${SCHEMA_VERSION_TABLE}`,
+    )
+    const row = result.rows[0] as unknown as
+      | { version: number | bigint | null }
+      | undefined
+    const raw = row?.version
+    if (raw == null) return 0
+    return typeof raw === 'bigint' ? Number(raw) : raw
+  }
+
+  /**
+   * Introspect the live schema via SQLite PRAGMAs so migration probes can
+   * detect which versions are already materialized on a pre-versioning DB.
+   */
+  private async buildSchemaInspector(): Promise<SchemaInspector> {
+    const tableNames = new Set<string>()
+    const columnsByTable = new Map<string, Set<string>>()
+    const tables = await this.client.execute(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    )
+    for (const row of tables.rows) {
+      const { name } = row as unknown as { name: string }
+      if (typeof name === 'string' && name.length > 0) tableNames.add(name)
+    }
+    for (const tableName of tableNames) {
+      // PRAGMA doesn't accept bind parameters; table names come from our
+      // own migration list probes (constants), not user input.
+      const info = await this.client.execute(`PRAGMA table_info(${tableName})`)
+      const columns = new Set<string>()
+      for (const row of info.rows) {
+        const { name } = row as unknown as { name: string }
+        if (typeof name === 'string') columns.add(name)
+      }
+      columnsByTable.set(tableName, columns)
+    }
+    return {
+      tableExists: (name) => tableNames.has(name),
+      columnExists: (table, column) =>
+        columnsByTable.get(table)?.has(column) === true,
+    }
+  }
+
+  /** Apply one migration's `up` statements + schema_version row atomically. */
+  private async applyMigration(migration: SqliteMigration): Promise<void> {
+    const now = new Date().toISOString()
+    const statements = [
+      ...migration.up.map((sql) => ({ sql, args: [] as InArgs })),
+      {
+        sql: `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`,
+        args: [migration.version, now] as InArgs,
+      },
+    ]
+    await this.client.batch(statements, 'write')
+    log.debug(
+      `applied migration v${migration.version}: ${migration.description}`,
+    )
+  }
+
+  /** Expose the applied-migration ledger for tooling/tests. */
+  async getAppliedMigrations(): Promise<SchemaVersionRow[]> {
+    const result = await this.client.execute(
+      `SELECT version, applied_at FROM ${SCHEMA_VERSION_TABLE} ORDER BY version ASC`,
+    )
+    return result.rows.map((row) => {
+      const r = row as unknown as {
+        version: number | bigint
+        applied_at: string
+      }
+      return {
+        version: typeof r.version === 'bigint' ? Number(r.version) : r.version,
+        applied_at: r.applied_at,
       }
     })
   }

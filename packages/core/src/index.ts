@@ -32,6 +32,15 @@ export {
   type LogLevel,
   resolveLogLevel,
 } from './log'
+export {
+  CREATE_SCHEMA_VERSION_TABLE,
+  detectBaselineVersion,
+  pendingMigrations,
+  SCHEMA_VERSION_TABLE,
+  type SchemaInspector,
+  SQLITE_MIGRATIONS,
+  type SqliteMigration,
+} from './migrations'
 export { mapRowToPattern, type PatternRow } from './pattern-mapper'
 export {
   definePlugin,
