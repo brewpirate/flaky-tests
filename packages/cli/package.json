@@ -15,8 +15,21 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist/", "src/", "package.json", "LICENSE"],
-  "publishConfig": { "access": "public" },
+  "files": [
+    "dist/**/*",
+    "src/**/*",
+    "!**/*.test.ts",
+    "!**/*.test.js",
+    "!**/*.test.d.ts",
+    "!**/*.test.d.ts.map",
+    "!**/*.integration.test.ts",
+    "!**/__snapshots__/**",
+    "package.json",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "bun build ./src/index.ts ./src/check.ts --outdir dist --format esm --target node --external @flaky-tests/store-turso --external @flaky-tests/store-supabase --external @flaky-tests/store-postgres --external @flaky-tests/store-sqlite --external @flaky-tests/core --external arktype",
     "build:types": "tsc --project tsconfig.build.json",

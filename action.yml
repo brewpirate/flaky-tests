@@ -1,3 +1,7 @@
+# NOTE: This action is currently stubbed. The detection step below is commented
+# out until `@flaky-tests/cli` has its first npm publish. Un-stubbing is tracked
+# in issue #55 — do not enable the `bunx @flaky-tests/cli` step until the
+# package resolves on the public registry.
 name: 'flaky-tests'
 description: 'Detect flaky tests and open GitHub issues automatically'
 author: 'brewpirate'

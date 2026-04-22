@@ -2,6 +2,8 @@
 
 Local SQLite store adapter for [flaky-tests](https://github.com/brewpirate/flaky-tests). Uses Bun's built-in SQLite.
 
+> **Requires Bun runtime** (`bun >= 1.3.0`). This package imports `bun:sqlite` and will not work under Node.js.
+
 ## Install
 
 ```sh

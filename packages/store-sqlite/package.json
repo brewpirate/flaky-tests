@@ -18,8 +18,14 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist/",
-    "src/",
+    "dist/**/*",
+    "src/**/*",
+    "!**/*.test.ts",
+    "!**/*.test.js",
+    "!**/*.test.d.ts",
+    "!**/*.test.d.ts.map",
+    "!**/*.integration.test.ts",
+    "!**/__snapshots__/**",
     "package.json",
     "LICENSE"
   ],
