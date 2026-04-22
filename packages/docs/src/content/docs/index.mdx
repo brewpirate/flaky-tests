@@ -15,6 +15,10 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components'
+import { Image } from 'astro:assets'
+import reportPreview from '../../assets/flaky-report-preview.png'
+
+<Image src={reportPreview} alt="HTML report preview — severity-ranked pattern cards with kind breakdown, hot files, and recent runs" />
 
 <CardGrid>
   <Card title="Zero config" icon="pencil">

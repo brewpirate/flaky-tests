@@ -18,6 +18,10 @@
 3. **Investigate** — A structured prompt is generated for Claude, Cursor, or Copilot
 4. **Notify** — A GitHub issue is opened with the prompt embedded
 
+<p align="center">
+  <img src="docs/flaky-report-preview.png" alt="HTML report preview — severity-ranked pattern cards with kind breakdown, hot files, and recent runs" width="820">
+</p>
+
 ## Quick start
 
 ```sh
