@@ -87,10 +87,11 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
    ```ts title="vitest.config.ts"
    import { defineConfig } from 'vitest/config'
    import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+   import { SqliteStore } from '@flaky-tests/store-sqlite'
 
    export default defineConfig({
      test: {
-       reporters: ['default', new FlakyTestsReporter()],
+       reporters: ['default', new FlakyTestsReporter(new SqliteStore())],
      },
    })
    ```

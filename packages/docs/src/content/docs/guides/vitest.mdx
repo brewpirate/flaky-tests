@@ -22,13 +22,17 @@ The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using t
    ```ts title="vitest.config.ts"
    import { defineConfig } from 'vitest/config'
    import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+   import { SqliteStore } from '@flaky-tests/store-sqlite'
 
    export default defineConfig({
      test: {
-       reporters: ['default', new FlakyTestsReporter()],
+       reporters: ['default', new FlakyTestsReporter(new SqliteStore())],
      },
    })
    ```
+
+   The reporter requires an `IStore` instance — swap `SqliteStore` for
+   any other adapter (Turso, Supabase, Postgres) with the same shape.
 
 3. **Run your tests**
 
@@ -40,7 +44,8 @@ The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using t
 
 ## Using a custom store
 
-Pass any store that implements `IStore` to the reporter constructor:
+Pass any store that implements `IStore` as the reporter's positional
+argument:
 
 ```ts title="vitest.config.ts"
 import { defineConfig } from 'vitest/config'
@@ -48,15 +53,15 @@ import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
 import { TursoStore } from '@flaky-tests/store-turso'
 
 const store = new TursoStore({
-  url: process.env.TURSO_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN,
+  url: process.env.FLAKY_TESTS_CONNECTION_STRING!,
+  authToken: process.env.FLAKY_TESTS_AUTH_TOKEN,
 })
 // The reporter calls migrate() for you on `onInit`, so manually
 // migrating here is optional.
 
 export default defineConfig({
   test: {
-    reporters: ['default', new FlakyTestsReporter({ store })],
+    reporters: ['default', new FlakyTestsReporter(store)],
   },
 })
 ```
