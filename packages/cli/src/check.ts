@@ -137,6 +137,19 @@ async function main(
     cliConfig
   const store = await resolveStore(runtimeConfig)
 
+  // Ensure the schema exists before the reader query fires. All four store
+  // adapters' migrate() calls are idempotent (CREATE TABLE IF NOT EXISTS +
+  // try/catch on column adds), so running this on every CLI invocation is
+  // safe and covers the fresh-remote-DB case. For Supabase this verifies
+  // the pre-created tables and surfaces a clean error pointing at the
+  // docs when they are missing.
+  try {
+    await store.migrate()
+  } catch (error) {
+    await store.close()
+    throw error
+  }
+
   let patterns: FlakyPattern[]
   try {
     patterns = await store.getNewPatterns(

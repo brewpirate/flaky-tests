@@ -57,6 +57,18 @@ To unlink:
 bun unlink @flaky-tests/plugin-bun
 ```
 
+### First run against a remote store
+
+When wiring up a remote adapter (`store-turso` / `store-postgres`), the
+schema is created by the CLI automatically — every `bunx flaky-tests`
+invocation calls `store.migrate()` before querying, so no manual setup
+step is required. `migrate()` is idempotent (`CREATE TABLE IF NOT EXISTS`).
+
+`store-supabase` is the exception: Supabase's JS client can't run DDL, so
+tables must be created once via the Supabase Dashboard SQL editor (see
+`packages/store-supabase/README.md`). Subsequent CLI runs verify they
+exist and surface a clean error if they don't.
+
 ## Project structure
 
 ```
