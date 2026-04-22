@@ -59,10 +59,16 @@ export class PostgresStore implements IStore {
       this.sql = postgres({
         host: validated.host ?? 'localhost',
         port: validated.port ?? 5432,
-        database: validated.database,
-        username: validated.username,
-        password: validated.password,
-        ssl: validated.ssl,
+        ...(validated.database !== undefined && {
+          database: validated.database,
+        }),
+        ...(validated.username !== undefined && {
+          username: validated.username,
+        }),
+        ...(validated.password !== undefined && {
+          password: validated.password,
+        }),
+        ...(validated.ssl !== undefined && { ssl: validated.ssl }),
       })
     }
   }

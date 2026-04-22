@@ -56,7 +56,10 @@ async function resolveStore(): Promise<IStore> {
           'FLAKY_TESTS_CONNECTION_STRING is required for store=turso',
         )
       const { TursoStore } = await import('@flaky-tests/store-turso')
-      return new TursoStore({ url: connStr, authToken })
+      return new TursoStore({
+        url: connStr,
+        ...(authToken !== undefined && { authToken }),
+      })
     }
     case 'supabase': {
       if (!connStr || !authToken)
@@ -68,7 +71,9 @@ async function resolveStore(): Promise<IStore> {
     }
     case 'postgres': {
       const { PostgresStore } = await import('@flaky-tests/store-postgres')
-      return new PostgresStore({ connectionString: connStr })
+      return new PostgresStore(
+        connStr !== undefined ? { connectionString: connStr } : {},
+      )
     }
     default: {
       const { SqliteStore } = await import('@flaky-tests/store-sqlite')

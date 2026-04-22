@@ -78,7 +78,9 @@ export class TursoStore implements IStore {
     const validated = parse(tursoStoreOptionsSchema, options)
     this.client = createClient({
       url: validated.url,
-      authToken: validated.authToken,
+      ...(validated.authToken !== undefined && {
+        authToken: validated.authToken,
+      }),
     })
   }
 
