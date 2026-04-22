@@ -4,6 +4,7 @@ import {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   definePlugin,
+  extractMessage,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -19,6 +20,7 @@ import {
   type PatternRow,
   parse,
   parseArray,
+  StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
 } from '@flaky-tests/core'
@@ -27,6 +29,7 @@ import { createClient } from '@libsql/client'
 import { type } from 'arktype'
 
 const log = createLogger('store-turso')
+const PACKAGE = '@flaky-tests/store-turso'
 
 /** Configuration for the Turso (libSQL) store. */
 export const tursoStoreOptionsSchema = type({
@@ -92,117 +95,142 @@ export class TursoStore implements IStore {
     })
   }
 
+  /** Wraps a driver call so any thrown libSQL error becomes a {@link StoreError} with `cause` preserved for stack inspection. */
+  private async wrap<T>(method: string, fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn()
+    } catch (error) {
+      throw new StoreError({
+        package: PACKAGE,
+        method,
+        message: extractMessage(error),
+        cause: error,
+      })
+    }
+  }
+
   /** Create tables if they don't exist. Call once before first use. */
   async migrate(): Promise<void> {
-    for (const stmt of SCHEMA.trim()
-      .split(';')
-      .filter((s) => s.trim())) {
-      await this.client.execute(stmt)
-    }
-    // Idempotent column additions for older DBs
-    const migrations = [
-      'ALTER TABLE runs ADD COLUMN passed_tests INTEGER',
-      'ALTER TABLE runs ADD COLUMN errors_between_tests INTEGER',
-      'ALTER TABLE runs ADD COLUMN runtime_version TEXT',
-      'ALTER TABLE runs ADD COLUMN test_args TEXT',
-    ]
-    for (const stmt of migrations) {
-      try {
+    await this.wrap('migrate', async () => {
+      for (const stmt of SCHEMA.trim()
+        .split(';')
+        .filter((s) => s.trim())) {
         await this.client.execute(stmt)
-      } catch {
-        // Column already present
       }
-    }
+      // Idempotent column additions for older DBs
+      const migrations = [
+        'ALTER TABLE runs ADD COLUMN passed_tests INTEGER',
+        'ALTER TABLE runs ADD COLUMN errors_between_tests INTEGER',
+        'ALTER TABLE runs ADD COLUMN runtime_version TEXT',
+        'ALTER TABLE runs ADD COLUMN test_args TEXT',
+      ]
+      for (const stmt of migrations) {
+        try {
+          await this.client.execute(stmt)
+        } catch {
+          // Column already present — swallowed intentionally inside the
+          // wrap boundary; migrate() itself still reports other failures.
+        }
+      }
+    })
   }
 
   /** Persist a new test-run row. Call before any failures are recorded. */
   async insertRun(input: InsertRunInput): Promise<void> {
     parse(insertRunInputSchema, input)
-    await this.client.execute({
-      sql: `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [
-        input.runId,
-        input.startedAt,
-        input.gitSha ?? null,
-        input.gitDirty != null ? Number(input.gitDirty) : null,
-        input.runtimeVersion ?? null,
-        input.testArgs ?? null,
-      ] as InArgs,
-    })
+    await this.wrap('insertRun', () =>
+      this.client.execute({
+        sql: `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [
+          input.runId,
+          input.startedAt,
+          input.gitSha ?? null,
+          input.gitDirty != null ? Number(input.gitDirty) : null,
+          input.runtimeVersion ?? null,
+          input.testArgs ?? null,
+        ] as InArgs,
+      }),
+    )
   }
 
   /** Update a run with its final summary (status, counts, duration). */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     parse(updateRunInputSchema, input)
-    await this.client.execute({
-      sql: `UPDATE runs
-               SET ended_at             = ?,
-                   duration_ms          = ?,
-                   status               = ?,
-                   total_tests          = ?,
-                   passed_tests         = ?,
-                   failed_tests         = ?,
-                   errors_between_tests = ?
-             WHERE run_id = ?`,
-      args: [
-        input.endedAt ?? null,
-        input.durationMs ?? null,
-        input.status ?? null,
-        input.totalTests ?? null,
-        input.passedTests ?? null,
-        input.failedTests ?? null,
-        input.errorsBetweenTests ?? null,
-        runId,
-      ] as InArgs,
-    })
+    await this.wrap('updateRun', () =>
+      this.client.execute({
+        sql: `UPDATE runs
+                 SET ended_at             = ?,
+                     duration_ms          = ?,
+                     status               = ?,
+                     total_tests          = ?,
+                     passed_tests         = ?,
+                     failed_tests         = ?,
+                     errors_between_tests = ?
+               WHERE run_id = ?`,
+        args: [
+          input.endedAt ?? null,
+          input.durationMs ?? null,
+          input.status ?? null,
+          input.totalTests ?? null,
+          input.passedTests ?? null,
+          input.failedTests ?? null,
+          input.errorsBetweenTests ?? null,
+          runId,
+        ] as InArgs,
+      }),
+    )
   }
 
   /** Record a single test failure linked to an existing run. */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     parse(insertFailureInputSchema, input)
-    await this.client.execute({
-      sql: `INSERT INTO failures
-              (run_id, test_file, test_name, failure_kind,
-               error_message, error_stack, duration_ms, failed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        input.runId,
-        input.testFile,
-        input.testName,
-        input.failureKind,
-        input.errorMessage ?? null,
-        input.errorStack ?? null,
-        input.durationMs != null ? Math.round(input.durationMs) : null,
-        input.failedAt,
-      ] as InArgs,
-    })
+    await this.wrap('insertFailure', () =>
+      this.client.execute({
+        sql: `INSERT INTO failures
+                (run_id, test_file, test_name, failure_kind,
+                 error_message, error_stack, duration_ms, failed_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          input.runId,
+          input.testFile,
+          input.testName,
+          input.failureKind,
+          input.errorMessage ?? null,
+          input.errorStack ?? null,
+          input.durationMs != null ? Math.round(input.durationMs) : null,
+          input.failedAt,
+        ] as InArgs,
+      }),
+    )
   }
 
   /** Insert multiple failures in a single batch transaction. */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
     if (inputs.length === 0) return
-    await this.client.batch(
-      inputs.map((input) => {
-        parse(insertFailureInputSchema, input)
-        return {
-          sql: `INSERT INTO failures
-                  (run_id, test_file, test_name, failure_kind,
-                   error_message, error_stack, duration_ms, failed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          args: [
-            input.runId,
-            input.testFile,
-            input.testName,
-            input.failureKind,
-            input.errorMessage ?? null,
-            input.errorStack ?? null,
-            input.durationMs != null ? Math.round(input.durationMs) : null,
-            input.failedAt,
-          ] as InArgs,
-        }
-      }),
-      'write',
+    await this.wrap('insertFailures', () =>
+      this.client.batch(
+        inputs.map((input) => {
+          parse(insertFailureInputSchema, input)
+          return {
+            sql: `INSERT INTO failures
+                    (run_id, test_file, test_name, failure_kind,
+                     error_message, error_stack, duration_ms, failed_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [
+              input.runId,
+              input.testFile,
+              input.testName,
+              input.failureKind,
+              input.errorMessage ?? null,
+              input.errorStack ?? null,
+              input.durationMs != null ? Math.round(input.durationMs) : null,
+              input.failedAt,
+            ] as InArgs,
+          }
+        }),
+        'write',
+      ),
     )
   }
 
@@ -226,36 +254,38 @@ export class TursoStore implements IStore {
     const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY).toISOString()
 
     // Identical query to store-sqlite — Turso speaks SQLite
-    const result = await this.client.execute({
-      sql: `SELECT
-               f.test_file,
-               f.test_name,
-               SUM(CASE WHEN f.failed_at > ?  THEN 1 ELSE 0 END) AS recent_fails,
-               SUM(CASE WHEN f.failed_at <= ? AND f.failed_at > ? THEN 1 ELSE 0 END) AS prior_fails,
-               GROUP_CONCAT(DISTINCT f.failure_kind) AS failure_kinds,
-               MAX(CASE WHEN f.failed_at > ? AND f.error_message IS NOT NULL
-                        THEN f.failed_at || CHAR(1) || f.error_message END) AS last_error_message_raw,
-               MAX(CASE WHEN f.failed_at > ? AND f.error_stack IS NOT NULL
-                        THEN f.failed_at || CHAR(1) || f.error_stack   END) AS last_error_stack_raw,
-               MAX(f.failed_at) AS last_failed
-             FROM failures f
-             JOIN runs r ON r.run_id = f.run_id
-            WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
-              AND r.ended_at IS NOT NULL
-              AND f.failed_at > ?
-            GROUP BY f.test_file, f.test_name
-            HAVING recent_fails >= ? AND prior_fails = 0
-            ORDER BY recent_fails DESC`,
-      args: [
-        windowStart,
-        windowStart,
-        priorStart,
-        windowStart,
-        windowStart,
-        priorStart,
-        threshold,
-      ] as InArgs,
-    })
+    const result = await this.wrap('getNewPatterns', () =>
+      this.client.execute({
+        sql: `SELECT
+                 f.test_file,
+                 f.test_name,
+                 SUM(CASE WHEN f.failed_at > ?  THEN 1 ELSE 0 END) AS recent_fails,
+                 SUM(CASE WHEN f.failed_at <= ? AND f.failed_at > ? THEN 1 ELSE 0 END) AS prior_fails,
+                 GROUP_CONCAT(DISTINCT f.failure_kind) AS failure_kinds,
+                 MAX(CASE WHEN f.failed_at > ? AND f.error_message IS NOT NULL
+                          THEN f.failed_at || CHAR(1) || f.error_message END) AS last_error_message_raw,
+                 MAX(CASE WHEN f.failed_at > ? AND f.error_stack IS NOT NULL
+                          THEN f.failed_at || CHAR(1) || f.error_stack   END) AS last_error_stack_raw,
+                 MAX(f.failed_at) AS last_failed
+               FROM failures f
+               JOIN runs r ON r.run_id = f.run_id
+              WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
+                AND r.ended_at IS NOT NULL
+                AND f.failed_at > ?
+              GROUP BY f.test_file, f.test_name
+              HAVING recent_fails >= ? AND prior_fails = 0
+              ORDER BY recent_fails DESC`,
+        args: [
+          windowStart,
+          windowStart,
+          priorStart,
+          windowStart,
+          windowStart,
+          priorStart,
+          threshold,
+        ] as InArgs,
+      }),
+    )
 
     // libsql Row type doesn't expose named fields — cast through unknown to PatternRow
     const patterns = parseArray(
@@ -270,7 +300,9 @@ export class TursoStore implements IStore {
 
   /** Close the underlying libSQL connection. */
   async close(): Promise<void> {
-    this.client.close()
+    await this.wrap('close', async () => {
+      this.client.close()
+    })
   }
 }
 

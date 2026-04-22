@@ -36,6 +36,15 @@ export type GitInfo = typeof gitInfoSchema.infer
 /**
  * Storage backend interface. All methods are async so implementations can
  * use any backend — SQLite, Supabase, Postgres, or custom.
+ *
+ * ## Error contract
+ *
+ * Implementations **MUST** wrap any driver-level error thrown by a public
+ * method in a {@link StoreError} with `package`, `method`, `message`, and
+ * `cause` set so callers receive a uniform error shape and the original
+ * stack stays inspectable via `error.cause`. Validation errors from
+ * `arktype` (thrown via {@link ValidationError}) propagate unwrapped so
+ * bad input is distinguishable from a downstream driver failure.
  */
 export interface IStore {
   /**
