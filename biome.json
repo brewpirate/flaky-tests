@@ -91,7 +91,8 @@
             "noMagicNumbers": "off"
           },
           "suspicious": {
-            "noEmptyBlockStatements": "off"
+            "noEmptyBlockStatements": "off",
+            "noConsole": "off"
           }
         }
       }

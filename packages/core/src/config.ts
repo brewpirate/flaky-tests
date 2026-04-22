@@ -283,6 +283,10 @@ export interface TestCredentials {
   postgresUrl: string | undefined
   supabaseUrl: string | undefined
   supabaseKey: string | undefined
+  /** Live-E2E credentials — separate gate from the contract-suite `integration` flag so ops can opt in per-store. */
+  tursoLive: boolean
+  tursoLiveUrl: string | undefined
+  tursoLiveToken: string | undefined
 }
 
 /**
@@ -297,6 +301,9 @@ export function getTestCredentials(): TestCredentials {
     postgresUrl: process.env.POSTGRES_TEST_URL,
     supabaseUrl: process.env.SUPABASE_TEST_URL,
     supabaseKey: process.env.SUPABASE_TEST_KEY,
+    tursoLive: parseBoolean(process.env.FLAKY_TESTS_TURSO_LIVE),
+    tursoLiveUrl: process.env.TURSO_LIVE_URL,
+    tursoLiveToken: process.env.TURSO_LIVE_TOKEN,
   }
 }
 
