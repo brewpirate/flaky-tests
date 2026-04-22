@@ -35,5 +35,8 @@
     "@flaky-tests/core": "workspace:*",
     "@supabase/supabase-js": "^2.0.0",
     "arktype": "^2.1.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
   }
 }

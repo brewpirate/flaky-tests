@@ -61,7 +61,14 @@ function createMockStore(): { store: IStore; calls: StoreCalls } {
 // Task helpers (mimics Vitest task shape)
 // ---------------------------------------------------------------------------
 
-function makeTask(overrides: Record<string, unknown> = {}) {
+// Test doubles intentionally shaped loosely — the reporter treats tasks
+// as unknown and narrows via property checks. Cast to `any` at the boundary
+// so tests can mutate (e.g. assign `.suite` parent refs) without fighting
+// Vitest's strict `TaskBase` shape.
+// biome-ignore lint/suspicious/noExplicitAny: test doubles for vitest task tree
+type TestTask = any
+
+function makeTask(overrides: Record<string, unknown> = {}): TestTask {
   return {
     id: '1',
     name: 'test name',
@@ -72,7 +79,7 @@ function makeTask(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function makeFileTask(tasks: unknown[] = []) {
+function makeFileTask(tasks: TestTask[] = []): TestTask {
   return {
     id: 'file-1',
     name: 'example.test.ts',
@@ -180,7 +187,7 @@ describe('FlakyTestsReporter', () => {
     const reporter = new FlakyTestsReporter(store)
     await reporter.onInit({})
 
-    const innerSuite = {
+    const innerSuite: TestTask = {
       id: 'suite-inner',
       name: 'inner',
       type: 'suite',
@@ -194,11 +201,11 @@ describe('FlakyTestsReporter', () => {
     // Set suite parent reference
     innerSuite.tasks[0].suite = innerSuite
 
-    const outerSuite = {
+    const outerSuite: TestTask = {
       id: 'suite-outer',
       name: 'outer',
       type: 'suite',
-      suite: undefined as unknown,
+      suite: undefined,
       tasks: [innerSuite],
     }
     innerSuite.suite = outerSuite

@@ -67,7 +67,8 @@ describe('generatePrompt', () => {
   })
 
   test('multiple failure kinds joined with comma', () => {
-    const p = { ...base, failureKinds: ['timeout', 'assertion'] }
+    const failureKinds: FlakyPattern['failureKinds'] = ['timeout', 'assertion']
+    const p = { ...base, failureKinds }
     expect(generatePrompt(p)).toContain('timeout, assertion')
   })
 })

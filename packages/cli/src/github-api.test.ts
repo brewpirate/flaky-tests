@@ -8,6 +8,13 @@ import {
   gitHubConfigSchema,
 } from './github'
 
+// Bun's `mock()` returns a Mock<> that lacks the `preconnect` method on
+// `typeof fetch`. Cast through unknown so each test can supply only the
+// call signature it actually needs.
+const mockFetch = (
+  implementation: (...args: never[]) => Promise<Response>,
+): typeof fetch => mock(implementation) as unknown as typeof fetch
+
 // ---------------------------------------------------------------------------
 // gitHubConfigSchema
 // ---------------------------------------------------------------------------
@@ -88,7 +95,7 @@ describe('findExistingIssue()', () => {
   })
 
   test('returns issue number when found', async () => {
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = mockFetch(() =>
       Promise.resolve(
         new Response(JSON.stringify({ items: [{ number: 42 }] }), {
           status: 200,
@@ -100,7 +107,7 @@ describe('findExistingIssue()', () => {
   })
 
   test('returns null when no matching issues', async () => {
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = mockFetch(() =>
       Promise.resolve(
         new Response(JSON.stringify({ items: [] }), { status: 200 }),
       ),
@@ -110,7 +117,7 @@ describe('findExistingIssue()', () => {
   })
 
   test('returns null on non-ok response', async () => {
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = mockFetch(() =>
       Promise.resolve(new Response('rate limited', { status: 403 })),
     )
     const result = await findExistingIssue(testConfig, 'auth > login')
@@ -119,7 +126,7 @@ describe('findExistingIssue()', () => {
 
   test('sends correct authorization header', async () => {
     let capturedHeaders: Headers | undefined
-    globalThis.fetch = mock((_url: string, init?: RequestInit) => {
+    globalThis.fetch = mockFetch((_url: string, init?: RequestInit) => {
       capturedHeaders = new Headers(init?.headers)
       return Promise.resolve(
         new Response(JSON.stringify({ items: [] }), { status: 200 }),
@@ -131,7 +138,7 @@ describe('findExistingIssue()', () => {
 
   test('encodes test name in search query', async () => {
     let capturedUrl = ''
-    globalThis.fetch = mock((url: string) => {
+    globalThis.fetch = mockFetch((url: string) => {
       capturedUrl = url
       return Promise.resolve(
         new Response(JSON.stringify({ items: [] }), { status: 200 }),
@@ -155,7 +162,7 @@ describe('createIssue()', () => {
   })
 
   test('returns issue URL on success', async () => {
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = mockFetch(() =>
       Promise.resolve(
         new Response(
           JSON.stringify({
@@ -172,7 +179,7 @@ describe('createIssue()', () => {
   test('sends POST to correct endpoint', async () => {
     let capturedUrl = ''
     let capturedMethod = ''
-    globalThis.fetch = mock((url: string, init?: RequestInit) => {
+    globalThis.fetch = mockFetch((url: string, init?: RequestInit) => {
       capturedUrl = url
       capturedMethod = init?.method ?? ''
       return Promise.resolve(
@@ -190,7 +197,7 @@ describe('createIssue()', () => {
 
   test('includes flaky-test label', async () => {
     let capturedBody = ''
-    globalThis.fetch = mock((_url: string, init?: RequestInit) => {
+    globalThis.fetch = mockFetch((_url: string, init?: RequestInit) => {
       capturedBody = init?.body as string
       return Promise.resolve(
         new Response(JSON.stringify({ html_url: 'https://x' }), {
@@ -205,7 +212,7 @@ describe('createIssue()', () => {
 
   test('includes test name in title', async () => {
     let capturedBody = ''
-    globalThis.fetch = mock((_url: string, init?: RequestInit) => {
+    globalThis.fetch = mockFetch((_url: string, init?: RequestInit) => {
       capturedBody = init?.body as string
       return Promise.resolve(
         new Response(JSON.stringify({ html_url: 'https://x' }), {
@@ -219,7 +226,7 @@ describe('createIssue()', () => {
   })
 
   test('throws on non-ok response', async () => {
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = mockFetch(() =>
       Promise.resolve(new Response('Validation Failed', { status: 422 })),
     )
     expect(createIssue(testConfig, makePattern(), 7)).rejects.toThrow(
@@ -229,7 +236,7 @@ describe('createIssue()', () => {
 
   test('includes investigation prompt in body', async () => {
     let capturedBody = ''
-    globalThis.fetch = mock((_url: string, init?: RequestInit) => {
+    globalThis.fetch = mockFetch((_url: string, init?: RequestInit) => {
       capturedBody = init?.body as string
       return Promise.resolve(
         new Response(JSON.stringify({ html_url: 'https://x' }), {

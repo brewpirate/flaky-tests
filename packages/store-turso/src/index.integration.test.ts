@@ -7,6 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import type { FailureKind } from '@flaky-tests/core'
 import { TursoStore } from './index'
 
 const SKIP = !process.env.INTEGRATION
@@ -24,7 +25,7 @@ function makeFailure(
   runId: string,
   testName: string,
   failedAt: Date,
-  kind = 'assertion' as const,
+  kind: FailureKind = 'assertion',
 ) {
   return {
     runId,

@@ -16,6 +16,7 @@
     "test:all": "INTEGRATION=1 bun test",
     "test:report": "bun packages/store-sqlite/src/report.ts --open",
     "test:cli": "bun packages/cli/src/check.ts",
+    "typecheck": "for config in packages/cli/tsconfig.json packages/core/tsconfig.json packages/plugin-bun/tsconfig.json packages/plugin-vitest/tsconfig.json packages/store-postgres/tsconfig.json packages/store-sqlite/tsconfig.json packages/store-supabase/tsconfig.json packages/store-turso/tsconfig.json; do echo \"==> $config\"; tsc -p \"$config\" --noEmit || exit 1; done",
     "build": "bun run --filter '!@flaky-tests/docs' build",
     "build:types": "bun run --filter '!@flaky-tests/docs' build:types",
     "build:docs": "bun run --filter '@flaky-tests/docs' build",

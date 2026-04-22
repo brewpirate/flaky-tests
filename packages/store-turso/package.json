@@ -35,5 +35,8 @@
     "@flaky-tests/core": "workspace:*",
     "@libsql/client": "^0.14.0",
     "arktype": "^2.1.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
   }
 }
