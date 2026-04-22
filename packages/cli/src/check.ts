@@ -129,13 +129,20 @@ async function main(
   let recentRuns: Awaited<ReturnType<typeof store.getRecentRuns>> = []
   try {
     patterns = await store.getNewPatterns(
-      parse(getNewPatternsOptionsSchema, { windowDays, threshold }),
+      parse(getNewPatternsOptionsSchema, {
+        windowDays,
+        threshold,
+        project: runtimeConfig.project ?? null,
+      }),
     )
     // Fetch run history up front so `--html` can show it even when
     // there are zero newly-flaky patterns. Cheap and always relevant
     // to the report.
     if (doHtml) {
-      recentRuns = await store.getRecentRuns(RECENT_RUNS_LIMIT)
+      recentRuns = await store.getRecentRuns({
+        limit: RECENT_RUNS_LIMIT,
+        project: runtimeConfig.project ?? null,
+      })
     }
   } finally {
     await store.close()

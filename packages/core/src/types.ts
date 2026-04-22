@@ -40,6 +40,7 @@ export type GitInfo = typeof gitInfoSchema.infer
  */
 export interface RecentRun {
   runId: string
+  project: string | null
   startedAt: string
   endedAt: string | null
   durationMs: number | null
@@ -50,6 +51,13 @@ export interface RecentRun {
   errorsBetweenTests: number | null
   gitSha: string | null
   gitDirty: boolean | null
+}
+
+/** Options for querying recent runs. */
+export interface GetRecentRunsOptions {
+  limit: number
+  /** Filter to a single project. Null-or-undefined matches rows whose `project` column is NULL. */
+  project?: string | null
 }
 
 /**
@@ -89,11 +97,13 @@ export interface IStore {
    */
   getNewPatterns(options?: GetNewPatternsOptions): Promise<FlakyPattern[]>
   /**
-   * Return the most recent `limit` runs ordered by `startedAt` descending.
-   * Used by the HTML report so users see run history even when there are
-   * no newly-flaky patterns to investigate.
+   * Return the most recent runs ordered by `startedAt` descending. Filters
+   * by `options.project` the same way `getNewPatterns` does — pass a
+   * project string to isolate one project's history, or leave undefined /
+   * null to match rows with NULL project. Used by the HTML report so users
+   * see run history even when there are no newly-flaky patterns.
    */
-  getRecentRuns(limit: number): Promise<RecentRun[]>
+  getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]>
   /** Release pooled connections and file handles. */
   close(): Promise<void>
 }

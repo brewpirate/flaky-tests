@@ -35,6 +35,7 @@ import {
   insertFailureInputSchema,
   insertRunInputSchema,
   parse,
+  resolveConfig,
   updateRunInputSchema,
 } from '@flaky-tests/core'
 
@@ -146,6 +147,7 @@ export class FlakyTestsReporter {
       .insertRun(
         parse(insertRunInputSchema, {
           runId: this.runId,
+          project: resolveConfig().project ?? null,
           startedAt: new Date().toISOString(),
           gitSha: git.sha,
           gitDirty: git.dirty,

@@ -8,6 +8,7 @@ import {
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
+  type GetRecentRunsOptions,
   getNewPatternsOptionsSchema,
   type InsertFailureInput,
   type InsertRunInput,
@@ -46,6 +47,7 @@ export type TursoStoreOptions = typeof tursoStoreOptionsSchema.infer
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS runs (
   run_id                TEXT PRIMARY KEY,
+  project               TEXT,
   started_at            TEXT NOT NULL,
   ended_at              TEXT,
   duration_ms           INTEGER,
@@ -125,6 +127,7 @@ export class TursoStore implements IStore {
         'ALTER TABLE runs ADD COLUMN errors_between_tests INTEGER',
         'ALTER TABLE runs ADD COLUMN runtime_version TEXT',
         'ALTER TABLE runs ADD COLUMN test_args TEXT',
+        'ALTER TABLE runs ADD COLUMN project TEXT',
       ]
       for (const stmt of migrations) {
         try {
@@ -142,10 +145,11 @@ export class TursoStore implements IStore {
     parse(insertRunInputSchema, input)
     await this.wrap('insertRun', () =>
       this.client.execute({
-        sql: `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
-              VALUES (?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO runs (run_id, project, started_at, git_sha, git_dirty, runtime_version, test_args)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
         args: [
           input.runId,
+          input.project ?? null,
           input.startedAt,
           input.gitSha ?? null,
           input.gitDirty != null ? Number(input.gitDirty) : null,
@@ -251,9 +255,24 @@ export class TursoStore implements IStore {
     const validated = parse(getNewPatternsOptionsSchema, options)
     const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
     const threshold = validated.threshold ?? DEFAULT_THRESHOLD
+    const project = validated.project ?? null
     const now = Date.now()
     const windowStart = new Date(now - windowDays * MS_PER_DAY).toISOString()
     const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY).toISOString()
+    const projectClause =
+      project === null ? 'r.project IS NULL' : 'r.project = ?'
+    const preFilterArgs = [
+      windowStart,
+      windowStart,
+      priorStart,
+      windowStart,
+      windowStart,
+      priorStart,
+    ]
+    const args =
+      project === null
+        ? [...preFilterArgs, threshold]
+        : [...preFilterArgs, project, threshold]
 
     // Identical query to store-sqlite — Turso speaks SQLite
     const result = await this.wrap('getNewPatterns', () =>
@@ -274,18 +293,11 @@ export class TursoStore implements IStore {
               WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
                 AND r.ended_at IS NOT NULL
                 AND f.failed_at > ?
+                AND ${projectClause}
               GROUP BY f.test_file, f.test_name
               HAVING recent_fails >= ? AND prior_fails = 0
               ORDER BY recent_fails DESC`,
-        args: [
-          windowStart,
-          windowStart,
-          priorStart,
-          windowStart,
-          windowStart,
-          priorStart,
-          threshold,
-        ] as InArgs,
+        args: args as InArgs,
       }),
     )
 
@@ -300,23 +312,28 @@ export class TursoStore implements IStore {
     return patterns
   }
 
-  /** Return the N most recent runs ordered by `startedAt` DESC. */
-  async getRecentRuns(limit: number): Promise<RecentRun[]> {
+  /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
+  async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
+    const { limit, project = null } = options
+    const projectClause = project === null ? 'project IS NULL' : 'project = ?'
+    const args = project === null ? [limit] : [project, limit]
     const result = await this.wrap('getRecentRuns', () =>
       this.client.execute({
-        sql: `SELECT run_id, started_at, ended_at, duration_ms, status,
+        sql: `SELECT run_id, project, started_at, ended_at, duration_ms, status,
                      total_tests, passed_tests, failed_tests,
                      errors_between_tests, git_sha, git_dirty
                 FROM runs
+               WHERE ${projectClause}
                ORDER BY started_at DESC
                LIMIT ?`,
-        args: [limit] as InArgs,
+        args: args as InArgs,
       }),
     )
     return result.rows.map((row) => {
       const r = row as unknown as Record<string, unknown>
       return {
         runId: String(r.run_id),
+        project: r.project == null ? null : String(r.project),
         startedAt: String(r.started_at),
         endedAt: r.ended_at == null ? null : String(r.ended_at),
         durationMs: r.duration_ms == null ? null : Number(r.duration_ms),

@@ -127,14 +127,16 @@ export function createPreload(store: IStore): void {
   const startedAt = new Date().toISOString()
   const startPerf = performance.now()
   const git = captureGitInfo()
+  const project = resolveConfig().project ?? null
   log.debug(
-    `createPreload: runId=${runId} (source=${runIdFromEnv ? 'FLAKY_TESTS_RUN_ID' : 'generated'}), gitSha=${git.sha ?? 'none'}, gitDirty=${git.dirty}, bunVersion=${Bun.version}`,
+    `createPreload: runId=${runId} (source=${runIdFromEnv ? 'FLAKY_TESTS_RUN_ID' : 'generated'}), project=${project ?? '<null>'}, gitSha=${git.sha ?? 'none'}, gitDirty=${git.dirty}, bunVersion=${Bun.version}`,
   )
 
   safeVoid('insertRun', () =>
     store.insertRun(
       parse(insertRunInputSchema, {
         runId,
+        project,
         startedAt,
         gitSha: git.sha,
         gitDirty: git.dirty,

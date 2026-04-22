@@ -7,6 +7,8 @@
  * as IPC to its `bun test` child — that is not a config read.
  */
 
+import { readFileSync } from 'node:fs'
+import { basename, dirname, resolve } from 'node:path'
 import { type } from 'arktype'
 import { ConfigError } from './errors'
 import { parse } from './validate-schemas'
@@ -60,6 +62,14 @@ export const storeConfigSchema = sqliteStoreConfigSchema
   .or(postgresStoreConfigSchema)
 
 export const configSchema = type({
+  /**
+   * Project name — scopes every write and read so multiple projects can
+   * share one store without their runs commingling. Resolved from
+   * FLAKY_TESTS_PROJECT if set; otherwise the nearest package.json's
+   * `name` (cwd walk-up); otherwise the cwd basename. Pass `null` to
+   * explicitly opt out (rows stored with NULL project).
+   */
+  'project?': 'string | null',
   log: {
     level: logLevel,
     /** Optional file path — every log line is appended here IN ADDITION to the console sink. Resolved relative to the process cwd. */
@@ -120,6 +130,44 @@ function parsePositiveInt(
     throw new ConfigError(`${label} must be a positive integer, got "${value}"`)
   }
   return parsed
+}
+
+/** Walk up from `start` reading each `package.json`; return the first
+ *  one's `name` field, or `null` if none found or parse fails. */
+function readNearestPackageName(start: string): string | null {
+  let dir = start
+  // Loop with a hard ceiling; `dirname('/')` returns '/' so detect that
+  // to break out on POSIX; Windows `C:\` → `C:\` same pattern.
+  const MAX_PACKAGE_JSON_WALK_UP_DEPTH = 32
+  for (let i = 0; i < MAX_PACKAGE_JSON_WALK_UP_DEPTH; i++) {
+    try {
+      const contents = readFileSync(resolve(dir, 'package.json'), 'utf8')
+      const parsed = JSON.parse(contents) as { name?: unknown }
+      if (typeof parsed.name === 'string' && parsed.name.length > 0) {
+        return parsed.name
+      }
+    } catch {
+      // No package.json here or parse failed — walk up.
+    }
+    const parent = dirname(dir)
+    if (parent === dir) return null
+    dir = parent
+  }
+  return null
+}
+
+/** Resolve the project name via env → package.json name → cwd basename. */
+function resolveProjectName(env: NodeJS.ProcessEnv): string | null {
+  const explicit = env.FLAKY_TESTS_PROJECT
+  if (explicit !== undefined) {
+    // Empty string is treated as "opt out" — write/read rows with NULL
+    // project. Any non-empty value wins.
+    return explicit === '' ? null : explicit
+  }
+  const fromPackage = readNearestPackageName(process.cwd())
+  if (fromPackage !== null) return fromPackage
+  const cwdName = basename(process.cwd())
+  return cwdName.length > 0 ? cwdName : null
 }
 
 function resolveLogLevelValue(
@@ -222,7 +270,9 @@ export function resolveConfig(source?: NodeJS.ProcessEnv | Config): Config {
     return cachedConfig
   }
 
+  const project = resolveProjectName(env)
   const raw = {
+    ...(project !== null && { project }),
     log: {
       level: resolveLogLevelValue(env.FLAKY_TESTS_LOG),
       ...(env.FLAKY_TESTS_LOG_FILE !== undefined &&

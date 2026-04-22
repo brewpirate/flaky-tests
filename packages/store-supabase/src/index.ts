@@ -7,6 +7,7 @@ import {
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
+  type GetRecentRunsOptions,
   getNewPatternsOptionsSchema,
   type InsertFailureInput,
   type InsertRunInput,
@@ -90,6 +91,7 @@ export class SupabaseStore implements IStore {
     parse(insertRunInputSchema, input)
     const { error } = await this.client.from(this.runsTable).insert({
       run_id: input.runId,
+      project: input.project ?? null,
       started_at: input.startedAt,
       git_sha: input.gitSha ?? null,
       git_dirty: input.gitDirty ?? null,
@@ -202,14 +204,21 @@ export class SupabaseStore implements IStore {
     const windowStart = new Date(now - windowDays * MS_PER_DAY).toISOString()
     const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY).toISOString()
 
+    const project = validated.project ?? null
+
     // Fetch failures from both windows in one query, filter to relevant runs
-    const { data, error } = await this.client
+    let query = this.client
       .from(this.failuresTable)
       .select(`run_id, test_file, test_name, failure_kind, error_message, error_stack, failed_at,
-               ${this.runsTable}!inner(failed_tests, ended_at)`)
+               ${this.runsTable}!inner(failed_tests, ended_at, project)`)
       .gt('failed_at', priorStart)
       .lt(`${this.runsTable}.failed_tests`, MAX_FAILED_TESTS_PER_RUN)
       .not(`${this.runsTable}.ended_at`, 'is', null)
+    query =
+      project === null
+        ? query.is(`${this.runsTable}.project`, null)
+        : query.eq(`${this.runsTable}.project`, project)
+    const { data, error } = await query
 
     if (error)
       throw new StoreError({
@@ -298,15 +307,21 @@ export class SupabaseStore implements IStore {
     return patterns
   }
 
-  /** Return the N most recent runs ordered by `startedAt` DESC. */
-  async getRecentRuns(limit: number): Promise<RecentRun[]> {
-    const { data, error } = await this.client
+  /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
+  async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
+    const { limit, project = null } = options
+    let query = this.client
       .from(this.runsTable)
       .select(
-        'run_id, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty',
+        'run_id, project, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty',
       )
       .order('started_at', { ascending: false })
       .limit(limit)
+    query =
+      project === null
+        ? query.is('project', null)
+        : query.eq('project', project)
+    const { data, error } = await query
     if (error)
       throw new StoreError({
         package: PACKAGE,
@@ -316,6 +331,7 @@ export class SupabaseStore implements IStore {
       })
     type Row = {
       run_id: string
+      project: string | null
       started_at: string
       ended_at: string | null
       duration_ms: number | null
@@ -329,6 +345,7 @@ export class SupabaseStore implements IStore {
     }
     return ((data ?? []) as unknown as Row[]).map((row) => ({
       runId: row.run_id,
+      project: row.project,
       startedAt: row.started_at,
       endedAt: row.ended_at,
       durationMs: row.duration_ms,

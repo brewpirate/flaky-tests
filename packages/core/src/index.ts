@@ -54,6 +54,7 @@ export type {
   FailureKind,
   FlakyPattern,
   GetNewPatternsOptions,
+  GetRecentRunsOptions,
   GitInfo,
   InsertFailureInput,
   InsertRunInput,

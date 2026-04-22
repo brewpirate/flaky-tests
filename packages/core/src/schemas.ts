@@ -32,6 +32,7 @@ export const runStatusSchema = type("'pass' | 'fail'")
 export const insertRunInputSchema = type({
   runId: nonEmptyString,
   startedAt: isoTimestamp,
+  'project?': 'string | null',
   'gitSha?': 'string | null',
   'gitDirty?': 'boolean | null',
   'runtimeVersion?': 'string | null',
@@ -77,6 +78,8 @@ export const flakyPatternSchema = type({
 export const getNewPatternsOptionsSchema = type({
   'windowDays?': positiveInt,
   'threshold?': positiveInt,
+  /** Filter to a single project. Null-or-undefined matches rows whose `project` column is NULL so cross-project stores stay cleanly isolated. */
+  'project?': 'string | null',
 })
 
 /** Git metadata captured at test-run start. Null fields indicate git is unavailable. */
