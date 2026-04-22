@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import {
+  createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   type FlakyPattern,
@@ -21,6 +22,8 @@ import {
   updateRunInputSchema,
 } from '@flaky-tests/core'
 import { type } from 'arktype'
+
+const log = createLogger('store-sqlite')
 
 /** Configuration for the SQLite-backed flaky-tests store. */
 export const sqliteStoreOptionsSchema = type({
@@ -95,6 +98,9 @@ export class SqliteStore implements IStore {
   constructor(options: SqliteStoreOptions = {}) {
     const validated = parse(sqliteStoreOptionsSchema, options)
     const dbPath = validated.dbPath ?? DEFAULT_DB_PATH
+    log.debug(
+      `SqliteStore: dbPath=${dbPath} (source=${validated.dbPath ? 'options' : 'default'})`,
+    )
     ensureDirectory(dbPath)
     this.db = new Database(dbPath, { create: true })
     this.db.exec('PRAGMA journal_mode = WAL')
@@ -239,9 +245,8 @@ export class SqliteStore implements IStore {
         WHERE run_id = ?`,
       [runId],
     )
-    // biome-ignore lint/suspicious/noConsole: legitimate runtime warning for operator visibility
-    console.warn(
-      `[flaky-tests] Run ${runId} exited with failure but preload recorded status=pass. Overriding to fail.`,
+    log.warn(
+      `Run ${runId} exited with failure but preload recorded status=pass. Overriding to fail.`,
     )
   }
 
@@ -312,7 +317,11 @@ export class SqliteStore implements IStore {
         threshold,
       )
 
-    return parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
+    const patterns = parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
+    log.debug(
+      `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
+    )
+    return patterns
   }
 
   /** Close the underlying SQLite connection. */

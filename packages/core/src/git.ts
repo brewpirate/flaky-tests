@@ -1,4 +1,7 @@
+import { createLogger } from './log'
 import type { GitInfo } from './types'
+
+const log = createLogger('core:git')
 
 /**
  * Runs a command and returns stdout as a string, or null on failure.
@@ -15,7 +18,12 @@ export type RunCommand = (command: string, args: string[]) => string | null
 export function captureGitInfo(runCommand: RunCommand): GitInfo {
   const sha = runCommand('git', ['rev-parse', 'HEAD'])
   const porcelain = runCommand('git', ['status', '--porcelain'])
-  if (sha === null) return { sha: null, dirty: null }
+  if (sha === null) {
+    log.debug(
+      'captureGitInfo: `git rev-parse HEAD` returned null (not a git repo, git unavailable, or command failed)',
+    )
+    return { sha: null, dirty: null }
+  }
   return {
     sha: sha.trim(),
     dirty: porcelain !== null && porcelain.trim().length > 0,

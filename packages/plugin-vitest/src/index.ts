@@ -18,13 +18,12 @@
  *   })
  */
 
-// biome-ignore-all lint/suspicious/noConsole: reporter is dev tooling
-
 import { execFileSync } from 'node:child_process'
 import type { InsertFailureInput, IStore, RunCommand } from '@flaky-tests/core'
 import {
   captureGitInfo as captureGitInfoCore,
   categorizeError,
+  createLogger,
   extractMessage,
   extractStack,
   insertFailureInputSchema,
@@ -32,6 +31,8 @@ import {
   parse,
   updateRunInputSchema,
 } from '@flaky-tests/core'
+
+const log = createLogger('plugin-vitest')
 
 /** Synchronous subprocess runner injected into core git helpers; swallows errors so missing git never breaks the reporter. */
 const runCommand: RunCommand = (command, args) => {
@@ -126,6 +127,9 @@ export class FlakyTestsReporter {
   async onInit(_ctx: unknown): Promise<void> {
     this.ready = true
     const git = captureGitInfo()
+    log.debug(
+      `onInit: runId=${this.runId}, gitSha=${git.sha ?? 'none'}, gitDirty=${git.dirty}, nodeVersion=${process.version}`,
+    )
     await this.store
       .insertRun(
         parse(insertRunInputSchema, {
@@ -137,7 +141,7 @@ export class FlakyTestsReporter {
           testArgs: process.argv.slice(2).join(' '),
         }),
       )
-      .catch((e: unknown) => console.warn('[flaky-tests] insertRun failed:', e))
+      .catch((e: unknown) => log.warn('insertRun failed:', e))
   }
 
   /**
@@ -191,29 +195,31 @@ export class FlakyTestsReporter {
       })
     }
 
+    const status = failedTests > 0 || errors.length > 0 ? 'fail' : 'pass'
+    const durationMs = Math.round(performance.now() - this.startTime)
+    log.debug(
+      `onFinished: runId=${this.runId}, status=${status}, total=${totalTests}, passed=${passedTests}, failed=${failedTests}, errorsBetweenTests=${errors.length}, durationMs=${durationMs}`,
+    )
+
     await this.store
       .insertFailures(failureInputs)
-      .catch((e: unknown) =>
-        console.warn('[flaky-tests] insertFailures failed:', e),
-      )
+      .catch((e: unknown) => log.warn('insertFailures failed:', e))
 
     await this.store
       .updateRun(
         this.runId,
         parse(updateRunInputSchema, {
           endedAt: new Date().toISOString(),
-          durationMs: Math.round(performance.now() - this.startTime),
-          status: failedTests > 0 || errors.length > 0 ? 'fail' : 'pass',
+          durationMs,
+          status,
           totalTests,
           passedTests,
           failedTests,
           errorsBetweenTests: errors.length,
         }),
       )
-      .catch((e: unknown) => console.warn('[flaky-tests] updateRun failed:', e))
+      .catch((e: unknown) => log.warn('updateRun failed:', e))
 
-    await this.store
-      .close()
-      .catch((e: unknown) => console.warn('[flaky-tests] close failed:', e))
+    await this.store.close().catch((e: unknown) => log.warn('close failed:', e))
   }
 }

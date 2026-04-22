@@ -19,13 +19,12 @@
  *   preload = ["./my-preload.ts"]
  */
 
-// biome-ignore-all lint/suspicious/noConsole: preload is dev tooling
-
 import * as bunTest from 'bun:test'
 import { afterAll, mock } from 'bun:test'
 import type { IStore } from '@flaky-tests/core'
 import {
   categorizeError,
+  createLogger,
   DescribeStack,
   extractMessage,
   extractStack,
@@ -35,6 +34,8 @@ import {
   updateRunInputSchema,
 } from '@flaky-tests/core'
 import { captureGitInfo } from './git'
+
+const log = createLogger('plugin-bun')
 
 type TestCallback = (...args: unknown[]) => unknown | Promise<unknown>
 type TestFn = (name: string, fn: TestCallback, timeout?: number) => unknown
@@ -51,9 +52,7 @@ let installed = false
 
 /** Fire-and-forget an async side-effect that must never throw into the caller. */
 function safeVoid(label: string, effect: () => Promise<void>): void {
-  effect().catch((error: unknown) =>
-    console.warn(`[flaky-tests] ${label}:`, error),
-  )
+  effect().catch((error: unknown) => log.warn(`${label}:`, error))
 }
 
 /**
@@ -61,8 +60,12 @@ function safeVoid(label: string, effect: () => Promise<void>): void {
  * first frame that isn't inside this package. Falls back to `'unknown'`.
  */
 function resolveTestFile(error: unknown): string {
-  if (!(error instanceof Error) || typeof error.stack !== 'string')
+  if (!(error instanceof Error) || typeof error.stack !== 'string') {
+    log.debug(
+      `resolveTestFile: fallback=unknown (reason=${error instanceof Error ? 'no stack' : 'non-Error throw'})`,
+    )
     return 'unknown'
+  }
   const lines = error.stack.split('\n')
   const limit = Math.min(lines.length, STACK_SCAN_MAX_LINES)
   for (let i = 0; i < limit; i++) {
@@ -73,6 +76,9 @@ function resolveTestFile(error: unknown): string {
     if (file.includes('/plugin-bun/')) continue
     return file
   }
+  log.debug(
+    `resolveTestFile: fallback=unknown (scanned ${limit} frames, no non-plugin frame found; first frame: ${lines[0]?.trim() ?? 'none'})`,
+  )
   return 'unknown'
 }
 
@@ -85,7 +91,7 @@ function resolveTestFile(error: unknown): string {
  */
 export function createPreload(store: IStore): void {
   if (installed) {
-    console.warn('[flaky-tests] createPreload called twice — ignoring')
+    log.warn('createPreload called twice — ignoring')
     return
   }
   installed = true
@@ -93,13 +99,15 @@ export function createPreload(store: IStore): void {
   // Use a run id provided by run-tracked (so it can reconcile the row post-exit)
   // or generate a fresh one. Reject garbage from env.
   const providedRunId = process.env.FLAKY_TESTS_RUN_ID
-  const runId =
+  const runIdFromEnv =
     providedRunId !== undefined && RUN_ID_PATTERN.test(providedRunId)
-      ? providedRunId
-      : crypto.randomUUID()
+  const runId = runIdFromEnv ? providedRunId : crypto.randomUUID()
   const startedAt = new Date().toISOString()
   const startPerf = performance.now()
   const git = captureGitInfo()
+  log.debug(
+    `createPreload: runId=${runId} (source=${runIdFromEnv ? 'FLAKY_TESTS_RUN_ID' : 'generated'}), gitSha=${git.sha ?? 'none'}, gitDirty=${git.dirty}, bunVersion=${Bun.version}`,
+  )
 
   safeVoid('insertRun', () =>
     store.insertRun(
@@ -241,7 +249,7 @@ export function createPreload(store: IStore): void {
       describe: wrapDescribe(bunTest.describe as unknown as DescribeFn),
     }))
   } catch (error) {
-    console.warn('[flaky-tests] monkey-patch bun:test failed:', error)
+    log.warn('monkey-patch bun:test failed:', error)
   }
 
   // Wired via `afterAll` — finalizes the run row with aggregate stats and closes the store.
@@ -253,6 +261,9 @@ export function createPreload(store: IStore): void {
     const passedTests = Math.max(0, testsRun - testsFailed)
     const status: 'pass' | 'fail' =
       testsFailed > 0 || errorsBetweenTests > 0 ? 'fail' : 'pass'
+    log.debug(
+      `afterAll: runId=${runId}, status=${status}, total=${testsRun}, passed=${passedTests}, failed=${testsFailed}, errorsBetweenTests=${errorsBetweenTests}, durationMs=${durationMs}`,
+    )
 
     await store
       .updateRun(
@@ -267,10 +278,8 @@ export function createPreload(store: IStore): void {
           errorsBetweenTests,
         }),
       )
-      .catch((e: unknown) => console.warn('[flaky-tests] updateRun failed:', e))
+      .catch((e: unknown) => log.warn('updateRun failed:', e))
 
-    await store
-      .close()
-      .catch((e: unknown) => console.warn('[flaky-tests] close failed:', e))
+    await store.close().catch((e: unknown) => log.warn('close failed:', e))
   })
 }

@@ -11,6 +11,12 @@ export { DescribeStack } from './describe-stack'
 export { StoreError } from './errors'
 export { captureGitInfo, type RunCommand } from './git'
 export { escapeHtml } from './html-utils'
+export {
+  createLogger,
+  type Logger,
+  type LogLevel,
+  resolveLogLevel,
+} from './log'
 export { mapRowToPattern, type PatternRow } from './pattern-mapper'
 export { generatePrompt } from './prompt'
 export {
