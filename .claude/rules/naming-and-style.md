@@ -11,7 +11,7 @@
 | Constants | SCREAMING_SNAKE | `MAX_RETRY_COUNT` |
 | Interfaces | PascalCase (no I prefix) | `Issue`, not `IIssue` |
 | Types | PascalCase | `IterationResult` |
-| Zod schemas | PascalCase + Schema | `IssueSchema` |
+| arktype schemas | lowerCamelCase + Schema | `flakyPatternSchema` |
 
 ## Verbose Names — No Abbreviations
 
@@ -149,7 +149,7 @@ if (array.length > 0) { ... }
 
 ## No Magic Numbers
 
-Use config values from Zod-validated `ConfigSchema`. Never scatter numeric literals.
+Use config values from an arktype-validated schema. Never scatter numeric literals.
 
 ```typescript
 // WRONG
