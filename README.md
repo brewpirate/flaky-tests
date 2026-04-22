@@ -43,6 +43,32 @@ bunx @flaky-tests/cli --prompt
 
 ---
 
+## Pluggable store architecture
+
+`flaky-tests` ships four store adapters out of the box (sqlite, turso,
+supabase, postgres), but the plugin and CLI never hardcode which one you
+use. The dispatcher in `@flaky-tests/core` looks up a plugin **registry**
+at runtime:
+
+```
+FLAKY_TESTS_STORE=turso → createStoreFromConfig(config)
+                         └─ listRegisteredPlugins()
+                            └─ find { name: 'store-turso' }
+                               └─ fallback: import('@flaky-tests/store-turso')
+                                  └─ descriptor.create(config)
+```
+
+Each store package calls `definePlugin({ name: 'store-<type>', create })`
+at its own import time. The dispatcher only cares about the registry —
+**there is no hardcoded list of adapter names in core, cli, or
+plugin-bun**. Adding a new backend means shipping a new package; nothing
+in this repo needs to change.
+
+See the [custom stores guide](https://brewpirate.github.io/flaky-tests/guides/custom-stores/)
+for authoring a third-party adapter.
+
+---
+
 ## GitHub Action
 
 Runs `flaky-tests check` in CI and opens issues when new patterns are detected.
@@ -102,8 +128,8 @@ jobs:
 - run: bun test
   env:
     FLAKY_TESTS_STORE: turso
-    TURSO_URL: ${{ secrets.TURSO_URL }}
-    TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    FLAKY_TESTS_CONNECTION_STRING: ${{ secrets.TURSO_URL }}
+    FLAKY_TESTS_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
 - if: github.ref == 'refs/heads/main'
   uses: brewpirate/flaky-tests@v1

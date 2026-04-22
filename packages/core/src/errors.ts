@@ -23,6 +23,28 @@ export class ConfigError extends Error {
   }
 }
 
+/**
+ * Thrown by `createStoreFromConfig` when the adapter package for the
+ * configured store type isn't installed. The message names both the
+ * store type and the exact install command so callers don't have to
+ * cross-reference docs.
+ */
+export class MissingStorePackageError extends Error {
+  readonly storeType: string
+  readonly packageName: string
+  constructor(storeType: string, packageName: string) {
+    super(
+      `flaky-tests: configured store type "${storeType}" requires the ` +
+        `"${packageName}" package, which is not installed. ` +
+        `Install it with:  bun add ${packageName}  — or change ` +
+        `FLAKY_TESTS_STORE to a type whose package is installed.`,
+    )
+    this.name = 'MissingStorePackageError'
+    this.storeType = storeType
+    this.packageName = packageName
+  }
+}
+
 export class StoreError extends Error {
   readonly package: string
   readonly method: string

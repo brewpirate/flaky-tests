@@ -22,6 +22,14 @@ const patterns = await store.getNewPatterns()
 await store.close()
 ```
 
+## Schema migration
+
+The `flaky-tests` CLI calls `migrate()` automatically before every query,
+so running `bunx flaky-tests` once against a fresh Postgres database creates
+the `*_runs` / `*_failures` tables and their indexes. If you embed
+`PostgresStore` directly, call `await store.migrate()` once at setup time
+— the method is idempotent (`CREATE TABLE IF NOT EXISTS`).
+
 ## Options
 
 | Option | Description |

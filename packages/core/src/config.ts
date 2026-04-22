@@ -17,15 +17,19 @@ import { parse } from './validate-schemas'
 
 const logLevel = type("'silent' | 'error' | 'warn' | 'debug'")
 
+// Every variant accepts an optional `module` override so users can point
+// the dispatcher at a fork or alternative package path for the same type.
 const sqliteStoreConfigSchema = type({
   type: "'sqlite'",
   'path?': 'string',
+  'module?': 'string',
 })
 
 const tursoStoreConfigSchema = type({
   type: "'turso'",
   url: type.string.atLeastLength(1),
   'authToken?': 'string',
+  'module?': 'string',
 })
 
 const supabaseStoreConfigSchema = type({
@@ -33,6 +37,7 @@ const supabaseStoreConfigSchema = type({
   url: type.string.atLeastLength(1),
   key: type.string.atLeastLength(1),
   'tablePrefix?': 'string',
+  'module?': 'string',
 })
 
 const postgresStoreConfigSchema = type({
@@ -45,6 +50,7 @@ const postgresStoreConfigSchema = type({
   'password?': 'string',
   'ssl?': "boolean | 'require' | 'prefer' | 'allow'",
   'tablePrefix?': 'string',
+  'module?': 'string',
 })
 
 /** Discriminated union on `type` — each variant carries only its own fields. */
@@ -131,14 +137,18 @@ function resolveStoreConfig(env: NodeJS.ProcessEnv): Config['store'] {
   const storeType = env.FLAKY_TESTS_STORE ?? 'sqlite'
   const connectionString = env.FLAKY_TESTS_CONNECTION_STRING
   const authToken = env.FLAKY_TESTS_AUTH_TOKEN
+  const module = env.FLAKY_TESTS_STORE_MODULE
+
+  const withModule = <T>(base: T): T =>
+    (module !== undefined ? { ...base, module } : base) as T
 
   switch (storeType) {
     case 'sqlite': {
       const dbPath = env.FLAKY_TESTS_DB
-      return {
+      return withModule({
         type: 'sqlite',
         ...(dbPath !== undefined && { path: dbPath }),
-      }
+      })
     }
     case 'turso': {
       if (!connectionString) {
@@ -146,11 +156,11 @@ function resolveStoreConfig(env: NodeJS.ProcessEnv): Config['store'] {
           'FLAKY_TESTS_CONNECTION_STRING is required for store=turso',
         )
       }
-      return {
+      return withModule({
         type: 'turso',
         url: connectionString,
         ...(authToken !== undefined && { authToken }),
-      }
+      })
     }
     case 'supabase': {
       if (!connectionString || !authToken) {
@@ -158,17 +168,17 @@ function resolveStoreConfig(env: NodeJS.ProcessEnv): Config['store'] {
           'FLAKY_TESTS_CONNECTION_STRING and FLAKY_TESTS_AUTH_TOKEN are required for store=supabase',
         )
       }
-      return {
+      return withModule({
         type: 'supabase',
         url: connectionString,
         key: authToken,
-      }
+      })
     }
     case 'postgres': {
-      return {
+      return withModule({
         type: 'postgres',
         ...(connectionString !== undefined && { connectionString }),
-      }
+      })
     }
     default:
       throw new ConfigError(
@@ -273,6 +283,10 @@ export interface TestCredentials {
   postgresUrl: string | undefined
   supabaseUrl: string | undefined
   supabaseKey: string | undefined
+  /** Live-E2E credentials — separate gate from the contract-suite `integration` flag so ops can opt in per-store. */
+  tursoLive: boolean
+  tursoLiveUrl: string | undefined
+  tursoLiveToken: string | undefined
 }
 
 /**
@@ -287,6 +301,9 @@ export function getTestCredentials(): TestCredentials {
     postgresUrl: process.env.POSTGRES_TEST_URL,
     supabaseUrl: process.env.SUPABASE_TEST_URL,
     supabaseKey: process.env.SUPABASE_TEST_KEY,
+    tursoLive: parseBoolean(process.env.FLAKY_TESTS_TURSO_LIVE),
+    tursoLiveUrl: process.env.TURSO_LIVE_URL,
+    tursoLiveToken: process.env.TURSO_LIVE_TOKEN,
   }
 }
 

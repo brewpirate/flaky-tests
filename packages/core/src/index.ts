@@ -10,6 +10,10 @@ export {
   type TestCredentials,
 } from './config'
 export {
+  createStoreFromConfig,
+  type StoreModuleImporter,
+} from './create-store'
+export {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   MAX_CLI_ERROR_MESSAGE_LENGTH,
@@ -18,7 +22,7 @@ export {
   MS_PER_DAY,
 } from './defaults'
 export { DescribeStack } from './describe-stack'
-export { ConfigError, StoreError } from './errors'
+export { ConfigError, MissingStorePackageError, StoreError } from './errors'
 export { captureGitInfo, type RunCommand } from './git'
 export { escapeHtml } from './html-utils'
 export {

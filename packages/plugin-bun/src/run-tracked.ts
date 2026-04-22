@@ -10,14 +10,28 @@
  *   bun run @flaky-tests/plugin-bun/run-tracked [bun-test-args...]
  *
  * On non-zero exit, if the preload recorded status='pass', the run is
- * reconciled to 'fail' and errors_between_tests is incremented.
+ * reconciled to 'fail' and errors_between_tests is incremented. Reconciliation
+ * is SQLite-only today (relies on `SqliteStore.reconcileRun`), so non-sqlite
+ * configs skip it with a debug log and the run's status stays whatever the
+ * preload wrote.
  */
 
 // biome-ignore-all lint/suspicious/noConsole: CLI wrapper
 
-import { publishRunIdForSubprocess, resolveConfig } from '@flaky-tests/core'
-import { SqliteStore } from '@flaky-tests/store-sqlite'
+import {
+  createLogger,
+  publishRunIdForSubprocess,
+  resolveConfig,
+} from '@flaky-tests/core'
 
+const log = createLogger('run-tracked')
+
+/** Dynamic import whose specifier is string-typed at the call site so tsc
+ *  does not attempt to statically resolve it. Used for optional peers
+ *  whose `dist/*.d.ts` may not be built during plugin-bun's typecheck. */
+async function loadOptionalModule<T>(spec: string): Promise<T> {
+  return (await import(spec)) as T
+}
 const config = resolveConfig()
 const DB_PATH =
   config.store.type === 'sqlite' && config.store.path !== undefined
@@ -48,14 +62,41 @@ async function main(): Promise<number> {
   return exitCode
 }
 
-/** Flips a recorded-as-pass run to fail when the subprocess exited non-zero, catching failures that never surfaced as test-level errors. */
+/**
+ * Flips a recorded-as-pass run to fail when the subprocess exited non-zero.
+ * SQLite-only: uses `SqliteStore.reconcileRun`, which isn't in IStore and
+ * can't be ported to remote stores without a network round-trip we'd rather
+ * skip here. For non-sqlite configs we leave the run as-recorded and debug-log.
+ */
 async function reconcileRun(runId: string): Promise<void> {
+  if (config.store.type !== 'sqlite') {
+    log.debug(
+      `reconcileRun: skipped (store.type=${config.store.type}; only sqlite supports in-process reconcile)`,
+    )
+    return
+  }
   try {
     if (!(await Bun.file(DB_PATH).exists())) {
       // DB doesn't exist — preload never ran or a different path is in use.
       return
     }
-    const store = new SqliteStore({ dbPath: DB_PATH })
+    // Dynamic import via a string-typed variable so tsc doesn't try to
+    // statically resolve the specifier. store-sqlite is an optional peer
+    // (its dist types may not exist during plugin-bun's build:types run),
+    // and we only touch a tiny slice of its surface here — the inline
+    // interface captures exactly what's needed.
+    interface SqliteStoreModule {
+      SqliteStore: new (options: {
+        dbPath?: string
+      }) => {
+        reconcileRun(runId: string): void
+        close(): Promise<void>
+      }
+    }
+    const mod = await loadOptionalModule<SqliteStoreModule>(
+      '@flaky-tests/store-sqlite',
+    )
+    const store = new mod.SqliteStore({ dbPath: DB_PATH })
     try {
       store.reconcileRun(runId)
     } finally {

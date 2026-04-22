@@ -10,7 +10,11 @@ bun add @flaky-tests/store-supabase
 
 ## Setup
 
-Tables must be created manually via the Supabase Dashboard SQL editor. See the [store setup guide](https://brewpirate.github.io/flaky-tests/stores/supabase/) for the required schema.
+Supabase's JS client can't run DDL, so tables **must be created manually**
+via the Supabase Dashboard SQL editor. See the [store setup guide](https://brewpirate.github.io/flaky-tests/stores/supabase/)
+for the required schema. The `flaky-tests` CLI calls `migrate()` on every
+invocation, which for Supabase just *verifies* the tables exist — if they
+don't, you'll get a clean error pointing at this page.
 
 ## Usage
 

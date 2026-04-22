@@ -7,3 +7,8 @@ bun.lockb
 .astro/
 .local/
 .playwright-mcp/
+
+# Per-package local credentials for live integration tests.
+# Loaded via `bun --env-file=packages/store-*/.env.local test …`.
+.env.local
+*.env.local
