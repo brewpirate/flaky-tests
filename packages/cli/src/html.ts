@@ -40,6 +40,8 @@ export interface RunFailure {
   failedAt: string
 }
 
+/** Minimal HTML-entity escape for user-controlled strings (test names, file
+ *  paths, error messages) that get interpolated into the single-file report. */
 function esc(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -48,6 +50,8 @@ function esc(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/** Buckets a recent-failure count into the four visual severity tiers that
+ *  drive card accents, TOC dots, and pill colors throughout the report. */
 function severityRank(recentFails: number): {
   label: string
   className: string
@@ -64,6 +68,8 @@ function severityRank(recentFails: number): {
   return { label: 'low', className: 'sev-low' }
 }
 
+/** Collapses deep repo paths to the last three segments so card headers stay
+ *  scannable without losing the locating suffix. */
 function shortFile(path: string): string {
   const parts = path.split('/')
   if (parts.length <= 3) {
@@ -72,6 +78,8 @@ function shortFile(path: string): string {
   return `…/${parts.slice(-3).join('/')}`
 }
 
+/** Renders one flaky-pattern card — severity-colored header, stats, last error,
+ *  and a collapsed investigation prompt with a copy affordance. */
 function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
   const prompt = generatePrompt(p, windowDays)
   const kinds = p.failureKinds.join(', ')
@@ -139,6 +147,8 @@ function formatDuration(ms: number | null): string {
   return `${m}m ${rem}s`
 }
 
+/** Humanizes an ISO timestamp as a coarse "x ago" string — the report is
+ *  read asynchronously so exact times are noise. */
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
@@ -156,10 +166,14 @@ function formatRelative(iso: string): string {
   return `${days}d ago`
 }
 
+/** Truncates a git SHA to the conventional 7-char display form, with an
+ *  em-dash placeholder when the run has no recorded commit. */
 function shortSha(sha: string | null): string {
   return sha ? sha.slice(0, 7) : '—'
 }
 
+/** Maps a failure category to a themed CSS variable so assertions, timeouts,
+ *  and uncaught errors are visually distinct at a glance. */
 function kindColor(kind: string): string {
   switch (kind) {
     case 'assertion':
@@ -173,6 +187,8 @@ function kindColor(kind: string): string {
   }
 }
 
+/** Same category-to-color mapping as kindColor, but returns the raw RGB
+ *  triple for use inside rgba() gradients and tinted backgrounds. */
 function kindRgb(kind: string): string {
   switch (kind) {
     case 'assertion':
@@ -186,6 +202,8 @@ function kindRgb(kind: string): string {
   }
 }
 
+/** Picks a numeric color for failure counts so totals in the stat strip and
+ *  hot-files table self-flag as healthy, concerning, or critical. */
 function failColor(n: number): string {
   if (n >= 10) {
     return 'var(--red)'
@@ -199,6 +217,8 @@ function failColor(n: number): string {
   return 'var(--green)'
 }
 
+/** Builds the top-of-report stat strip — the at-a-glance summary readers see
+ *  before scrolling into individual patterns or dashboard tables. */
 function renderSummaryStats(
   patterns: FlakyPattern[],
   dashboard:
@@ -250,6 +270,8 @@ function renderSummaryStats(
     </section>`
 }
 
+/** Emits the sticky sidebar index — pattern anchors plus dashboard jump
+ *  links — so long reports remain navigable without a JS runtime. */
 function renderToc(patterns: FlakyPattern[], hasDashboard: boolean): string {
   if (patterns.length === 0 && !hasDashboard) {
     return '<div></div>'
@@ -279,6 +301,8 @@ function renderToc(patterns: FlakyPattern[], hasDashboard: boolean): string {
     </nav>`
 }
 
+/** Renders the failure-kind distribution as a row of percentage cards, giving
+ *  readers a quick sense of which error category dominates the window. */
 function renderKindBar(kindBreakdown: KindBreakdown[]): string {
   const total = kindBreakdown.reduce((s, k) => s + k.count, 0)
   if (total === 0) {
@@ -314,6 +338,8 @@ function hotFilePrompt(
   return `Investigate ${file}: ${fails} failures across ${distinctTests} distinct tests in the last ${windowDays} days`
 }
 
+/** Inner table for an expanded run row — lists the individual failures that
+ *  made up that run so readers can drill down without a separate page. */
 function renderRunFailures(failures: RunFailure[]): string {
   if (failures.length === 0) {
     return '<p class="muted">No failures recorded.</p>'
@@ -338,6 +364,8 @@ function renderRunFailures(failures: RunFailure[]): string {
     </table>`
 }
 
+/** Assembles the three aggregate sections (kind breakdown, hot files, recent
+ *  runs) that appear below the pattern list when dashboard data is provided. */
 function renderDashboard(
   dashboard: {
     recentRuns: RecentRun[]
