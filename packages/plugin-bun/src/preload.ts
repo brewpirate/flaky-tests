@@ -51,9 +51,20 @@ const STACK_SCAN_MAX_LINES = 200
 /** Module-level idempotency guard — double-registration would double-count everything. */
 let installed = false
 
-/** Fire-and-forget an async side-effect that must never throw into the caller. */
+/** Outstanding fire-and-forget writes. `afterAll` drains this before the
+ *  run is finalized — without the drain, remote-store writes (Turso,
+ *  Supabase, Postgres) get orphaned mid-flight when Bun exits and silently
+ *  drop test data. See issue #44. */
+const pendingWrites = new Set<Promise<unknown>>()
+
+/** Kick off an async side-effect that must never throw into the caller.
+ *  The returned promise is tracked in {@link pendingWrites} so the run's
+ *  `afterAll` can wait for in-flight writes before closing the store. */
 function safeVoid(label: string, effect: () => Promise<void>): void {
-  effect().catch((error: unknown) => log.warn(`${label}:`, error))
+  const promise: Promise<unknown> = effect()
+    .catch((error: unknown) => log.warn(`${label}:`, error))
+    .finally(() => pendingWrites.delete(promise))
+  pendingWrites.add(promise)
 }
 
 /**
@@ -263,8 +274,15 @@ export function createPreload(store: IStore): void {
     const status: 'pass' | 'fail' =
       testsFailed > 0 || errorsBetweenTests > 0 ? 'fail' : 'pass'
     log.debug(
-      `afterAll: runId=${runId}, status=${status}, total=${testsRun}, passed=${passedTests}, failed=${testsFailed}, errorsBetweenTests=${errorsBetweenTests}, durationMs=${durationMs}`,
+      `afterAll: runId=${runId}, status=${status}, total=${testsRun}, passed=${passedTests}, failed=${testsFailed}, errorsBetweenTests=${errorsBetweenTests}, durationMs=${durationMs}, pendingWrites=${pendingWrites.size}`,
     )
+
+    // Drain in-flight writes before finalizing. allSettled (not all) so
+    // one slow/failed network write doesn't hide another's error, and so
+    // the updateRun/close still run even if a write rejects.
+    if (pendingWrites.size > 0) {
+      await Promise.allSettled([...pendingWrites])
+    }
 
     await store
       .updateRun(

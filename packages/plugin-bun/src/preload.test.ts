@@ -37,6 +37,9 @@ describe('createPreload store contract', () => {
       ): Promise<FlakyPattern[]> {
         return []
       },
+      async getRecentRuns() {
+        return []
+      },
       async close() {},
     }
 
