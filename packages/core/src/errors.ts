@@ -15,6 +15,14 @@
  * }
  * ```
  */
+/** Thrown by `resolveConfig()` and `parseCliConfig()` when input validation fails. */
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ConfigError'
+  }
+}
+
 export class StoreError extends Error {
   readonly package: string
   readonly method: string

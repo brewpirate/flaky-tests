@@ -7,11 +7,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import type { FailureKind } from '@flaky-tests/core'
+import { type FailureKind, getTestCredentials } from '@flaky-tests/core'
 import { TursoStore } from './index'
 
-const SKIP = !process.env.INTEGRATION
-const TURSO_URL = process.env.TURSO_TEST_URL ?? 'file::memory:'
+const credentials = getTestCredentials()
+const SKIP = !credentials.integration
+const TURSO_URL = credentials.tursoUrl ?? 'file::memory:'
 
 // ---------------------------------------------------------------------------
 // Helpers

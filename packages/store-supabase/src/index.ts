@@ -1,5 +1,7 @@
 import {
+  type Config,
   createLogger,
+  definePlugin,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   type FlakyPattern,
@@ -297,3 +299,23 @@ export class SupabaseStore implements IStore {
     // Supabase JS client has no explicit close; connections are managed internally.
   }
 }
+
+/** Lazy plugin descriptor — `create(config)` builds a SupabaseStore from the resolved config. */
+export const supabaseStorePlugin = definePlugin({
+  name: 'store-supabase',
+  configSchema: supabaseStoreOptionsSchema,
+  create(config: Config): SupabaseStore {
+    if (config.store.type !== 'supabase') {
+      throw new Error(
+        `store-supabase plugin invoked with config.store.type="${config.store.type}"`,
+      )
+    }
+    return new SupabaseStore({
+      url: config.store.url,
+      key: config.store.key,
+      ...(config.store.tablePrefix !== undefined && {
+        tablePrefix: config.store.tablePrefix,
+      }),
+    })
+  },
+})

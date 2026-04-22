@@ -6,6 +6,7 @@
  * keeps `check.ts` small.
  */
 
+import type { Config } from '@flaky-tests/core'
 import { type } from 'arktype'
 import { ConfigError } from './errors'
 
@@ -27,50 +28,61 @@ export type CliConfig = typeof cliConfigSchema.infer
 
 export interface ParseCliConfigOpts {
   argv: readonly string[]
-  env: Record<string, string | undefined>
+  /** Fallback values when argv flags are absent — sourced from the resolved {@link Config}. */
+  defaults: Pick<Config['detection'], 'windowDays' | 'threshold'>
 }
 
 /**
- * Parses argv and env into a validated {@link CliConfig}.
+ * Parses argv into a validated {@link CliConfig}, falling back to defaults
+ * from the resolved runtime config when flags are absent.
  *
  * Throws {@link ConfigError} (exit code 2) on invalid input so the caller
  * can surface a clean error without a stack trace.
  */
 export function parseCliConfig(opts: ParseCliConfigOpts): CliConfig {
-  const { argv, env } = opts
+  const { argv, defaults } = opts
 
   const hasFlag = (name: string): boolean =>
     argv.includes(`--${name}`) || argv.includes(`-${name.charAt(0)}`)
 
-  const option = (name: string, fallbackEnv?: string): string | undefined => {
+  const option = (name: string): string | undefined => {
     const index = argv.indexOf(`--${name}`)
     if (index !== -1 && index + 1 < argv.length) return argv[index + 1]
-    if (fallbackEnv !== undefined) return env[fallbackEnv]
     return undefined
   }
 
   const help = hasFlag('help')
   const version = hasFlag('version')
 
-  const rawWindow = option('window', 'FLAKY_TESTS_WINDOW') ?? '7'
-  const rawThreshold = option('threshold', 'FLAKY_TESTS_THRESHOLD') ?? '2'
+  const rawWindow = option('window')
+  const rawThreshold = option('threshold')
 
-  const windowDays = Number(rawWindow)
-  if (!Number.isFinite(windowDays) || windowDays <= 0) {
-    throw new ConfigError(
-      `--window must be a positive number, got "${rawWindow}"`,
-    )
+  let windowDays: number
+  if (rawWindow === undefined) {
+    windowDays = defaults.windowDays
+  } else {
+    windowDays = Number(rawWindow)
+    if (!Number.isFinite(windowDays) || windowDays <= 0) {
+      throw new ConfigError(
+        `--window must be a positive number, got "${rawWindow}"`,
+      )
+    }
   }
 
-  const threshold = Number(rawThreshold)
-  if (
-    !Number.isFinite(threshold) ||
-    threshold <= 0 ||
-    !Number.isInteger(threshold)
-  ) {
-    throw new ConfigError(
-      `--threshold must be a positive integer, got "${rawThreshold}"`,
-    )
+  let threshold: number
+  if (rawThreshold === undefined) {
+    threshold = defaults.threshold
+  } else {
+    threshold = Number(rawThreshold)
+    if (
+      !Number.isFinite(threshold) ||
+      threshold <= 0 ||
+      !Number.isInteger(threshold)
+    ) {
+      throw new ConfigError(
+        `--threshold must be a positive integer, got "${rawThreshold}"`,
+      )
+    }
   }
 
   const doCopy = hasFlag('copy')

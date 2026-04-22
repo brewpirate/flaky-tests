@@ -25,14 +25,16 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { getTestCredentials } from '@flaky-tests/core'
 import { SupabaseStore } from './index'
 
+const credentials = getTestCredentials()
 const SKIP =
-  !process.env.INTEGRATION ||
-  !process.env.SUPABASE_TEST_URL ||
-  !process.env.SUPABASE_TEST_KEY
-const SUPABASE_URL = process.env.SUPABASE_TEST_URL ?? ''
-const SUPABASE_KEY = process.env.SUPABASE_TEST_KEY ?? ''
+  !credentials.integration ||
+  !credentials.supabaseUrl ||
+  !credentials.supabaseKey
+const SUPABASE_URL = credentials.supabaseUrl ?? ''
+const SUPABASE_KEY = credentials.supabaseKey ?? ''
 const TABLE_PREFIX = 'ft_integ'
 
 // ---------------------------------------------------------------------------

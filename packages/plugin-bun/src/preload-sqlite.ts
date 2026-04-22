@@ -6,22 +6,19 @@
  *   [test]
  *   preload = ["@flaky-tests/plugin-bun/preload"]
  *
- * Environment variables:
- *   FLAKY_TESTS_DISABLE=1   — skip all telemetry
- *   FLAKY_TESTS_DB=<path>   — override DB path
- *   FLAKY_TESTS_RUN_ID=<id> — set by run-tracked for reconciliation
+ * Configuration flows through `resolveConfig()` — see core/src/config.ts.
  */
 
 // biome-ignore-all lint/suspicious/noConsole: preload is dev tooling
 
-import { SqliteStore } from '@flaky-tests/store-sqlite'
+import { resolveConfig } from '@flaky-tests/core'
+import { sqliteStorePlugin } from '@flaky-tests/store-sqlite'
 import { createPreload } from './preload'
 
-if (process.env.FLAKY_TESTS_DISABLE !== '1') {
+const config = resolveConfig()
+if (!config.plugin.disabled) {
   try {
-    const store = new SqliteStore({
-      dbPath: process.env.FLAKY_TESTS_DB ?? undefined,
-    })
+    const store = sqliteStorePlugin.create(config)
     createPreload(store)
   } catch (error) {
     console.warn('[flaky-tests] Failed to initialise preload:', error)

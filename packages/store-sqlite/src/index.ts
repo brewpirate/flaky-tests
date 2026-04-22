@@ -1,9 +1,11 @@
 import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import {
+  type Config,
   createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
+  definePlugin,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -334,3 +336,19 @@ export class SqliteStore implements IStore {
     return this.db
   }
 }
+
+/** Lazy plugin descriptor — `create(config)` builds a SqliteStore from the resolved config. */
+export const sqliteStorePlugin = definePlugin({
+  name: 'store-sqlite',
+  configSchema: sqliteStoreOptionsSchema,
+  create(config: Config): SqliteStore {
+    if (config.store.type !== 'sqlite') {
+      throw new Error(
+        `store-sqlite plugin invoked with config.store.type="${config.store.type}"`,
+      )
+    }
+    return new SqliteStore({
+      ...(config.store.path !== undefined && { dbPath: config.store.path }),
+    })
+  },
+})

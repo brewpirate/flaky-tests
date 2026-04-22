@@ -15,19 +15,27 @@
 
 // biome-ignore-all lint/suspicious/noConsole: CLI wrapper
 
+import { publishRunIdForSubprocess, resolveConfig } from '@flaky-tests/core'
 import { SqliteStore } from '@flaky-tests/store-sqlite'
 
+const config = resolveConfig()
 const DB_PATH =
-  process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
+  config.store.type === 'sqlite' && config.store.path !== undefined
+    ? config.store.path
+    : 'node_modules/.cache/flaky-tests/failures.db'
 
 /** Spawns `bun test` as a child so the authoritative exit code survives module-load errors the preload cannot observe in-process. */
 async function main(): Promise<number> {
   const runId = crypto.randomUUID()
   const forwardedArgs = process.argv.slice(2)
 
+  // Publish the generated run id so the child's preload picks it up via
+  // `resolveConfig().plugin.runIdOverride`. Bun.spawn inherits process.env
+  // when `env` is omitted; the helper lives in core so env access stays in
+  // one module.
+  publishRunIdForSubprocess(runId)
   const child = Bun.spawn({
     cmd: ['bun', 'test', ...forwardedArgs],
-    env: { ...process.env, FLAKY_TESTS_RUN_ID: runId },
     stdout: 'inherit',
     stderr: 'inherit',
     stdin: 'inherit',

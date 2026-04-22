@@ -1,5 +1,7 @@
 import {
+  type Config,
   createLogger,
+  definePlugin,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   type FlakyPattern,
@@ -271,3 +273,22 @@ export class TursoStore implements IStore {
     this.client.close()
   }
 }
+
+/** Lazy plugin descriptor — `create(config)` builds a TursoStore from the resolved config. */
+export const tursoStorePlugin = definePlugin({
+  name: 'store-turso',
+  configSchema: tursoStoreOptionsSchema,
+  create(config: Config): TursoStore {
+    if (config.store.type !== 'turso') {
+      throw new Error(
+        `store-turso plugin invoked with config.store.type="${config.store.type}"`,
+      )
+    }
+    return new TursoStore({
+      url: config.store.url,
+      ...(config.store.authToken !== undefined && {
+        authToken: config.store.authToken,
+      }),
+    })
+  },
+})
