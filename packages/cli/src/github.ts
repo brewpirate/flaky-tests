@@ -16,6 +16,7 @@ export const gitHubConfigSchema = type({
   repo: type.string.atLeastLength(1),
 })
 
+/** Validated GitHub API credentials and repository target. */
 export type GitHubConfig = typeof gitHubConfigSchema.infer
 
 /**

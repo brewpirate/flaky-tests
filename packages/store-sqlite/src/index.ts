@@ -27,6 +27,7 @@ export const sqliteStoreOptionsSchema = type({
   'dbPath?': 'string | undefined',
 })
 
+/** Inferred options type for {@link SqliteStore}; accepted by its constructor. */
 export type SqliteStoreOptions = typeof sqliteStoreOptionsSchema.infer
 
 const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'

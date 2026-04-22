@@ -43,8 +43,11 @@ export interface IStore {
    * Idempotent — safe to call on every startup.
    */
   migrate(): Promise<void>
+  /** Record the start of a run — paired with `updateRun` at completion. */
   insertRun(input: InsertRunInput): Promise<void>
+  /** Finalize a previously-inserted run with terminal status and counts. */
   updateRun(runId: string, input: UpdateRunInput): Promise<void>
+  /** Record a single test failure against an existing run. */
   insertFailure(input: InsertFailureInput): Promise<void>
   /**
    * Insert multiple failures in a single transaction. Falls back to
@@ -57,5 +60,6 @@ export interface IStore {
    * the current window but none in the prior window of the same length.
    */
   getNewPatterns(options?: GetNewPatternsOptions): Promise<FlakyPattern[]>
+  /** Release pooled connections and file handles. */
   close(): Promise<void>
 }

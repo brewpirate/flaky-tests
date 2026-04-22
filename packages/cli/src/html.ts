@@ -3,17 +3,20 @@ import { generatePrompt } from './prompt'
 
 // Dashboard aggregate types. Kept local so the report file is self-contained
 // and does not require extending the core package's public surface.
+/** Count of failures grouped by error category for the dashboard summary. */
 export interface KindBreakdown {
   failureKind: string
   count: number
 }
 
+/** Test file with high failure concentration — surfaces hotspots worth refactoring first. */
 export interface HotFile {
   testFile: string
   fails: number
   distinctTests: number
 }
 
+/** Per-run summary shown in the report timeline; nullable fields cover runs still in flight or missing metadata. */
 export interface RecentRun {
   runId: string
   startedAt: string
@@ -28,6 +31,7 @@ export interface RecentRun {
   gitDirty?: boolean | null
 }
 
+/** Individual failure attached to a run, rendered in the expandable drill-down view. */
 export interface RunFailure {
   testName: string
   testFile: string
