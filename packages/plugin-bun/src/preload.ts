@@ -40,6 +40,15 @@ type TestCallback = (...args: unknown[]) => unknown | Promise<unknown>
 type TestFn = (name: string, fn: TestCallback, timeout?: number) => unknown
 type DescribeFn = (name: string, body: () => void) => unknown
 
+/** Accept only safe characters from env-provided RUN_ID. */
+const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+/** Bound on stack lines scanned when resolving a test file — stacks can be huge. */
+const STACK_SCAN_MAX_LINES = 200
+
+/** Module-level idempotency guard — double-registration would double-count everything. */
+let installed = false
+
 /** Fire-and-forget an async side-effect that must never throw into the caller. */
 function safeVoid(label: string, effect: () => Promise<void>): void {
   effect().catch((error: unknown) =>
@@ -54,7 +63,10 @@ function safeVoid(label: string, effect: () => Promise<void>): void {
 function resolveTestFile(error: unknown): string {
   if (!(error instanceof Error) || typeof error.stack !== 'string')
     return 'unknown'
-  for (const line of error.stack.split('\n')) {
+  const lines = error.stack.split('\n')
+  const limit = Math.min(lines.length, STACK_SCAN_MAX_LINES)
+  for (let i = 0; i < limit; i++) {
+    const line = lines[i] ?? ''
     const match = line.match(/\(([^)]+\.(?:ts|tsx|js|jsx|mjs|cjs)):\d+:\d+\)/)
     if (!match) continue
     const file = match[1] ?? ''
@@ -72,11 +84,17 @@ function resolveTestFile(error: unknown): string {
  * @param store - Storage backend implementing {@link IStore} (e.g. SQLite, Supabase).
  */
 export function createPreload(store: IStore): void {
+  if (installed) {
+    console.warn('[flaky-tests] createPreload called twice — ignoring')
+    return
+  }
+  installed = true
+
   // Use a run id provided by run-tracked (so it can reconcile the row post-exit)
-  // or generate a fresh one.
+  // or generate a fresh one. Reject garbage from env.
   const providedRunId = process.env.FLAKY_TESTS_RUN_ID
   const runId =
-    providedRunId !== undefined && providedRunId.length > 0
+    providedRunId !== undefined && RUN_ID_PATTERN.test(providedRunId)
       ? providedRunId
       : crypto.randomUUID()
   const startedAt = new Date().toISOString()
@@ -221,7 +239,9 @@ export function createPreload(store: IStore): void {
   afterAll(async () => {
     const endedAt = new Date().toISOString()
     const durationMs = Math.round(performance.now() - startPerf)
-    const passedTests = testsRun - testsFailed
+    // Clamp against counter skew — e.g. a test throwing outside the wrapper
+    // could increment failures without a matching testsRun++.
+    const passedTests = Math.max(0, testsRun - testsFailed)
     const status: 'pass' | 'fail' =
       testsFailed > 0 || errorsBetweenTests > 0 ? 'fail' : 'pass'
 

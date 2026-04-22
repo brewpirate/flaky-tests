@@ -1,5 +1,32 @@
 import type { FailureKind } from './types'
 
+/** Cap on how much of `error.message` we scan — guards against regex-DoS on huge messages. */
+const MAX_MESSAGE_SCAN_LENGTH = 4096
+
+/** Word-boundary match — avoids false positives like `"documentout"`. */
+const TIMEOUT_MESSAGE_PATTERN = /\btimed? ?out\b/i
+
+/**
+ * Read a property via a try/catch — a frozen object or a Proxy with a
+ * throwing getter can make `in` / property access throw. Returns `undefined`
+ * on failure.
+ */
+function safeRead(target: object, key: string): unknown {
+  try {
+    return (target as Record<string, unknown>)[key]
+  } catch {
+    return undefined
+  }
+}
+
+function safeHasOwn(target: object, key: string): boolean {
+  try {
+    return key in target
+  } catch {
+    return false
+  }
+}
+
 /**
  * Classifies a thrown test error into a coarse category. The categories are
  * deliberately few — we want to answer "is this test timing out vs. a bad
@@ -12,14 +39,19 @@ export function categorizeError(error: unknown): FailureKind {
   if (!(error instanceof Error)) {
     return 'unknown'
   }
-  const message = error.message ?? ''
-  if (error.name === 'TimeoutError' || /timed? ?out/i.test(message)) {
+  const rawMessage =
+    typeof safeRead(error, 'message') === 'string'
+      ? (safeRead(error, 'message') as string)
+      : ''
+  const message = rawMessage.slice(0, MAX_MESSAGE_SCAN_LENGTH)
+  const name = safeRead(error, 'name')
+  if (name === 'TimeoutError' || TIMEOUT_MESSAGE_PATTERN.test(message)) {
     return 'timeout'
   }
   if (
-    error.name === 'AssertionError' ||
+    name === 'AssertionError' ||
     // Bun's `expect` attaches a `matcherResult` to failures
-    'matcherResult' in error ||
+    safeHasOwn(error, 'matcherResult') ||
     // Vitest / Jest expect error format
     message.startsWith('expect(received)')
   ) {
