@@ -91,7 +91,9 @@ function getTestPath(task: TaskBase): string {
 function walkTasks(tasks: TaskBase[], visit: (task: TaskBase) => void): void {
   for (const task of tasks) {
     visit(task)
-    if (task.tasks) walkTasks(task.tasks, visit)
+    if (task.tasks) {
+      walkTasks(task.tasks, visit)
+    }
   }
 }
 
@@ -157,7 +159,9 @@ export class FlakyTestsReporter {
     files: TaskBase[] = [],
     errors: unknown[] = [],
   ): Promise<void> {
-    if (!this.ready) return
+    if (!this.ready) {
+      return
+    }
 
     let totalTests = 0
     let passedTests = 0
@@ -166,11 +170,17 @@ export class FlakyTestsReporter {
 
     for (const file of files) {
       walkTasks(file.tasks ?? [], (task) => {
-        if (task.type !== 'test' && task.type !== 'custom') return
+        if (task.type !== 'test' && task.type !== 'custom') {
+          return
+        }
         const result = task.result
-        if (!result) return
+        if (!result) {
+          return
+        }
         totalTests++
-        if (result.state === 'pass') passedTests++
+        if (result.state === 'pass') {
+          passedTests++
+        }
         if (result.state === 'fail') {
           failedTests++
           const firstError = (result.errors ?? [])[0]

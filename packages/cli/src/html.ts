@@ -3,6 +3,7 @@ import type {
   HotFile,
   KindBreakdown,
   RecentRun,
+  RunFailure,
 } from '@flaky-tests/core'
 import { generatePrompt } from './prompt'
 
@@ -18,15 +19,23 @@ function severityRank(recentFails: number): {
   label: string
   className: string
 } {
-  if (recentFails >= 10) return { label: 'critical', className: 'sev-critical' }
-  if (recentFails >= 5) return { label: 'high', className: 'sev-high' }
-  if (recentFails >= 2) return { label: 'medium', className: 'sev-medium' }
+  if (recentFails >= 10) {
+    return { label: 'critical', className: 'sev-critical' }
+  }
+  if (recentFails >= 5) {
+    return { label: 'high', className: 'sev-high' }
+  }
+  if (recentFails >= 2) {
+    return { label: 'medium', className: 'sev-medium' }
+  }
   return { label: 'low', className: 'sev-low' }
 }
 
 function shortFile(path: string): string {
   const parts = path.split('/')
-  if (parts.length <= 3) return path
+  if (parts.length <= 3) {
+    return path
+  }
   return `…/${parts.slice(-3).join('/')}`
 }
 
@@ -82,10 +91,16 @@ function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
  * Formats a millisecond duration as a compact human string.
  */
 function formatDuration(ms: number | null): string {
-  if (ms == null) return '—'
-  if (ms < 1000) return `${ms}ms`
+  if (ms == null) {
+    return '—'
+  }
+  if (ms < 1000) {
+    return `${ms}ms`
+  }
   const s = ms / 1000
-  if (s < 60) return `${s.toFixed(1)}s`
+  if (s < 60) {
+    return `${s.toFixed(1)}s`
+  }
   const m = Math.floor(s / 60)
   const rem = Math.round(s % 60)
   return `${m}m ${rem}s`
@@ -94,10 +109,16 @@ function formatDuration(ms: number | null): string {
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) {
+    return 'just now'
+  }
+  if (mins < 60) {
+    return `${mins}m ago`
+  }
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
+  if (hrs < 24) {
+    return `${hrs}h ago`
+  }
   const days = Math.floor(hrs / 24)
   return `${days}d ago`
 }
@@ -133,9 +154,15 @@ function kindRgb(kind: string): string {
 }
 
 function failColor(n: number): string {
-  if (n >= 10) return 'var(--red)'
-  if (n >= 5) return 'var(--yellow)'
-  if (n >= 2) return 'var(--text)'
+  if (n >= 10) {
+    return 'var(--red)'
+  }
+  if (n >= 5) {
+    return 'var(--yellow)'
+  }
+  if (n >= 2) {
+    return 'var(--text)'
+  }
   return 'var(--green)'
 }
 
@@ -146,6 +173,7 @@ function renderSummaryStats(
         recentRuns: RecentRun[]
         kindBreakdown: KindBreakdown[]
         hotFiles: HotFile[]
+        failuresByRun: Map<string, RunFailure[]>
       }
     | undefined,
   windowDays: number,
@@ -190,7 +218,9 @@ function renderSummaryStats(
 }
 
 function renderToc(patterns: FlakyPattern[], hasDashboard: boolean): string {
-  if (patterns.length === 0 && !hasDashboard) return '<div></div>'
+  if (patterns.length === 0 && !hasDashboard) {
+    return '<div></div>'
+  }
   const items = patterns
     .map((p, i) => {
       const sev = severityRank(p.recentFails)
@@ -218,7 +248,9 @@ function renderToc(patterns: FlakyPattern[], hasDashboard: boolean): string {
 
 function renderKindBar(kindBreakdown: KindBreakdown[]): string {
   const total = kindBreakdown.reduce((s, k) => s + k.count, 0)
-  if (total === 0) return '<p class="muted">No failures recorded.</p>'
+  if (total === 0) {
+    return '<p class="muted">No failures recorded.</p>'
+  }
 
   const cards = kindBreakdown
     .map((k) => {
@@ -249,11 +281,36 @@ function hotFilePrompt(
   return `Investigate ${file}: ${fails} failures across ${distinctTests} distinct tests in the last ${windowDays} days`
 }
 
+function renderRunFailures(failures: RunFailure[]): string {
+  if (failures.length === 0) {
+    return '<p class="muted">No failures recorded.</p>'
+  }
+  const rows = failures
+    .map((failure) => {
+      const firstLine =
+        failure.errorMessage?.split('\n')[0] ?? failure.errorMessage ?? ''
+      const color = kindColor(failure.failureKind)
+      const rgb = kindRgb(failure.failureKind)
+      return `<tr>
+          <td><code>${esc(failure.testName)}</code><div class="run-fail-file">${esc(failure.testFile)}</div></td>
+          <td><span class="kind-badge" style="color:${color};background:rgba(${rgb}, 0.14);border-color:${color}">${esc(failure.failureKind)}</span></td>
+          <td class="run-fail-err" title="${esc(failure.errorMessage ?? '')}"><code>${esc(firstLine)}</code></td>
+          <td class="dim">${formatRelative(failure.failedAt)}</td>
+        </tr>`
+    })
+    .join('\n')
+  return `<table class="run-failures-table">
+      <thead><tr><th>Test</th><th>Kind</th><th>Error</th><th>When</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`
+}
+
 function renderDashboard(
   dashboard: {
     recentRuns: RecentRun[]
     kindBreakdown: KindBreakdown[]
     hotFiles: HotFile[]
+    failuresByRun: Map<string, RunFailure[]>
   },
   windowDays: number,
 ): string {
@@ -281,10 +338,16 @@ function renderDashboard(
   const runRows = dashboard.recentRuns
     .map((r) => {
       let statusClass = 'status-na'
-      if (r.status === 'pass') statusClass = 'status-pass'
-      else if (r.status === 'fail') statusClass = 'status-fail'
+      if (r.status === 'pass') {
+        statusClass = 'status-pass'
+      } else if (r.status === 'fail') {
+        statusClass = 'status-fail'
+      }
       const statusLabel = r.status ?? 'n/a'
-      return `<tr>
+      const failures = dashboard.failuresByRun.get(r.runId) ?? []
+      const runIdAttr = esc(r.runId)
+      return `<tr class="run-row" data-run-id="${runIdAttr}" tabindex="0">
+      <td class="run-chevron-cell" aria-hidden="true"><svg class="run-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></td>
       <td><span class="status-badge ${statusClass}">${esc(statusLabel)}</span></td>
       <td class="dim">${formatRelative(r.startedAt)}</td>
       <td class="dim num">${formatDuration(r.durationMs)}</td>
@@ -293,6 +356,9 @@ function renderDashboard(
       <td class="num fail-num">${r.failedTests ?? '—'}</td>
       <td class="num">${r.errorsBetweenTests ?? '—'}</td>
       <td><code class="dim">${shortSha(r.gitSha)}</code></td>
+    </tr>
+    <tr class="run-failures" data-run-id="${runIdAttr}" hidden>
+      <td colspan="9">${renderRunFailures(failures)}</td>
     </tr>`
     })
     .join('\n')
@@ -317,7 +383,7 @@ function renderDashboard(
       <h2 class="section-title">Recent Runs</h2>
       <div class="table-wrap">
         <table class="dash-table">
-          <thead><tr><th>Status</th><th>When</th><th class="num">Duration</th><th class="num">Total</th><th class="num">Passed</th><th class="num">Failed</th><th class="num">Errors</th><th>SHA</th></tr></thead>
+          <thead><tr><th aria-label="expand" class="run-chevron-cell"></th><th>Status</th><th>When</th><th class="num">Duration</th><th class="num">Total</th><th class="num">Passed</th><th class="num">Failed</th><th class="num">Errors</th><th>SHA</th></tr></thead>
           <tbody>${runRows}</tbody>
         </table>
       </div>
@@ -342,6 +408,7 @@ export function generateHtml(
     recentRuns: RecentRun[]
     kindBreakdown: KindBreakdown[]
     hotFiles: HotFile[]
+    failuresByRun: Map<string, RunFailure[]>
   },
 ): string {
   const plural = patterns.length === 1 ? 'pattern' : 'patterns'
@@ -1071,6 +1138,81 @@ export function generateHtml(
       border: 1px dashed var(--border);
       border-radius: var(--radius);
     }
+
+    /* ---- Expandable run rows ---- */
+    .run-row { cursor: pointer; }
+    .run-row:hover { background: var(--surface); }
+    .run-row:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+    .run-chevron-cell { width: 1.25rem; padding-right: 0 !important; }
+    .run-chevron {
+      width: 0.85rem;
+      height: 0.85rem;
+      color: var(--muted);
+      transition: transform 0.12s ease-out;
+      vertical-align: middle;
+    }
+    .run-row.expanded .run-chevron { transform: rotate(90deg); color: var(--blue); }
+    .run-failures[hidden] { display: none; }
+    .run-failures > td {
+      background: var(--bg);
+      padding: 0.75rem 1rem 0.9rem 2.25rem !important;
+      border-top: 1px solid var(--border);
+    }
+    .run-failures-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .run-failures-table th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 0.64rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.4rem 0.7rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .run-failures-table td {
+      padding: 0.4rem 0.7rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .run-failures-table tbody tr:last-child td { border-bottom: none; }
+    .run-failures-table code {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--text);
+    }
+    .run-fail-file {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.15rem;
+    }
+    .run-fail-err {
+      max-width: 38ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .run-fail-err code { color: var(--yellow); }
+    .kind-badge {
+      display: inline-block;
+      padding: 0.05rem 0.4rem;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      font-size: 0.66rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-family: var(--font-mono);
+    }
   </style>
 </head>
 <body>
@@ -1162,6 +1304,25 @@ export function generateHtml(
               navigator.clipboard.writeText(text).then(function () { flash(btn); }, function () { fallbackSelect(target); });
             } else { fallbackSelect(target); }
           } catch (err) { fallbackSelect(target); }
+        });
+      });
+      var runRows = document.querySelectorAll('.run-row[data-run-id]');
+      function toggleRun(row) {
+        var id = row.getAttribute('data-run-id');
+        if (!id) return;
+        var sibling = document.querySelector('.run-failures[data-run-id="' + id.replace(/"/g, '\\"') + '"]');
+        if (!sibling) return;
+        var isHidden = sibling.hasAttribute('hidden');
+        if (isHidden) { sibling.removeAttribute('hidden'); row.classList.add('expanded'); }
+        else { sibling.setAttribute('hidden', ''); row.classList.remove('expanded'); }
+      }
+      runRows.forEach(function (row) {
+        row.addEventListener('click', function (event) {
+          if (event.target && event.target.closest && event.target.closest('a')) return;
+          toggleRun(row);
+        });
+        row.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleRun(row); }
         });
       });
     })();

@@ -212,9 +212,15 @@ function escapeHtml(text: string): string {
 }
 
 function severityClass(count: number): string {
-  if (count >= 10) return 'sev-high'
-  if (count >= 5) return 'sev-med'
-  if (count >= 2) return 'sev-low'
+  if (count >= 10) {
+    return 'sev-high'
+  }
+  if (count >= 5) {
+    return 'sev-med'
+  }
+  if (count >= 2) {
+    return 'sev-low'
+  }
   return 'sev-single'
 }
 
@@ -224,37 +230,60 @@ function kindBadge(kind: string): string {
 }
 
 function formatDuration(ms: number | null): string {
-  if (ms === null) return '—'
-  if (ms < 1000) return `${ms}ms`
+  if (ms === null) {
+    return '—'
+  }
+  if (ms < 1000) {
+    return `${ms}ms`
+  }
   const s = ms / 1000
-  if (s < 60) return `${s.toFixed(1)}s`
+  if (s < 60) {
+    return `${s.toFixed(1)}s`
+  }
   return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`
 }
 
 function shortSha(sha: string | null): string {
-  if (sha === null) return '—'
+  if (sha === null) {
+    return '—'
+  }
   return sha.slice(0, 7)
 }
 
 function formatRelative(iso: string): string {
   const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diffSec < 60) return `${diffSec}s ago`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
+  if (diffSec < 60) {
+    return `${diffSec}s ago`
+  }
+  if (diffSec < 3600) {
+    return `${Math.floor(diffSec / 60)}m ago`
+  }
+  if (diffSec < 86400) {
+    return `${Math.floor(diffSec / 3600)}h ago`
+  }
   return `${Math.floor(diffSec / 86400)}d ago`
 }
 
 function passRateTone(pct: number | null): string {
-  if (pct === null) return 'tone-muted'
-  if (pct >= 95) return 'tone-good'
-  if (pct >= 80) return 'tone-warn'
+  if (pct === null) {
+    return 'tone-muted'
+  }
+  if (pct >= 95) {
+    return 'tone-good'
+  }
+  if (pct >= 80) {
+    return 'tone-warn'
+  }
   return 'tone-bad'
 }
 
 function renderSummary(s: Summary): string {
   let flakyTone = 'tone-bad'
-  if (s.activeFlakyTests === 0) flakyTone = 'tone-good'
-  else if (s.activeFlakyTests <= 3) flakyTone = 'tone-warn'
+  if (s.activeFlakyTests === 0) {
+    flakyTone = 'tone-good'
+  } else if (s.activeFlakyTests <= 3) {
+    flakyTone = 'tone-warn'
+  }
   const flakyLabel =
     s.activeFlakyTests === 0
       ? 'none'
@@ -293,8 +322,9 @@ function renderSummary(s: Summary): string {
 }
 
 function renderFlaky(rows: FlakyRow[]): string {
-  if (rows.length === 0)
+  if (rows.length === 0) {
     return '<p class="empty">No failures in the last 30 days. Clean house.</p>'
+  }
   const items = rows
     .map((r) => {
       const kinds = r.kinds
@@ -317,7 +347,9 @@ function renderFlaky(rows: FlakyRow[]): string {
 }
 
 function renderKinds(rows: KindRow[]): string {
-  if (rows.length === 0) return '<p class="empty">No data.</p>'
+  if (rows.length === 0) {
+    return '<p class="empty">No data.</p>'
+  }
   const total = rows.reduce((s, r) => s + r.count, 0)
   return `<div class="kind-grid">${rows
     .map((r) => {
@@ -332,13 +364,19 @@ function renderKinds(rows: KindRow[]): string {
 }
 
 function statusClass(status: string | null): string {
-  if (status === 'pass') return 'status-pass'
-  if (status === 'fail') return 'status-fail'
+  if (status === 'pass') {
+    return 'status-pass'
+  }
+  if (status === 'fail') {
+    return 'status-fail'
+  }
   return 'status-crashed'
 }
 
 function renderRuns(rows: RunRow[]): string {
-  if (rows.length === 0) return '<p class="empty">No runs recorded.</p>'
+  if (rows.length === 0) {
+    return '<p class="empty">No runs recorded.</p>'
+  }
   const items = rows
     .map((r) => {
       const dirty =
@@ -367,7 +405,9 @@ function renderRuns(rows: RunRow[]): string {
 }
 
 function renderHotFiles(rows: HotFileRow[]): string {
-  if (rows.length === 0) return '<p class="empty">No data.</p>'
+  if (rows.length === 0) {
+    return '<p class="empty">No data.</p>'
+  }
   const items = rows
     .map(
       (r) => `<tr>
@@ -507,10 +547,15 @@ function openInBrowser(filePath: string): void {
   const url = `file://${abs}`
   const envBrowser = process.env.BROWSER
   let cmd: string[]
-  if (envBrowser) cmd = [envBrowser, url]
-  else if (process.platform === 'darwin') cmd = ['open', url]
-  else if (process.platform === 'win32') cmd = ['cmd', '/c', 'start', '', url]
-  else cmd = ['xdg-open', url]
+  if (envBrowser) {
+    cmd = [envBrowser, url]
+  } else if (process.platform === 'darwin') {
+    cmd = ['open', url]
+  } else if (process.platform === 'win32') {
+    cmd = ['cmd', '/c', 'start', '', url]
+  } else {
+    cmd = ['xdg-open', url]
+  }
   try {
     Bun.spawn({ cmd, stdout: 'ignore', stderr: 'ignore' }).unref?.()
   } catch (e) {
@@ -531,7 +576,9 @@ async function main(): Promise<void> {
   console.log(
     `[flaky-tests] Wrote ${OUT_PATH} (${data.totalRuns} runs, ${data.totalFailures} failures)`,
   )
-  if (process.argv.includes('--open')) openInBrowser(OUT_PATH)
+  if (process.argv.includes('--open')) {
+    openInBrowser(OUT_PATH)
+  }
 }
 
 await main()

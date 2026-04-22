@@ -138,3 +138,20 @@ export const GitInfoSchema = z.object({
   sha: z.string().nullable(),
   dirty: z.boolean().nullable(),
 })
+
+/** One test failure scoped to a run, used by the per-run expand UI.
+ * `errorMessage` is nullable because older inserts may have omitted it. */
+export const RunFailureSchema = z.object({
+  testFile: TestPath,
+  testName: TestPath,
+  failureKind: FailureKindSchema,
+  errorMessage: z.string().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  failedAt: IsoDateTime,
+})
+
+/** Options for {@link IStore.getFailuresByRun} — the set of runIds whose
+ * failures should be fetched in one round-trip. */
+export const GetFailuresByRunOptionsSchema = z.object({
+  runIds: z.array(RunId).min(1),
+})

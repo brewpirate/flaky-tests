@@ -42,7 +42,9 @@ export function generatePrompt(pattern: FlakyPattern, windowDays = 7): string {
     // Trim to first 20 lines to keep the prompt focused
     const stackLines = pattern.lastErrorStack.split('\n').slice(0, 20)
     lines.push(stackLines.join('\n'))
-    if (pattern.lastErrorStack.split('\n').length > 20) lines.push('  ...')
+    if (pattern.lastErrorStack.split('\n').length > 20) {
+      lines.push('  ...')
+    }
     lines.push('```')
   }
 
@@ -62,9 +64,13 @@ export function generatePrompt(pattern: FlakyPattern, windowDays = 7): string {
  */
 export function copyToClipboard(text: string): boolean {
   let cmd: string[]
-  if (process.platform === 'darwin') cmd = ['pbcopy']
-  else if (process.platform === 'win32') cmd = ['clip']
-  else cmd = ['xclip', '-selection', 'clipboard']
+  if (process.platform === 'darwin') {
+    cmd = ['pbcopy']
+  } else if (process.platform === 'win32') {
+    cmd = ['clip']
+  } else {
+    cmd = ['xclip', '-selection', 'clipboard']
+  }
 
   try {
     const result = Bun.spawnSync({

@@ -25,7 +25,9 @@ function getProcess(): MinimalProcess | undefined {
 
 export function debugWarn(label: string, error?: unknown): void {
   const proc = getProcess()
-  if (!proc || proc.env.FLAKY_TESTS_DEBUG !== '1') return
+  if (!proc || proc.env.FLAKY_TESTS_DEBUG !== '1') {
+    return
+  }
   const prefix = `[flaky-tests] ${label}`
   if (error === undefined) {
     proc.stderr.write(`${prefix}\n`)

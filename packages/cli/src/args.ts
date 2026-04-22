@@ -51,9 +51,13 @@ function optionValue(
   name: string,
 ): string | undefined {
   const idx = argv.indexOf(`--${name}`)
-  if (idx === -1) return undefined
+  if (idx === -1) {
+    return undefined
+  }
   const value = argv[idx + 1]
-  if (value === undefined || value.startsWith('--')) return undefined
+  if (value === undefined || value.startsWith('--')) {
+    return undefined
+  }
   return value
 }
 
@@ -67,7 +71,9 @@ function parseIntOption(
   fieldName: string,
   fallback: number,
 ): number {
-  if (raw === undefined || raw === '') return fallback
+  if (raw === undefined || raw === '') {
+    return fallback
+  }
   const result = PositiveInt.safeParse(raw)
   if (!result.success) {
     const msg = result.error.issues[0]?.message ?? 'invalid number'

@@ -1,6 +1,7 @@
 import type {
   FlakyPattern,
   GetFailureKindBreakdownOptions,
+  GetFailuresByRunOptions,
   GetHotFilesOptions,
   GetNewPatternsOptions,
   GetRecentRunsOptions,
@@ -10,6 +11,7 @@ import type {
   IStore,
   KindBreakdown,
   RecentRun,
+  RunFailure,
   UpdateRunInput,
 } from '@flaky-tests/core'
 import {
@@ -17,6 +19,7 @@ import {
   coerceFailureKinds,
   coerceRunStatus,
   GetFailureKindBreakdownOptionsSchema,
+  GetFailuresByRunOptionsSchema,
   GetHotFilesOptionsSchema,
   GetNewPatternsOptionsSchema,
   GetRecentRunsOptionsSchema,
@@ -27,27 +30,40 @@ import {
 } from '@flaky-tests/core'
 import type { Client, InArgs } from '@libsql/client'
 import { createClient } from '@libsql/client'
+import { z } from 'zod'
 
 function gitDirtyToSqlite(gitDirty: boolean | null | undefined): 0 | 1 | null {
-  if (gitDirty == null) return null
+  if (gitDirty == null) {
+    return null
+  }
   return gitDirty ? 1 : 0
 }
 
 /**
- * Configuration for the Turso-backed flaky-tests store. Accepts any libsql
- * client URL so the same store works against a remote Turso database, a
- * local libsql file, or an in-memory database for tests.
+ * Zod schema for {@link TursoStoreOptions}. `url` accepts `libsql://`,
+ * `file://`, `http(s)://`, `ws(s)://`, or the literal `:memory:`.
  */
-export interface TursoStoreOptions {
+export const TursoStoreOptionsSchema = z.object({
   /**
    * Turso database URL.
    * - Remote:    libsql://your-db.turso.io
    * - Local dev: file:///path/to/local.db  or  :memory:
    */
-  url: string
+  url: z
+    .string()
+    .min(1)
+    .max(2048)
+    .refine(
+      (value) =>
+        value === ':memory:' || /^(libsql|file|https?|wss?):/.test(value),
+      'url must be libsql://, file://, http(s)://, ws(s)://, or :memory:',
+    ),
   /** Turso auth token. Not required for local file/memory URLs. */
-  authToken?: string
-}
+  authToken: z.string().min(1).max(4096).optional(),
+})
+
+/** Runtime-validated Turso connection options. See {@link TursoStoreOptionsSchema}. */
+export type TursoStoreOptions = z.infer<typeof TursoStoreOptionsSchema>
 
 // Schema is identical to store-sqlite — Turso is SQLite-compatible.
 const SCHEMA = `
@@ -90,7 +106,12 @@ CREATE INDEX IF NOT EXISTS idx_failures_run  ON failures(run_id);
 export class TursoStore implements IStore {
   private client: Client
 
-  constructor(options: TursoStoreOptions) {
+  constructor(rawOptions: TursoStoreOptions) {
+    const options = validateInput(
+      TursoStoreOptionsSchema,
+      rawOptions,
+      'TursoStore',
+    )
     this.client = createClient({
       url: options.url,
       ...(options.authToken !== undefined
@@ -340,6 +361,56 @@ export class TursoStore implements IStore {
       fails: Number(r.fails),
       distinctTests: Number(r.distinct_tests),
     }))
+  }
+
+  /**
+   * Fetch failures for the given runIds and group by `run_id`. Runs with no
+   * failures still appear in the map with an empty array.
+   */
+  async getFailuresByRun(
+    rawOptions: GetFailuresByRunOptions,
+  ): Promise<Map<string, RunFailure[]>> {
+    const options = validateInput(
+      GetFailuresByRunOptionsSchema,
+      rawOptions,
+      'getFailuresByRun',
+    )
+    const { runIds } = options
+    const result = new Map<string, RunFailure[]>()
+    for (const runId of runIds) {
+      result.set(runId, [])
+    }
+    if (runIds.length === 0) {
+      return result
+    }
+
+    const placeholders = runIds.map(() => '?').join(',')
+    const queryResult = await this.client.execute({
+      sql: `SELECT run_id, test_file, test_name, failure_kind, error_message, duration_ms, failed_at
+              FROM failures
+             WHERE run_id IN (${placeholders})
+             ORDER BY failed_at ASC`,
+      args: [...runIds] as InArgs,
+    })
+    for (const row of queryResult.rows) {
+      const runId = String(row.run_id)
+      const failure: RunFailure = {
+        testFile: String(row.test_file),
+        testName: String(row.test_name),
+        failureKind: coerceFailureKind(row.failure_kind),
+        errorMessage:
+          row.error_message != null ? String(row.error_message) : null,
+        durationMs: row.duration_ms != null ? Number(row.duration_ms) : null,
+        failedAt: String(row.failed_at),
+      }
+      const bucket = result.get(runId)
+      if (bucket !== undefined) {
+        bucket.push(failure)
+      } else {
+        result.set(runId, [failure])
+      }
+    }
+    return result
   }
 
   /** Close the underlying libSQL connection. */

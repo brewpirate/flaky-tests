@@ -107,6 +107,7 @@ describe('generateHtml', () => {
       kindBreakdown,
       hotFiles,
       recentRuns,
+      failuresByRun: new Map(),
     })
     expect(html).toContain('Failure Kind Breakdown')
     expect(html).toContain('Hot Files')
@@ -136,6 +137,7 @@ describe('generateHtml', () => {
       kindBreakdown: [],
       hotFiles: [],
       recentRuns,
+      failuresByRun: new Map(),
     })
     expect(html).toContain('n/a')
   })

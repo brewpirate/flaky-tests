@@ -29,7 +29,7 @@
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { FlakyPattern, IStore } from '@flaky-tests/core'
+import type { FlakyPattern, IStore, RunFailure } from '@flaky-tests/core'
 import { type CliConfig, parseCliConfig } from './args'
 import { CliError, ConfigError } from './errors'
 import { createIssue, findExistingIssue, resolveRepo } from './github'
@@ -84,6 +84,7 @@ interface Snapshot {
   recentRuns: Awaited<ReturnType<IStore['getRecentRuns']>>
   kindBreakdown: Awaited<ReturnType<IStore['getFailureKindBreakdown']>>
   hotFiles: Awaited<ReturnType<IStore['getHotFiles']>>
+  failuresByRun: Awaited<ReturnType<IStore['getFailuresByRun']>>
 }
 
 async function gatherSnapshot(
@@ -97,7 +98,13 @@ async function gatherSnapshot(
     store.getFailureKindBreakdown({ windowDays }),
     store.getHotFiles({ windowDays, limit: 15 }),
   ])
-  return { patterns, recentRuns, kindBreakdown, hotFiles }
+  const failuresByRun: Map<string, RunFailure[]> =
+    recentRuns.length > 0
+      ? await store.getFailuresByRun({
+          runIds: recentRuns.map((r) => r.runId),
+        })
+      : new Map()
+  return { patterns, recentRuns, kindBreakdown, hotFiles, failuresByRun }
 }
 
 function printPatterns(patterns: FlakyPattern[], windowDays: number): void {
@@ -106,7 +113,9 @@ function printPatterns(patterns: FlakyPattern[], windowDays: number): void {
 
   for (let index = 0; index < patterns.length; index++) {
     const pattern = patterns[index]
-    if (!pattern) continue
+    if (!pattern) {
+      continue
+    }
     const kindStr = pattern.failureKinds.join(', ')
     console.log(`  ${index + 1}. ${pattern.testName}`)
     console.log(
@@ -130,7 +139,9 @@ function printInvestigationPrompts(
   console.log('─'.repeat(60))
   for (let index = 0; index < patterns.length; index++) {
     const pattern = patterns[index]
-    if (!pattern) continue
+    if (!pattern) {
+      continue
+    }
     console.log(`\n── Pattern ${index + 1} of ${patterns.length} ──\n`)
     console.log(generatePrompt(pattern, windowDays))
   }
@@ -152,9 +163,13 @@ function copyFirstPromptIfRequested(
   patterns: FlakyPattern[],
   config: CliConfig,
 ): void {
-  if (!config.doCopy) return
+  if (!config.doCopy) {
+    return
+  }
   const first = patterns[0]
-  if (!first) return
+  if (!first) {
+    return
+  }
   const ok = copyToClipboard(generatePrompt(first, config.windowDays))
   console.log(
     ok
@@ -202,11 +217,13 @@ async function openGitHubIssues(
 }
 
 function writeHtmlReport(snapshot: Snapshot, config: CliConfig): void {
-  const { patterns, recentRuns, kindBreakdown, hotFiles } = snapshot
+  const { patterns, recentRuns, kindBreakdown, hotFiles, failuresByRun } =
+    snapshot
   const html = generateHtml(patterns, config.windowDays, {
     recentRuns,
     kindBreakdown,
     hotFiles,
+    failuresByRun,
   })
   const outPath =
     config.htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
@@ -214,8 +231,11 @@ function writeHtmlReport(snapshot: Snapshot, config: CliConfig): void {
   console.log(`✓ Report written to ${outPath}`)
 
   let opener = 'xdg-open'
-  if (process.platform === 'darwin') opener = 'open'
-  else if (process.platform === 'win32') opener = 'start'
+  if (process.platform === 'darwin') {
+    opener = 'open'
+  } else if (process.platform === 'win32') {
+    opener = 'start'
+  }
   Bun.spawnSync({ cmd: [opener, outPath], stdout: 'ignore', stderr: 'ignore' })
   console.log('  Opening in browser…\n')
 }

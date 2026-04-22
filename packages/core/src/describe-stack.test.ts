@@ -44,7 +44,9 @@ describe('DescribeStack.run', () => {
   test('throws RangeError at max depth', () => {
     const stack = new DescribeStack()
     const recurse = (remaining: number): void => {
-      if (remaining === 0) return
+      if (remaining === 0) {
+        return
+      }
       stack.run(`frame-${remaining}`, () => recurse(remaining - 1))
     }
     expect(() => recurse(257)).toThrow(RangeError)

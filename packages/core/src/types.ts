@@ -3,6 +3,7 @@ import type {
   FailureKindSchema,
   FlakyPatternSchema,
   GetFailureKindBreakdownOptionsSchema,
+  GetFailuresByRunOptionsSchema,
   GetHotFilesOptionsSchema,
   GetNewPatternsOptionsSchema,
   GetRecentRunsOptionsSchema,
@@ -12,6 +13,7 @@ import type {
   InsertRunInputSchema,
   KindBreakdownSchema,
   RecentRunSchema,
+  RunFailureSchema,
   RunStatusSchema,
   UpdateRunInputSchema,
 } from './schemas'
@@ -44,6 +46,14 @@ export type GetFailureKindBreakdownOptions = z.infer<
 
 /** Options for {@link IStore.getHotFiles} — aggregation window + top-N limit. */
 export type GetHotFilesOptions = z.infer<typeof GetHotFilesOptionsSchema>
+
+/** Options for {@link IStore.getFailuresByRun} — runIds to fetch failures for. */
+export type GetFailuresByRunOptions = z.infer<
+  typeof GetFailuresByRunOptionsSchema
+>
+
+/** One failure within a run, projected for the per-run expand UI. */
+export type RunFailure = z.infer<typeof RunFailureSchema>
 
 /** A test that has newly become flaky — present in the current window but absent in the prior. */
 export type FlakyPattern = z.infer<typeof FlakyPatternSchema>
@@ -104,5 +114,13 @@ export interface IStore {
   ): Promise<KindBreakdown[]>
   /** Returns test files ranked by failure count within the given window. */
   getHotFiles(options?: GetHotFilesOptions): Promise<HotFile[]>
+  /**
+   * Returns failures grouped by runId. Missing runIds map to an empty array;
+   * never throws for missing keys. Order within each run is ascending by
+   * `failedAt` (chronological).
+   */
+  getFailuresByRun(
+    options: GetFailuresByRunOptions,
+  ): Promise<Map<string, RunFailure[]>>
   close(): Promise<void>
 }

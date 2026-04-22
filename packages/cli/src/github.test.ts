@@ -18,8 +18,11 @@ const originalArgv = process.argv
 const originalFetch = globalThis.fetch
 
 afterEach(() => {
-  if (originalEnv === undefined) delete process.env.GITHUB_REPOSITORY
-  else process.env.GITHUB_REPOSITORY = originalEnv
+  if (originalEnv === undefined) {
+    delete process.env.GITHUB_REPOSITORY
+  } else {
+    process.env.GITHUB_REPOSITORY = originalEnv
+  }
   process.argv = originalArgv
   globalThis.fetch = originalFetch
 })

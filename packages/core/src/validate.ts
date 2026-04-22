@@ -16,7 +16,9 @@ export function validateInput<T>(
   label: string,
 ): T {
   const result = schema.safeParse(input)
-  if (result.success) return result.data
+  if (result.success) {
+    return result.data
+  }
   const issues = result.error.issues
     .map((issue) => {
       const path = issue.path.length > 0 ? issue.path.join('.') : '<root>'

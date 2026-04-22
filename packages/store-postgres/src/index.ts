@@ -1,6 +1,7 @@
 import type {
   FlakyPattern,
   GetFailureKindBreakdownOptions,
+  GetFailuresByRunOptions,
   GetHotFilesOptions,
   GetNewPatternsOptions,
   GetRecentRunsOptions,
@@ -10,6 +11,7 @@ import type {
   IStore,
   KindBreakdown,
   RecentRun,
+  RunFailure,
   UpdateRunInput,
 } from '@flaky-tests/core'
 import {
@@ -17,6 +19,7 @@ import {
   coerceFailureKinds,
   coerceRunStatus,
   GetFailureKindBreakdownOptionsSchema,
+  GetFailuresByRunOptionsSchema,
   GetHotFilesOptionsSchema,
   GetNewPatternsOptionsSchema,
   GetRecentRunsOptionsSchema,
@@ -334,6 +337,66 @@ export class PostgresStore implements IStore {
       fails: Number(r.fails),
       distinctTests: Number(r.distinct_tests),
     }))
+  }
+
+  /**
+   * Fetch failures for the given runIds and group by `run_id`. Runs with no
+   * failures still appear in the map with an empty array.
+   */
+  async getFailuresByRun(
+    rawOptions: GetFailuresByRunOptions,
+  ): Promise<Map<string, RunFailure[]>> {
+    const options = validateInput(
+      GetFailuresByRunOptionsSchema,
+      rawOptions,
+      'getFailuresByRun',
+    )
+    const { runIds } = options
+    const result = new Map<string, RunFailure[]>()
+    for (const runId of runIds) {
+      result.set(runId, [])
+    }
+    if (runIds.length === 0) {
+      return result
+    }
+
+    const failures = this.failuresTable
+    const rows = await this.sql<
+      Array<{
+        run_id: string
+        test_file: string
+        test_name: string
+        failure_kind: string
+        error_message: string | null
+        duration_ms: number | null
+        failed_at: Date | string
+      }>
+    >`
+      SELECT run_id, test_file, test_name, failure_kind, error_message, duration_ms, failed_at
+      FROM ${this.sql(failures)}
+      WHERE run_id = ANY(${runIds as string[]})
+      ORDER BY failed_at ASC
+    `
+    for (const row of rows) {
+      const failure: RunFailure = {
+        testFile: row.test_file,
+        testName: row.test_name,
+        failureKind: coerceFailureKind(row.failure_kind),
+        errorMessage: row.error_message,
+        durationMs: row.duration_ms != null ? Number(row.duration_ms) : null,
+        failedAt:
+          row.failed_at instanceof Date
+            ? row.failed_at.toISOString()
+            : String(row.failed_at),
+      }
+      const bucket = result.get(row.run_id)
+      if (bucket !== undefined) {
+        bucket.push(failure)
+      } else {
+        result.set(row.run_id, [failure])
+      }
+    }
+    return result
   }
 
   /** Gracefully close the underlying PostgreSQL connection pool. */

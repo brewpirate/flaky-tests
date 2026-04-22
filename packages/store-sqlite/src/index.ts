@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs'
 import type {
   FlakyPattern,
   GetFailureKindBreakdownOptions,
+  GetFailuresByRunOptions,
   GetHotFilesOptions,
   GetNewPatternsOptions,
   GetRecentRunsOptions,
@@ -12,6 +13,7 @@ import type {
   IStore,
   KindBreakdown,
   RecentRun,
+  RunFailure,
   UpdateRunInput,
 } from '@flaky-tests/core'
 import {
@@ -19,6 +21,7 @@ import {
   coerceFailureKinds,
   coerceRunStatus,
   GetFailureKindBreakdownOptionsSchema,
+  GetFailuresByRunOptionsSchema,
   GetHotFilesOptionsSchema,
   GetNewPatternsOptionsSchema,
   GetRecentRunsOptionsSchema,
@@ -38,13 +41,14 @@ export const SqliteStoreOptionsSchema = z.object({
   dbPath: z.string().min(1).max(4096).optional(),
 })
 
-/** Configuration for the SQLite-backed flaky-tests store. */
 export type SqliteStoreOptions = z.infer<typeof SqliteStoreOptionsSchema>
 
 const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'
 
 function gitDirtyToSqlite(gitDirty: boolean | null | undefined): 0 | 1 | null {
-  if (gitDirty == null) return null
+  if (gitDirty == null) {
+    return null
+  }
   return gitDirty ? 1 : 0
 }
 
@@ -83,7 +87,9 @@ CREATE INDEX IF NOT EXISTS idx_failures_run  ON failures(run_id);
 
 function ensureDirectory(dbPath: string): void {
   const lastSlash = dbPath.lastIndexOf('/')
-  if (lastSlash <= 0) return
+  if (lastSlash <= 0) {
+    return
+  }
   const parent = dbPath.slice(0, lastSlash)
   try {
     mkdirSync(parent, { recursive: true })
@@ -227,7 +233,9 @@ export class SqliteStore implements IStore {
       .query('SELECT status FROM runs WHERE run_id = ?')
       .get(runId) as { status: string | null } | null
 
-    if (row === null || row.status !== 'pass') return
+    if (row === null || row.status !== 'pass') {
+      return
+    }
 
     this.db.run(
       `UPDATE runs
@@ -425,6 +433,70 @@ export class SqliteStore implements IStore {
       fails: row.fails,
       distinctTests: row.distinct_tests,
     }))
+  }
+
+  /**
+   * Fetch every failure for the given runIds in a single query and group the
+   * rows by `run_id`. Runs with no failures still appear in the returned map
+   * with an empty array, so callers can render "no failures" states without
+   * additional existence checks.
+   *
+   * @param rawOptions - Options object carrying `runIds` to query.
+   * @returns Map keyed by runId; each value is chronologically ordered.
+   */
+  async getFailuresByRun(
+    rawOptions: GetFailuresByRunOptions,
+  ): Promise<Map<string, RunFailure[]>> {
+    const options = validateInput(
+      GetFailuresByRunOptionsSchema,
+      rawOptions,
+      'getFailuresByRun',
+    )
+    const { runIds } = options
+    const result = new Map<string, RunFailure[]>()
+    for (const runId of runIds) {
+      result.set(runId, [])
+    }
+    if (runIds.length === 0) {
+      return result
+    }
+
+    interface Row {
+      run_id: string
+      test_file: string
+      test_name: string
+      failure_kind: string
+      error_message: string | null
+      duration_ms: number | null
+      failed_at: string
+    }
+    const placeholders = runIds.map(() => '?').join(',')
+    const rows = this.db
+      .prepare(
+        `SELECT run_id, test_file, test_name, failure_kind, error_message, duration_ms, failed_at
+           FROM failures
+          WHERE run_id IN (${placeholders})
+          ORDER BY failed_at ASC`,
+      )
+      .all(...runIds) as Row[]
+
+    for (const row of rows) {
+      const failure: RunFailure = {
+        testFile: row.test_file,
+        testName: row.test_name,
+        failureKind: coerceFailureKind(row.failure_kind),
+        errorMessage: row.error_message,
+        durationMs: row.duration_ms,
+        failedAt: row.failed_at,
+      }
+      const bucket = result.get(row.run_id)
+      if (bucket !== undefined) {
+        bucket.push(failure)
+      } else {
+        result.set(row.run_id, [failure])
+      }
+    }
+    return result
   }
 
   /** Close the underlying SQLite connection. */

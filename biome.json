@@ -54,6 +54,7 @@
       },
       "style": {
         "noNestedTernary": "error",
+        "useBlockStatements": "error",
         "useNodejsImportProtocol": "off"
       },
       "nursery": {

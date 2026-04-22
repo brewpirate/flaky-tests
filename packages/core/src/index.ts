@@ -10,6 +10,7 @@ export {
   FailureKindSchema,
   FlakyPatternSchema,
   GetFailureKindBreakdownOptionsSchema,
+  GetFailuresByRunOptionsSchema,
   GetHotFilesOptionsSchema,
   GetNewPatternsOptionsSchema,
   GetRecentRunsOptionsSchema,
@@ -19,6 +20,7 @@ export {
   InsertRunInputSchema,
   KindBreakdownSchema,
   RecentRunSchema,
+  RunFailureSchema,
   RunStatusSchema,
   UpdateRunInputSchema,
 } from './schemas'
@@ -26,6 +28,7 @@ export type {
   FailureKind,
   FlakyPattern,
   GetFailureKindBreakdownOptions,
+  GetFailuresByRunOptions,
   GetHotFilesOptions,
   GetNewPatternsOptions,
   GetRecentRunsOptions,
@@ -36,6 +39,7 @@ export type {
   IStore,
   KindBreakdown,
   RecentRun,
+  RunFailure,
   RunStatus,
   UpdateRunInput,
 } from './types'

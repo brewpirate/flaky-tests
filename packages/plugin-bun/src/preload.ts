@@ -48,7 +48,9 @@ const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 let installed = false
 
 function sanitizedRunId(raw: string | undefined): string {
-  if (raw && RUN_ID_PATTERN.test(raw)) return raw
+  if (raw && RUN_ID_PATTERN.test(raw)) {
+    return raw
+  }
   return crypto.randomUUID()
 }
 
@@ -62,18 +64,27 @@ function safeVoid(label: string, effect: () => Promise<void>): void {
  * first frame that isn't inside this package. Falls back to `'unknown'`.
  */
 function resolveTestFile(error: unknown): string {
-  if (!(error instanceof Error) || typeof error.stack !== 'string')
+  if (!(error instanceof Error) || typeof error.stack !== 'string') {
     return 'unknown'
+  }
   const lines = error.stack.split('\n')
   const scanLimit = Math.min(lines.length, STACK_SCAN_MAX_LINES)
   for (let i = 0; i < scanLimit; i++) {
     const line = lines[i]
-    if (!line) continue
+    if (!line) {
+      continue
+    }
     const match = line.match(/\(([^)]+\.(?:ts|tsx|js|jsx|mjs|cjs)):\d+:\d+\)/)
-    if (!match) continue
+    if (!match) {
+      continue
+    }
     const file = match[1]
-    if (!file) continue
-    if (file.includes('/plugin-bun/')) continue
+    if (!file) {
+      continue
+    }
+    if (file.includes('/plugin-bun/')) {
+      continue
+    }
     return file
   }
   return 'unknown'
@@ -163,7 +174,9 @@ export function createPreload(store: IStore): void {
     const callWrapped: TestFn = (name, fn, timeout) => {
       // Preserve `done`-callback style — wrapping would change arity and
       // trigger Bun's async-done timeout.
-      if (fn.length > 0) return originalTest(name, fn, timeout)
+      if (fn.length > 0) {
+        return originalTest(name, fn, timeout)
+      }
 
       const fullPath = describeStack.path(name)
       const wrappedFn: TestCallback = async () => {

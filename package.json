@@ -11,6 +11,7 @@
     "lint": "bun x @biomejs/biome lint",
     "lint:fix": "bun x @biomejs/biome lint --fix",
     "test": "bun test",
+    "typecheck": "for p in packages/core packages/cli packages/store-sqlite packages/store-postgres packages/store-supabase packages/store-turso packages/plugin-bun packages/plugin-vitest; do echo \"== $p ==\" && tsc -p $p --noEmit || exit 1; done",
     "prepare": "lefthook install"
   },
   "devDependencies": {

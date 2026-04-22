@@ -1,10 +1,6 @@
-/** Git metadata captured at test-run start. `null` fields indicate git is unavailable. */
-export interface GitInfo {
-  /** Full HEAD commit SHA, or `null` if not in a git repo. */
-  sha: string | null
-  /** Whether the working tree has uncommitted changes, or `null` if not in a git repo. */
-  dirty: boolean | null
-}
+import type { GitInfo } from '@flaky-tests/core'
+
+export type { GitInfo }
 
 function runGit(args: string[]): string | null {
   try {
@@ -13,7 +9,9 @@ function runGit(args: string[]): string | null {
       stdout: 'pipe',
       stderr: 'ignore',
     })
-    if (result.exitCode !== 0) return null
+    if (result.exitCode !== 0) {
+      return null
+    }
     return new TextDecoder().decode(result.stdout)
   } catch {
     return null
@@ -27,7 +25,9 @@ function runGit(args: string[]): string | null {
 export function captureGitInfo(): GitInfo {
   const sha = runGit(['rev-parse', 'HEAD'])
   const porcelain = runGit(['status', '--porcelain'])
-  if (sha === null) return { sha: null, dirty: null }
+  if (sha === null) {
+    return { sha: null, dirty: null }
+  }
   return {
     sha: sha.trim(),
     dirty: porcelain !== null && porcelain.trim().length > 0,

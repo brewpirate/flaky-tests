@@ -1,6 +1,7 @@
 import type {
   FlakyPattern,
   GetFailureKindBreakdownOptions,
+  GetFailuresByRunOptions,
   GetHotFilesOptions,
   GetNewPatternsOptions,
   GetRecentRunsOptions,
@@ -10,6 +11,7 @@ import type {
   IStore,
   KindBreakdown,
   RecentRun,
+  RunFailure,
   UpdateRunInput,
 } from '@flaky-tests/core'
 import {
@@ -17,6 +19,7 @@ import {
   coerceFailureKinds,
   coerceRunStatus,
   GetFailureKindBreakdownOptionsSchema,
+  GetFailuresByRunOptionsSchema,
   GetHotFilesOptionsSchema,
   GetNewPatternsOptionsSchema,
   GetRecentRunsOptionsSchema,
@@ -88,10 +91,11 @@ export class SupabaseStore implements IStore {
       runtime_version: input.runtimeVersion ?? null,
       test_args: input.testArgs ?? null,
     })
-    if (error)
+    if (error) {
       throw new Error(
         `[flaky-tests/store-supabase] insertRun: ${error.message}`,
       )
+    }
   }
 
   /**
@@ -113,10 +117,11 @@ export class SupabaseStore implements IStore {
         errors_between_tests: input.errorsBetweenTests ?? null,
       })
       .eq('run_id', runId)
-    if (error)
+    if (error) {
       throw new Error(
         `[flaky-tests/store-supabase] updateRun: ${error.message}`,
       )
+    }
   }
 
   /** Record a single test failure. `durationMs` is rounded to the nearest integer. */
@@ -137,10 +142,11 @@ export class SupabaseStore implements IStore {
         input.durationMs != null ? Math.round(input.durationMs) : null,
       failed_at: input.failedAt,
     })
-    if (error)
+    if (error) {
       throw new Error(
         `[flaky-tests/store-supabase] insertFailure: ${error.message}`,
       )
+    }
   }
 
   /**
@@ -172,10 +178,11 @@ export class SupabaseStore implements IStore {
       .lt(`${this.runsTable}.failed_tests`, 10)
       .not(`${this.runsTable}.ended_at`, 'is', null)
 
-    if (error)
+    if (error) {
       throw new Error(
         `[flaky-tests/store-supabase] getNewPatterns: ${error.message}`,
       )
+    }
 
     interface Row {
       test_file: string
@@ -186,7 +193,9 @@ export class SupabaseStore implements IStore {
       failed_at: string
     }
     function isRow(value: unknown): value is Row {
-      if (value === null || typeof value !== 'object') return false
+      if (value === null || typeof value !== 'object') {
+        return false
+      }
       const candidate = value as Record<string, unknown>
       return (
         typeof candidate.test_file === 'string' &&
@@ -275,10 +284,11 @@ export class SupabaseStore implements IStore {
       .order('started_at', { ascending: false })
       .limit(limit)
 
-    if (error)
+    if (error) {
       throw new Error(
         `[flaky-tests/store-supabase] getRecentRuns: ${error.message}`,
       )
+    }
 
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
       runId: row.run_id as string,
@@ -313,10 +323,11 @@ export class SupabaseStore implements IStore {
       .select('failure_kind')
       .gt('failed_at', windowStart)
 
-    if (error)
+    if (error) {
       throw new Error(
         `[flaky-tests/store-supabase] getFailureKindBreakdown: ${error.message}`,
       )
+    }
 
     const counts = new Map<string, number>()
     for (const row of (data ?? []) as Array<{ failure_kind: string }>) {
@@ -348,10 +359,11 @@ export class SupabaseStore implements IStore {
       .select('test_file, test_name')
       .gt('failed_at', windowStart)
 
-    if (error)
+    if (error) {
       throw new Error(
         `[flaky-tests/store-supabase] getHotFiles: ${error.message}`,
       )
+    }
 
     const fileMap = new Map<string, { fails: number; tests: Set<string> }>()
     for (const row of (data ?? []) as Array<{
@@ -375,6 +387,61 @@ export class SupabaseStore implements IStore {
       }))
       .sort((a, b) => b.fails - a.fails)
       .slice(0, limit)
+  }
+
+  /**
+   * Fetch failures for the given runIds and group by `run_id`. Runs with no
+   * failures still appear in the map with an empty array.
+   */
+  async getFailuresByRun(
+    rawOptions: GetFailuresByRunOptions,
+  ): Promise<Map<string, RunFailure[]>> {
+    const options = validateInput(
+      GetFailuresByRunOptionsSchema,
+      rawOptions,
+      'getFailuresByRun',
+    )
+    const { runIds } = options
+    const result = new Map<string, RunFailure[]>()
+    for (const runId of runIds) {
+      result.set(runId, [])
+    }
+    if (runIds.length === 0) {
+      return result
+    }
+
+    const { data, error } = await this.client
+      .from(this.failuresTable)
+      .select(
+        'run_id, test_file, test_name, failure_kind, error_message, duration_ms, failed_at',
+      )
+      .in('run_id', runIds)
+      .order('failed_at', { ascending: true })
+    if (error) {
+      throw new Error(
+        `[flaky-tests/store-supabase] getFailuresByRun: ${error.message}`,
+      )
+    }
+
+    for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+      const runId = String(row.run_id)
+      const failure: RunFailure = {
+        testFile: String(row.test_file),
+        testName: String(row.test_name),
+        failureKind: coerceFailureKind(row.failure_kind),
+        errorMessage:
+          row.error_message != null ? String(row.error_message) : null,
+        durationMs: row.duration_ms != null ? Number(row.duration_ms) : null,
+        failedAt: String(row.failed_at),
+      }
+      const bucket = result.get(runId)
+      if (bucket !== undefined) {
+        bucket.push(failure)
+      } else {
+        result.set(runId, [failure])
+      }
+    }
+    return result
   }
 
   async close(): Promise<void> {

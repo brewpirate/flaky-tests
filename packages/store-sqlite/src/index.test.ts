@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import type { FailureKind } from '@flaky-tests/core'
 import { SqliteStore } from './index'
 
 // Helpers ----------------------------------------------------------------
@@ -14,7 +15,7 @@ function makeFailure(
   runId: string,
   testName: string,
   failedAt: Date,
-  kind = 'assertion' as const,
+  kind: FailureKind = 'assertion',
 ) {
   return {
     runId,
@@ -220,6 +221,41 @@ describe('SqliteStore — getNewPatterns', () => {
 
     const patterns = await store.getNewPatterns({ threshold: 2 })
     expect(patterns).toHaveLength(0)
+  })
+})
+
+describe('SqliteStore — getFailuresByRun', () => {
+  test('groups failures by runId in chronological order with coerced kind', async () => {
+    await store.insertRun(makeRun('run-1'))
+    await store.insertRun(makeRun('run-2'))
+    const t0 = new Date('2026-04-01T10:00:00.000Z')
+    const t1 = new Date('2026-04-01T10:00:01.000Z')
+    const t2 = new Date('2026-04-01T10:00:02.000Z')
+    const t3 = new Date('2026-04-01T10:00:03.000Z')
+    await store.insertFailure(makeFailure('run-1', 'b-second', t1))
+    await store.insertFailure(makeFailure('run-1', 'a-first', t0, 'timeout'))
+    await store.insertFailure(makeFailure('run-2', 'x', t2))
+    await store.insertFailure(makeFailure('run-2', 'y', t3, 'uncaught'))
+
+    const result = await store.getFailuresByRun({
+      runIds: ['run-1', 'run-2'],
+    })
+    expect(result.size).toBe(2)
+    const r1 = result.get('run-1')
+    const r2 = result.get('run-2')
+    expect(r1).toHaveLength(2)
+    expect(r2).toHaveLength(2)
+    expect(r1?.[0]?.testName).toBe('a-first')
+    expect(r1?.[0]?.failureKind).toBe('timeout')
+    expect(r1?.[1]?.testName).toBe('b-second')
+    expect(r2?.[1]?.failureKind).toBe('uncaught')
+  })
+
+  test('returns empty array for runIds with no failures', async () => {
+    await store.insertRun(makeRun('run-empty'))
+    const result = await store.getFailuresByRun({ runIds: ['run-empty'] })
+    expect(result.size).toBe(1)
+    expect(result.get('run-empty')).toEqual([])
   })
 })
 

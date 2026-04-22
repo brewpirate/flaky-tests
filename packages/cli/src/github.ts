@@ -128,7 +128,9 @@ export async function findExistingIssue(
     `https://api.github.com/search/issues?q=${query}&per_page=1`,
     { headers: githubHeaders(config.token) },
   )
-  if (!response.ok) return null
+  if (!response.ok) {
+    return null
+  }
   const data = (await response.json()) as { items?: Array<{ number: number }> }
   return data.items?.[0]?.number ?? null
 }

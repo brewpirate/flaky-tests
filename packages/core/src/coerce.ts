@@ -17,7 +17,9 @@ export function coerceFailureKind(value: unknown): FailureKind {
  * is normalized to `null`.
  */
 export function coerceRunStatus(value: unknown): RunStatus | null {
-  if (value === null || value === undefined) return null
+  if (value === null || value === undefined) {
+    return null
+  }
   const parsed = RunStatusSchema.safeParse(value)
   return parsed.success ? parsed.data : null
 }
@@ -39,7 +41,9 @@ export function coerceFailureKinds(value: unknown): FailureKind[] {
     const parsed = FailureKindSchema.safeParse(
       typeof item === 'string' ? item.trim() : item,
     )
-    if (parsed.success) out.push(parsed.data)
+    if (parsed.success) {
+      out.push(parsed.data)
+    }
   }
   return out
 }
