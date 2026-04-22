@@ -53,11 +53,13 @@ export class SupabaseStore implements IStore {
   /** Validate options, construct a supabase-js client, and resolve the runs/failures table names from `tablePrefix` (default `flaky_test`). */
   constructor(options: SupabaseStoreOptions) {
     const validated = parse(supabaseStoreOptionsSchema, options)
-    this.client = createClient(validated.url, validated.key)
+    // Validate the prefix before creating any client — a malicious prefix
+    // should short-circuit with no observable side effects.
     const prefix = validated.tablePrefix ?? 'flaky_test'
     validateTablePrefix(prefix)
     this.runsTable = `${prefix}_runs`
     this.failuresTable = `${prefix}_failures`
+    this.client = createClient(validated.url, validated.key)
   }
 
   /**
