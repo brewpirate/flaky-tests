@@ -8,6 +8,11 @@ bun.lockb
 .local/
 .playwright-mcp/
 
+# Ephemeral git worktrees created via Claude's EnterWorktree helper.
+# Tracked-out copies of the repo live here; biome/tsc would otherwise
+# treat each nested biome.json as a conflicting root config.
+.claude/worktrees/
+
 # Per-package local credentials for live integration tests.
 # Loaded via `bun --env-file=packages/store-*/.env.local test …`.
 .env.local
