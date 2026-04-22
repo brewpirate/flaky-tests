@@ -1,16 +1,21 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { SqliteStore } from './index'
 
 // Helpers ----------------------------------------------------------------
 
-function makeRun(runId: string, failedTests = 1) {
+function makeRun(runId: string, _failedTests = 1) {
   return {
     runId,
     startedAt: new Date().toISOString(),
   }
 }
 
-function makeFailure(runId: string, testName: string, failedAt: Date, kind = 'assertion' as const) {
+function makeFailure(
+  runId: string,
+  testName: string,
+  failedAt: Date,
+  kind = 'assertion' as const,
+) {
   return {
     runId,
     testFile: 'tests/example.test.ts',
@@ -59,8 +64,18 @@ describe('SqliteStore — basic operations', () => {
 })
 
 describe('SqliteStore — getNewPatterns', () => {
-  async function seedRun(runId: string, failures: Array<{ name: string; daysBack: number; kind?: 'assertion' | 'timeout' | 'uncaught' | 'unknown' }>) {
-    await store.insertRun({ runId, startedAt: daysAgo(failures[0]?.daysBack ?? 0).toISOString() })
+  async function seedRun(
+    runId: string,
+    failures: Array<{
+      name: string
+      daysBack: number
+      kind?: 'assertion' | 'timeout' | 'uncaught' | 'unknown'
+    }>,
+  ) {
+    await store.insertRun({
+      runId,
+      startedAt: daysAgo(failures[0]?.daysBack ?? 0).toISOString(),
+    })
     await store.updateRun(runId, {
       endedAt: new Date().toISOString(),
       status: 'fail',
@@ -69,7 +84,9 @@ describe('SqliteStore — getNewPatterns', () => {
       failedTests: failures.length,
     })
     for (const f of failures) {
-      await store.insertFailure(makeFailure(runId, f.name, daysAgo(f.daysBack), f.kind ?? 'assertion'))
+      await store.insertFailure(
+        makeFailure(runId, f.name, daysAgo(f.daysBack), f.kind ?? 'assertion'),
+      )
     }
   }
 
@@ -85,9 +102,9 @@ describe('SqliteStore — getNewPatterns', () => {
     ])
     const patterns = await store.getNewPatterns({ windowDays: 7, threshold: 2 })
     expect(patterns).toHaveLength(1)
-    expect(patterns[0]!.testName).toBe('auth > login')
-    expect(patterns[0]!.recentFails).toBe(2)
-    expect(patterns[0]!.priorFails).toBe(0)
+    expect(patterns[0]?.testName).toBe('auth > login')
+    expect(patterns[0]?.recentFails).toBe(2)
+    expect(patterns[0]?.priorFails).toBe(0)
   })
 
   test('does not flag a test below threshold', async () => {
@@ -98,8 +115,8 @@ describe('SqliteStore — getNewPatterns', () => {
 
   test('does not flag a test that also failed in the prior window', async () => {
     await seedRun('run-a', [
-      { name: 'auth > login', daysBack: 1 },  // current window
-      { name: 'auth > login', daysBack: 2 },  // current window
+      { name: 'auth > login', daysBack: 1 }, // current window
+      { name: 'auth > login', daysBack: 2 }, // current window
       { name: 'auth > login', daysBack: 10 }, // prior window (7-14 days ago)
     ])
     const patterns = await store.getNewPatterns({ windowDays: 7, threshold: 2 })
@@ -125,10 +142,10 @@ describe('SqliteStore — getNewPatterns', () => {
     ])
     const patterns = await store.getNewPatterns({ windowDays: 7, threshold: 2 })
     expect(patterns).toHaveLength(2)
-    expect(patterns[0]!.testName).toBe('test-a')
-    expect(patterns[0]!.recentFails).toBe(3)
-    expect(patterns[1]!.testName).toBe('test-b')
-    expect(patterns[1]!.recentFails).toBe(2)
+    expect(patterns[0]?.testName).toBe('test-a')
+    expect(patterns[0]?.recentFails).toBe(3)
+    expect(patterns[1]?.testName).toBe('test-b')
+    expect(patterns[1]?.recentFails).toBe(2)
   })
 
   test('respects custom threshold', async () => {
@@ -147,24 +164,59 @@ describe('SqliteStore — getNewPatterns', () => {
       { name: 'flaky', daysBack: 2, kind: 'timeout' },
     ])
     const patterns = await store.getNewPatterns({ threshold: 2 })
-    expect(patterns[0]!.failureKinds.sort()).toEqual(['assertion', 'timeout'])
+    expect(patterns[0]?.failureKinds.sort()).toEqual(['assertion', 'timeout'])
   })
 
   test('includes lastErrorMessage from the most recent failure in the current window', async () => {
     await store.insertRun({ runId: 'r1', startedAt: daysAgo(2).toISOString() })
-    await store.updateRun('r1', { endedAt: new Date().toISOString(), status: 'fail', totalTests: 2, passedTests: 0, failedTests: 2 })
-    await store.insertFailure({ runId: 'r1', testFile: 'f.test.ts', testName: 'flaky', failureKind: 'assertion', errorMessage: 'older error', errorStack: null, failedAt: daysAgo(2).toISOString() })
-    await store.insertFailure({ runId: 'r1', testFile: 'f.test.ts', testName: 'flaky', failureKind: 'assertion', errorMessage: 'newer error', errorStack: null, failedAt: daysAgo(1).toISOString() })
+    await store.updateRun('r1', {
+      endedAt: new Date().toISOString(),
+      status: 'fail',
+      totalTests: 2,
+      passedTests: 0,
+      failedTests: 2,
+    })
+    await store.insertFailure({
+      runId: 'r1',
+      testFile: 'f.test.ts',
+      testName: 'flaky',
+      failureKind: 'assertion',
+      errorMessage: 'older error',
+      errorStack: null,
+      failedAt: daysAgo(2).toISOString(),
+    })
+    await store.insertFailure({
+      runId: 'r1',
+      testFile: 'f.test.ts',
+      testName: 'flaky',
+      failureKind: 'assertion',
+      errorMessage: 'newer error',
+      errorStack: null,
+      failedAt: daysAgo(1).toISOString(),
+    })
 
     const patterns = await store.getNewPatterns({ threshold: 2 })
-    expect(patterns[0]!.lastErrorMessage).toBe('newer error')
+    expect(patterns[0]?.lastErrorMessage).toBe('newer error')
   })
 
   test('excludes runs where failed_tests >= 10 (whole-suite crash, not flakiness)', async () => {
-    await store.insertRun({ runId: 'r-crash', startedAt: daysAgo(1).toISOString() })
-    await store.updateRun('r-crash', { endedAt: new Date().toISOString(), status: 'fail', totalTests: 50, passedTests: 0, failedTests: 50 })
-    await store.insertFailure(makeFailure('r-crash', 'auth > login', daysAgo(1)))
-    await store.insertFailure(makeFailure('r-crash', 'auth > login', daysAgo(2)))
+    await store.insertRun({
+      runId: 'r-crash',
+      startedAt: daysAgo(1).toISOString(),
+    })
+    await store.updateRun('r-crash', {
+      endedAt: new Date().toISOString(),
+      status: 'fail',
+      totalTests: 50,
+      passedTests: 0,
+      failedTests: 50,
+    })
+    await store.insertFailure(
+      makeFailure('r-crash', 'auth > login', daysAgo(1)),
+    )
+    await store.insertFailure(
+      makeFailure('r-crash', 'auth > login', daysAgo(2)),
+    )
 
     const patterns = await store.getNewPatterns({ threshold: 2 })
     expect(patterns).toHaveLength(0)
@@ -174,21 +226,39 @@ describe('SqliteStore — getNewPatterns', () => {
 describe('SqliteStore — reconcileRun', () => {
   test('overrides status from pass to fail when exit code is non-zero', async () => {
     await store.insertRun({ runId: 'r1', startedAt: new Date().toISOString() })
-    await store.updateRun('r1', { endedAt: new Date().toISOString(), status: 'pass', totalTests: 5, passedTests: 5, failedTests: 0 })
+    await store.updateRun('r1', {
+      endedAt: new Date().toISOString(),
+      status: 'pass',
+      totalTests: 5,
+      passedTests: 5,
+      failedTests: 0,
+    })
 
     store.reconcileRun('r1')
 
-    const row = store.getDb().query('SELECT status FROM runs WHERE run_id = ?').get('r1') as { status: string }
+    const row = store
+      .getDb()
+      .query('SELECT status FROM runs WHERE run_id = ?')
+      .get('r1') as { status: string }
     expect(row.status).toBe('fail')
   })
 
   test('does nothing when status is already fail', async () => {
     await store.insertRun({ runId: 'r1', startedAt: new Date().toISOString() })
-    await store.updateRun('r1', { endedAt: new Date().toISOString(), status: 'fail', totalTests: 5, passedTests: 4, failedTests: 1 })
+    await store.updateRun('r1', {
+      endedAt: new Date().toISOString(),
+      status: 'fail',
+      totalTests: 5,
+      passedTests: 4,
+      failedTests: 1,
+    })
 
     store.reconcileRun('r1')
 
-    const row = store.getDb().query('SELECT status FROM runs WHERE run_id = ?').get('r1') as { status: string }
+    const row = store
+      .getDb()
+      .query('SELECT status FROM runs WHERE run_id = ?')
+      .get('r1') as { status: string }
     expect(row.status).toBe('fail')
   })
 

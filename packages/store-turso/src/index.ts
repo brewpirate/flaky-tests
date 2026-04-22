@@ -1,8 +1,9 @@
-import { createClient } from '@libsql/client'
-import type { Client, InArgs } from '@libsql/client'
 import type {
   FlakyPattern,
+  GetFailureKindBreakdownOptions,
+  GetHotFilesOptions,
   GetNewPatternsOptions,
+  GetRecentRunsOptions,
   HotFile,
   InsertFailureInput,
   InsertRunInput,
@@ -11,8 +12,32 @@ import type {
   RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
-import { coerceFailureKind, coerceFailureKinds, coerceRunStatus } from '@flaky-tests/core'
+import {
+  coerceFailureKind,
+  coerceFailureKinds,
+  coerceRunStatus,
+  GetFailureKindBreakdownOptionsSchema,
+  GetHotFilesOptionsSchema,
+  GetNewPatternsOptionsSchema,
+  GetRecentRunsOptionsSchema,
+  InsertFailureInputSchema,
+  InsertRunInputSchema,
+  UpdateRunInputSchema,
+  validateInput,
+} from '@flaky-tests/core'
+import type { Client, InArgs } from '@libsql/client'
+import { createClient } from '@libsql/client'
 
+function gitDirtyToSqlite(gitDirty: boolean | null | undefined): 0 | 1 | null {
+  if (gitDirty == null) return null
+  return gitDirty ? 1 : 0
+}
+
+/**
+ * Configuration for the Turso-backed flaky-tests store. Accepts any libsql
+ * client URL so the same store works against a remote Turso database, a
+ * local libsql file, or an in-memory database for tests.
+ */
 export interface TursoStoreOptions {
   /**
    * Turso database URL.
@@ -68,13 +93,17 @@ export class TursoStore implements IStore {
   constructor(options: TursoStoreOptions) {
     this.client = createClient({
       url: options.url,
-      authToken: options.authToken,
+      ...(options.authToken !== undefined
+        ? { authToken: options.authToken }
+        : {}),
     })
   }
 
   /** Create tables if they don't exist. Call once before first use. */
   async migrate(): Promise<void> {
-    for (const stmt of SCHEMA.trim().split(';').filter((s) => s.trim())) {
+    for (const stmt of SCHEMA.trim()
+      .split(';')
+      .filter((s) => s.trim())) {
       await this.client.execute(stmt)
     }
     // Idempotent column additions for older DBs
@@ -94,7 +123,8 @@ export class TursoStore implements IStore {
   }
 
   /** Persist a new test-run row. Call before any failures are recorded. */
-  async insertRun(input: InsertRunInput): Promise<void> {
+  async insertRun(rawInput: InsertRunInput): Promise<void> {
+    const input = validateInput(InsertRunInputSchema, rawInput, 'insertRun')
     await this.client.execute({
       sql: `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
             VALUES (?, ?, ?, ?, ?, ?)`,
@@ -102,7 +132,7 @@ export class TursoStore implements IStore {
         input.runId,
         input.startedAt,
         input.gitSha ?? null,
-        input.gitDirty != null ? (input.gitDirty ? 1 : 0) : null,
+        gitDirtyToSqlite(input.gitDirty),
         input.runtimeVersion ?? null,
         input.testArgs ?? null,
       ] as InArgs,
@@ -110,7 +140,8 @@ export class TursoStore implements IStore {
   }
 
   /** Update a run with its final summary (status, counts, duration). */
-  async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+  async updateRun(runId: string, rawInput: UpdateRunInput): Promise<void> {
+    const input = validateInput(UpdateRunInputSchema, rawInput, 'updateRun')
     await this.client.execute({
       sql: `UPDATE runs
                SET ended_at             = ?,
@@ -135,7 +166,12 @@ export class TursoStore implements IStore {
   }
 
   /** Record a single test failure linked to an existing run. */
-  async insertFailure(input: InsertFailureInput): Promise<void> {
+  async insertFailure(rawInput: InsertFailureInput): Promise<void> {
+    const input = validateInput(
+      InsertFailureInputSchema,
+      rawInput,
+      'insertFailure',
+    )
     await this.client.execute({
       sql: `INSERT INTO failures
               (run_id, test_file, test_name, failure_kind,
@@ -163,7 +199,14 @@ export class TursoStore implements IStore {
    * @param options.threshold  - Minimum recent failures to qualify (default 2).
    * @returns Patterns sorted by recent failure count descending.
    */
-  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
+  async getNewPatterns(
+    rawOptions: GetNewPatternsOptions = {},
+  ): Promise<FlakyPattern[]> {
+    const options = validateInput(
+      GetNewPatternsOptionsSchema,
+      rawOptions,
+      'getNewPatterns',
+    )
     const windowDays = options.windowDays ?? 7
     const threshold = options.threshold ?? 2
     const now = Date.now()
@@ -189,7 +232,15 @@ export class TursoStore implements IStore {
             GROUP BY f.test_file, f.test_name
             HAVING recent_fails >= ? AND prior_fails = 0
             ORDER BY recent_fails DESC`,
-      args: [windowStart, windowStart, priorStart, windowStart, windowStart, priorStart, threshold] as InArgs,
+      args: [
+        windowStart,
+        windowStart,
+        priorStart,
+        windowStart,
+        windowStart,
+        priorStart,
+        threshold,
+      ] as InArgs,
     })
 
     return result.rows.map((r) => ({
@@ -198,14 +249,23 @@ export class TursoStore implements IStore {
       recentFails: Number(r.recent_fails),
       priorFails: Number(r.prior_fails),
       failureKinds: coerceFailureKinds(String(r.failure_kinds)),
-      lastErrorMessage: r.last_error_message != null ? String(r.last_error_message) : null,
-      lastErrorStack: r.last_error_stack != null ? String(r.last_error_stack) : null,
+      lastErrorMessage:
+        r.last_error_message != null ? String(r.last_error_message) : null,
+      lastErrorStack:
+        r.last_error_stack != null ? String(r.last_error_stack) : null,
       lastFailed: String(r.last_failed),
     }))
   }
 
   /** Return recent test runs, newest first. */
-  async getRecentRuns(options: { limit?: number } = {}): Promise<RecentRun[]> {
+  async getRecentRuns(
+    rawOptions: GetRecentRunsOptions = {},
+  ): Promise<RecentRun[]> {
+    const options = validateInput(
+      GetRecentRunsOptionsSchema,
+      rawOptions,
+      'getRecentRuns',
+    )
     const limit = options.limit ?? 20
     const result = await this.client.execute({
       sql: `SELECT run_id, started_at, ended_at, duration_ms, status,
@@ -225,14 +285,22 @@ export class TursoStore implements IStore {
       totalTests: r.total_tests != null ? Number(r.total_tests) : null,
       passedTests: r.passed_tests != null ? Number(r.passed_tests) : null,
       failedTests: r.failed_tests != null ? Number(r.failed_tests) : null,
-      errorsBetweenTests: r.errors_between_tests != null ? Number(r.errors_between_tests) : null,
+      errorsBetweenTests:
+        r.errors_between_tests != null ? Number(r.errors_between_tests) : null,
       gitSha: r.git_sha != null ? String(r.git_sha) : null,
       gitDirty: r.git_dirty != null ? Boolean(Number(r.git_dirty)) : null,
     }))
   }
 
   /** Breakdown of failure kinds within a time window. */
-  async getFailureKindBreakdown(options: { windowDays?: number } = {}): Promise<KindBreakdown[]> {
+  async getFailureKindBreakdown(
+    rawOptions: GetFailureKindBreakdownOptions = {},
+  ): Promise<KindBreakdown[]> {
+    const options = validateInput(
+      GetFailureKindBreakdownOptionsSchema,
+      rawOptions,
+      'getFailureKindBreakdown',
+    )
     const windowDays = options.windowDays ?? 30
     const result = await this.client.execute({
       sql: `SELECT failure_kind, COUNT(*) AS count
@@ -248,7 +316,12 @@ export class TursoStore implements IStore {
   }
 
   /** Files with the most failures in a time window. */
-  async getHotFiles(options: { windowDays?: number; limit?: number } = {}): Promise<HotFile[]> {
+  async getHotFiles(rawOptions: GetHotFilesOptions = {}): Promise<HotFile[]> {
+    const options = validateInput(
+      GetHotFilesOptionsSchema,
+      rawOptions,
+      'getHotFiles',
+    )
     const windowDays = options.windowDays ?? 30
     const limit = options.limit ?? 15
     const result = await this.client.execute({

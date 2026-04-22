@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
-import { generatePrompt } from './prompt'
+import { describe, expect, test } from 'bun:test'
 import type { FlakyPattern } from '@flaky-tests/core'
+import { copyToClipboard, generatePrompt } from './prompt'
 
 const base: FlakyPattern = {
   testFile: 'tests/auth.test.ts',
@@ -49,7 +49,10 @@ describe('generatePrompt', () => {
   })
 
   test('trims stack trace to 20 lines and appends ellipsis', () => {
-    const longStack = Array.from({ length: 30 }, (_, i) => `  at frame${i}`).join('\n')
+    const longStack = Array.from(
+      { length: 30 },
+      (_, i) => `  at frame${i}`,
+    ).join('\n')
     const p = { ...base, lastErrorStack: longStack }
     const out = generatePrompt(p)
     expect(out).toContain('...')
@@ -64,7 +67,23 @@ describe('generatePrompt', () => {
   })
 
   test('multiple failure kinds joined with comma', () => {
-    const p = { ...base, failureKinds: ['timeout', 'assertion'] }
+    const p: FlakyPattern = {
+      ...base,
+      failureKinds: ['timeout', 'assertion'],
+    }
     expect(generatePrompt(p)).toContain('timeout, assertion')
+  })
+})
+
+describe('copyToClipboard', () => {
+  test('returns a boolean without throwing', () => {
+    // Exact result depends on whether pbcopy/xclip/clip is available in the
+    // current environment — we only assert the contract.
+    const result = copyToClipboard('hello')
+    expect(typeof result).toBe('boolean')
+  })
+
+  test('handles empty string input', () => {
+    expect(() => copyToClipboard('')).not.toThrow()
   })
 })

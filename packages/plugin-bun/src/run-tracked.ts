@@ -15,9 +15,14 @@
 
 // biome-ignore-all lint/suspicious/noConsole: CLI wrapper
 
+import { debugWarn } from '@flaky-tests/core'
 import { SqliteStore } from '@flaky-tests/store-sqlite'
 
-const DB_PATH = process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
+const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'
+
+function resolveDbPath(): string {
+  return process.env.FLAKY_TESTS_DB ?? DEFAULT_DB_PATH
+}
 
 async function main(): Promise<number> {
   const runId = crypto.randomUUID()
@@ -39,20 +44,29 @@ async function main(): Promise<number> {
 }
 
 async function reconcileRun(runId: string): Promise<void> {
+  const dbPath = resolveDbPath()
   try {
-    if (!(await Bun.file(DB_PATH).exists())) {
+    if (!(await Bun.file(dbPath).exists())) {
       // DB doesn't exist — preload never ran or a different path is in use.
       return
     }
-    const store = new SqliteStore({ dbPath: DB_PATH })
+    const store = new SqliteStore({ dbPath })
     try {
       store.reconcileRun(runId)
     } finally {
       await store.close()
     }
   } catch (error) {
-    console.warn('[flaky-tests] reconcile failed:', error)
+    debugWarn('reconcile failed', error)
   }
 }
 
-process.exit(await main())
+try {
+  const exitCode = await main()
+  process.exit(exitCode)
+} catch (error) {
+  const message =
+    error instanceof Error ? (error.stack ?? error.message) : String(error)
+  console.error(`[flaky-tests] run-tracked failed:\n${message}`)
+  process.exit(1)
+}

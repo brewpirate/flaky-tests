@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "description": "SQLite store adapter for flaky-tests (Bun built-in)",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./report": "./src/report.ts"
   },
+  "types": "./src/index.ts",
   "license": "MIT",
   "dependencies": {
-    "@flaky-tests/core": "workspace:*"
+    "@flaky-tests/core": "workspace:*",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "bun-types": "latest"

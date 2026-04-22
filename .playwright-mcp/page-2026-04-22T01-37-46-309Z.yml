@@ -1,0 +1,311 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: ✗
+      - generic [ref=e6]: flaky-tests
+      - generic [ref=e7]: report
+    - generic [ref=e8]:
+      - generic [ref=e9]: "window: 7d · 4 patterns"
+      - button "Toggle theme" [ref=e10] [cursor=pointer]:
+        - img [ref=e11]
+  - generic [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]: "4"
+      - generic [ref=e16]: patterns
+      - generic [ref=e17]: Tests failing ≥2× in window
+    - generic [ref=e18]:
+      - generic [ref=e19]: "0"
+      - generic [ref=e20]: critical
+      - generic [ref=e21]: Tests with ≥10 fails
+    - generic [ref=e22]:
+      - generic [ref=e23]: "17"
+      - generic [ref=e24]: fails / 7d
+      - generic [ref=e25]: Total recent failure events
+    - generic [ref=e26]:
+      - generic [ref=e27]: "1"
+      - generic [ref=e28]: hot files
+      - generic [ref=e29]: Distinct files producing failures
+    - generic [ref=e30]:
+      - generic [ref=e31]: 31m ago
+      - generic [ref=e32]: last run
+      - generic [ref=e33]: Most recent test session
+  - navigation "Report index" [ref=e34]:
+    - heading "Patterns" [level=2] [ref=e35]
+    - list [ref=e36]:
+      - listitem [ref=e37]:
+        - link "1 auth > login accepts valid token (intermittent timeout) 6" [ref=e38] [cursor=pointer]:
+          - /url: "#pattern-1"
+          - generic [ref=e40]: "1"
+          - generic [ref=e41]: auth > login accepts valid token (intermittent timeout)
+          - generic [ref=e42]: "6"
+      - listitem [ref=e43]:
+        - link "2 api > /users returns paginated results (intermittent 500) 4" [ref=e44] [cursor=pointer]:
+          - /url: "#pattern-2"
+          - generic [ref=e46]: "2"
+          - generic [ref=e47]: api > /users returns paginated results (intermittent 500)
+          - generic [ref=e48]: "4"
+      - listitem [ref=e49]:
+        - link "3 db > upsert respects unique constraint (intermittent assertion) 4" [ref=e50] [cursor=pointer]:
+          - /url: "#pattern-3"
+          - generic [ref=e52]: "3"
+          - generic [ref=e53]: db > upsert respects unique constraint (intermittent assertion)
+          - generic [ref=e54]: "4"
+      - listitem [ref=e55]:
+        - link "4 queue > drain processes pending jobs (intermittent race) 3" [ref=e56] [cursor=pointer]:
+          - /url: "#pattern-4"
+          - generic [ref=e58]: "4"
+          - generic [ref=e59]: queue > drain processes pending jobs (intermittent race)
+          - generic [ref=e60]: "3"
+    - generic [ref=e61]:
+      - link "Kind breakdown" [ref=e62] [cursor=pointer]:
+        - /url: "#dashboard"
+      - link "Hot files" [ref=e63] [cursor=pointer]:
+        - /url: "#hot-files"
+      - link "Recent runs" [ref=e64] [cursor=pointer]:
+        - /url: "#recent-runs"
+  - main [ref=e65]:
+    - heading "Detected Patterns" [level=2] [ref=e66]
+    - article [ref=e67]:
+      - generic [ref=e68]:
+        - generic [ref=e69]:
+          - generic [ref=e70]:
+            - generic [ref=e71]: high
+            - generic [ref=e72]: "#1"
+            - heading "auth > login accepts valid token (intermittent timeout)" [level=2] [ref=e73]
+          - code [ref=e75]: …/scripts/flaky-sandbox/flaky.test.ts
+        - generic [ref=e76]:
+          - generic [ref=e77]:
+            - generic [ref=e78]: "6"
+            - generic [ref=e79]: fails / 7d
+          - generic [ref=e80]:
+            - generic [ref=e81]: 0 prior
+            - generic [ref=e82]: ·
+            - generic [ref=e83]: timeout
+      - generic [ref=e84]:
+        - generic [ref=e85]: last error
+        - code [ref=e86]: "timeout: exceeded 5000ms waiting for token validation"
+      - group [ref=e87]:
+        - generic "▶ Investigation prompt click to expand Copy" [ref=e88] [cursor=pointer]:
+          - text: ▶
+          - generic [ref=e89]: Investigation prompt
+          - generic [ref=e90]:
+            - generic [ref=e91]: click to expand
+            - button "Copy" [ref=e92]
+    - article [ref=e93]:
+      - generic [ref=e94]:
+        - generic [ref=e95]:
+          - generic [ref=e96]:
+            - generic [ref=e97]: medium
+            - generic [ref=e98]: "#2"
+            - heading "api > /users returns paginated results (intermittent 500)" [level=2] [ref=e99]
+          - code [ref=e101]: …/scripts/flaky-sandbox/flaky.test.ts
+        - generic [ref=e102]:
+          - generic [ref=e103]:
+            - generic [ref=e104]: "4"
+            - generic [ref=e105]: fails / 7d
+          - generic [ref=e106]:
+            - generic [ref=e107]: 0 prior
+            - generic [ref=e108]: ·
+            - generic [ref=e109]: uncaught
+      - generic [ref=e110]:
+        - generic [ref=e111]: last error
+        - code [ref=e112]: "Network error: ECONNRESET during /users request"
+      - group [ref=e113]:
+        - generic "▶ Investigation prompt click to expand Copy" [ref=e114] [cursor=pointer]:
+          - text: ▶
+          - generic [ref=e115]: Investigation prompt
+          - generic [ref=e116]:
+            - generic [ref=e117]: click to expand
+            - button "Copy" [ref=e118]
+    - article [ref=e119]:
+      - generic [ref=e120]:
+        - generic [ref=e121]:
+          - generic [ref=e122]:
+            - generic [ref=e123]: medium
+            - generic [ref=e124]: "#3"
+            - heading "db > upsert respects unique constraint (intermittent assertion)" [level=2] [ref=e125]
+          - code [ref=e127]: …/scripts/flaky-sandbox/flaky.test.ts
+        - generic [ref=e128]:
+          - generic [ref=e129]:
+            - generic [ref=e130]: "4"
+            - generic [ref=e131]: fails / 7d
+          - generic [ref=e132]:
+            - generic [ref=e133]: 0 prior
+            - generic [ref=e134]: ·
+            - generic [ref=e135]: assertion
+      - generic [ref=e136]:
+        - generic [ref=e137]: last error
+        - code [ref=e138]: expect(received).toBe(expected)
+      - group [ref=e139]:
+        - generic "▶ Investigation prompt click to expand Copy" [ref=e140] [cursor=pointer]:
+          - text: ▶
+          - generic [ref=e141]: Investigation prompt
+          - generic [ref=e142]:
+            - generic [ref=e143]: click to expand
+            - button "Copy" [ref=e144]
+    - article [ref=e145]:
+      - generic [ref=e146]:
+        - generic [ref=e147]:
+          - generic [ref=e148]:
+            - generic [ref=e149]: medium
+            - generic [ref=e150]: "#4"
+            - heading "queue > drain processes pending jobs (intermittent race)" [level=2] [ref=e151]
+          - code [ref=e153]: …/scripts/flaky-sandbox/flaky.test.ts
+        - generic [ref=e154]:
+          - generic [ref=e155]:
+            - generic [ref=e156]: "3"
+            - generic [ref=e157]: fails / 7d
+          - generic [ref=e158]:
+            - generic [ref=e159]: 0 prior
+            - generic [ref=e160]: ·
+            - generic [ref=e161]: assertion
+      - generic [ref=e162]:
+        - generic [ref=e163]: last error
+        - code [ref=e164]: expect(received).toBe(expected)
+      - group [ref=e165]:
+        - generic "▶ Investigation prompt click to expand Copy" [ref=e166] [cursor=pointer]:
+          - text: ▶
+          - generic [ref=e167]: Investigation prompt
+          - generic [ref=e168]:
+            - generic [ref=e169]: click to expand
+            - button "Copy" [ref=e170]
+    - generic [ref=e171]:
+      - heading "Failure Kind Breakdown" [level=2] [ref=e172]
+      - generic [ref=e173]:
+        - generic [ref=e174]:
+          - generic [ref=e175]: "7"
+          - generic [ref=e176]: assertion
+          - generic [ref=e177]: 41% of failures
+        - generic [ref=e178]:
+          - generic [ref=e179]: "6"
+          - generic [ref=e180]: timeout
+          - generic [ref=e181]: 35% of failures
+        - generic [ref=e182]:
+          - generic [ref=e183]: "4"
+          - generic [ref=e184]: uncaught
+          - generic [ref=e185]: 24% of failures
+    - generic [ref=e186]:
+      - heading "Hot Files" [level=2] [ref=e187]
+      - table [ref=e189]:
+        - rowgroup [ref=e190]:
+          - row "Fails Tests File" [ref=e191]:
+            - columnheader "Fails" [ref=e192]
+            - columnheader "Tests" [ref=e193]
+            - columnheader "File" [ref=e194]
+            - columnheader [ref=e195]
+        - rowgroup [ref=e196]:
+          - 'row "17 4 /home/daniel/work/viaanix/barf-ts/scripts/flaky-sandbox/flaky.test.ts Copy Investigate /home/daniel/work/viaanix/barf-ts/scripts/flaky-sandbox/flaky.test.ts: 17 failures across 4 distinct tests in the last 7 days" [ref=e197]':
+            - cell "17" [ref=e198]
+            - cell "4" [ref=e199]
+            - cell "/home/daniel/work/viaanix/barf-ts/scripts/flaky-sandbox/flaky.test.ts" [ref=e200]:
+              - code [ref=e201]: /home/daniel/work/viaanix/barf-ts/scripts/flaky-sandbox/flaky.test.ts
+            - 'cell "Copy Investigate /home/daniel/work/viaanix/barf-ts/scripts/flaky-sandbox/flaky.test.ts: 17 failures across 4 distinct tests in the last 7 days" [ref=e202]':
+              - button "Copy" [ref=e203] [cursor=pointer]
+              - generic [ref=e204]: "Investigate /home/daniel/work/viaanix/barf-ts/scripts/flaky-sandbox/flaky.test.ts: 17 failures across 4 distinct tests in the last 7 days"
+    - generic [ref=e205]:
+      - heading "Recent Runs" [level=2] [ref=e206]
+      - table [ref=e208]:
+        - rowgroup [ref=e209]:
+          - row "Status When Duration Total Passed Failed Errors SHA" [ref=e210]:
+            - columnheader "Status" [ref=e211]
+            - columnheader "When" [ref=e212]
+            - columnheader "Duration" [ref=e213]
+            - columnheader "Total" [ref=e214]
+            - columnheader "Passed" [ref=e215]
+            - columnheader "Failed" [ref=e216]
+            - columnheader "Errors" [ref=e217]
+            - columnheader "SHA" [ref=e218]
+        - rowgroup [ref=e219]:
+          - row "fail 31m ago 37ms 5 4 1 0 6be6a30" [ref=e220]:
+            - cell "fail" [ref=e221]:
+              - generic [ref=e222]: fail
+            - cell "31m ago" [ref=e223]
+            - cell "37ms" [ref=e224]
+            - cell "5" [ref=e225]
+            - cell "4" [ref=e226]
+            - cell "1" [ref=e227]
+            - cell "0" [ref=e228]
+            - cell "6be6a30" [ref=e229]:
+              - code [ref=e230]: 6be6a30
+          - row "fail 31m ago 37ms 5 1 4 0 6be6a30" [ref=e231]:
+            - cell "fail" [ref=e232]:
+              - generic [ref=e233]: fail
+            - cell "31m ago" [ref=e234]
+            - cell "37ms" [ref=e235]
+            - cell "5" [ref=e236]
+            - cell "1" [ref=e237]
+            - cell "4" [ref=e238]
+            - cell "0" [ref=e239]
+            - cell "6be6a30" [ref=e240]:
+              - code [ref=e241]: 6be6a30
+          - row "fail 31m ago 36ms 5 3 2 0 6be6a30" [ref=e242]:
+            - cell "fail" [ref=e243]:
+              - generic [ref=e244]: fail
+            - cell "31m ago" [ref=e245]
+            - cell "36ms" [ref=e246]
+            - cell "5" [ref=e247]
+            - cell "3" [ref=e248]
+            - cell "2" [ref=e249]
+            - cell "0" [ref=e250]
+            - cell "6be6a30" [ref=e251]:
+              - code [ref=e252]: 6be6a30
+          - row "fail 31m ago 34ms 5 3 2 0 6be6a30" [ref=e253]:
+            - cell "fail" [ref=e254]:
+              - generic [ref=e255]: fail
+            - cell "31m ago" [ref=e256]
+            - cell "34ms" [ref=e257]
+            - cell "5" [ref=e258]
+            - cell "3" [ref=e259]
+            - cell "2" [ref=e260]
+            - cell "0" [ref=e261]
+            - cell "6be6a30" [ref=e262]:
+              - code [ref=e263]: 6be6a30
+          - row "fail 31m ago 29ms 5 2 3 0 6be6a30" [ref=e264]:
+            - cell "fail" [ref=e265]:
+              - generic [ref=e266]: fail
+            - cell "31m ago" [ref=e267]
+            - cell "29ms" [ref=e268]
+            - cell "5" [ref=e269]
+            - cell "2" [ref=e270]
+            - cell "3" [ref=e271]
+            - cell "0" [ref=e272]
+            - cell "6be6a30" [ref=e273]:
+              - code [ref=e274]: 6be6a30
+          - row "fail 31m ago 30ms 5 1 4 0 6be6a30" [ref=e275]:
+            - cell "fail" [ref=e276]:
+              - generic [ref=e277]: fail
+            - cell "31m ago" [ref=e278]
+            - cell "30ms" [ref=e279]
+            - cell "5" [ref=e280]
+            - cell "1" [ref=e281]
+            - cell "4" [ref=e282]
+            - cell "0" [ref=e283]
+            - cell "6be6a30" [ref=e284]:
+              - code [ref=e285]: 6be6a30
+          - row "pass 31m ago 25ms 5 5 0 0 6be6a30" [ref=e286]:
+            - cell "pass" [ref=e287]:
+              - generic [ref=e288]: pass
+            - cell "31m ago" [ref=e289]
+            - cell "25ms" [ref=e290]
+            - cell "5" [ref=e291]
+            - cell "5" [ref=e292]
+            - cell "0" [ref=e293]
+            - cell "0" [ref=e294]
+            - cell "6be6a30" [ref=e295]:
+              - code [ref=e296]: 6be6a30
+          - row "fail 31m ago 39ms 5 4 1 0 6be6a30" [ref=e297]:
+            - cell "fail" [ref=e298]:
+              - generic [ref=e299]: fail
+            - cell "31m ago" [ref=e300]
+            - cell "39ms" [ref=e301]
+            - cell "5" [ref=e302]
+            - cell "4" [ref=e303]
+            - cell "1" [ref=e304]
+            - cell "0" [ref=e305]
+            - cell "6be6a30" [ref=e306]:
+              - code [ref=e307]: 6be6a30
+  - contentinfo [ref=e308]:
+    - text: Generated by
+    - link "flaky-tests" [ref=e309] [cursor=pointer]:
+      - /url: https://github.com/brewpirate/flaky-tests
+    - text: · click Copy on any card or use the disclosure to select-all manually

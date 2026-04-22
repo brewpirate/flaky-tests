@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "description": "Bun test preload plugin for flaky-tests",
   "type": "module",
+  "sideEffects": ["./src/preload-sqlite.ts", "./src/run-tracked.ts"],
   "exports": {
     ".": "./src/index.ts",
     "./preload": "./src/preload-sqlite.ts",
     "./run-tracked": "./src/run-tracked.ts"
   },
+  "types": "./src/index.ts",
   "license": "MIT",
   "dependencies": {
     "@flaky-tests/core": "workspace:*",

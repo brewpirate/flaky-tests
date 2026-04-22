@@ -1,8 +1,11 @@
-import { mkdirSync } from 'node:fs'
 import { Database } from 'bun:sqlite'
+import { mkdirSync } from 'node:fs'
 import type {
   FlakyPattern,
+  GetFailureKindBreakdownOptions,
+  GetHotFilesOptions,
   GetNewPatternsOptions,
+  GetRecentRunsOptions,
   HotFile,
   InsertFailureInput,
   InsertRunInput,
@@ -11,15 +14,39 @@ import type {
   RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
-import { coerceFailureKind, coerceFailureKinds, coerceRunStatus } from '@flaky-tests/core'
+import {
+  coerceFailureKind,
+  coerceFailureKinds,
+  coerceRunStatus,
+  GetFailureKindBreakdownOptionsSchema,
+  GetHotFilesOptionsSchema,
+  GetNewPatternsOptionsSchema,
+  GetRecentRunsOptionsSchema,
+  InsertFailureInputSchema,
+  InsertRunInputSchema,
+  UpdateRunInputSchema,
+  validateInput,
+} from '@flaky-tests/core'
+import { z } from 'zod'
+
+/**
+ * Zod schema for {@link SqliteStoreOptions}. Exported so callers can validate
+ * untrusted config (JSON file, env-driven options) before constructing a store.
+ */
+export const SqliteStoreOptionsSchema = z.object({
+  /** Path to the SQLite database file. Defaults to node_modules/.cache/flaky-tests/failures.db */
+  dbPath: z.string().min(1).max(4096).optional(),
+})
 
 /** Configuration for the SQLite-backed flaky-tests store. */
-export interface SqliteStoreOptions {
-  /** Path to the SQLite database file. Defaults to node_modules/.cache/flaky-tests/failures.db */
-  dbPath?: string
-}
+export type SqliteStoreOptions = z.infer<typeof SqliteStoreOptionsSchema>
 
 const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'
+
+function gitDirtyToSqlite(gitDirty: boolean | null | undefined): 0 | 1 | null {
+  if (gitDirty == null) return null
+  return gitDirty ? 1 : 0
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS runs (
@@ -78,7 +105,12 @@ export class SqliteStore implements IStore {
    * Open (or create) a SQLite store.
    * @param options - Store configuration; uses sensible defaults when omitted.
    */
-  constructor(options: SqliteStoreOptions = {}) {
+  constructor(rawOptions: SqliteStoreOptions = {}) {
+    const options = validateInput(
+      SqliteStoreOptionsSchema,
+      rawOptions,
+      'SqliteStore',
+    )
     const dbPath = options.dbPath ?? DEFAULT_DB_PATH
     ensureDirectory(dbPath)
     this.db = new Database(dbPath, { create: true })
@@ -112,7 +144,8 @@ export class SqliteStore implements IStore {
    * Record a new test run. Called at the start of a test session.
    * @param input - Run metadata including ID, timestamp, and optional git info.
    */
-  async insertRun(input: InsertRunInput): Promise<void> {
+  async insertRun(rawInput: InsertRunInput): Promise<void> {
+    const input = validateInput(InsertRunInputSchema, rawInput, 'insertRun')
     this.db.run(
       `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -120,7 +153,7 @@ export class SqliteStore implements IStore {
         input.runId,
         input.startedAt,
         input.gitSha ?? null,
-        input.gitDirty != null ? (input.gitDirty ? 1 : 0) : null,
+        gitDirtyToSqlite(input.gitDirty),
         input.runtimeVersion ?? null,
         input.testArgs ?? null,
       ],
@@ -132,7 +165,8 @@ export class SqliteStore implements IStore {
    * @param runId - The run to update.
    * @param input - Completion data for the run.
    */
-  async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+  async updateRun(runId: string, rawInput: UpdateRunInput): Promise<void> {
+    const input = validateInput(UpdateRunInputSchema, rawInput, 'updateRun')
     this.db.run(
       `UPDATE runs
           SET ended_at             = ?,
@@ -160,7 +194,12 @@ export class SqliteStore implements IStore {
    * Record an individual test failure within a run.
    * @param input - Failure details including test identity, error info, and timing.
    */
-  async insertFailure(input: InsertFailureInput): Promise<void> {
+  async insertFailure(rawInput: InsertFailureInput): Promise<void> {
+    const input = validateInput(
+      InsertFailureInputSchema,
+      rawInput,
+      'insertFailure',
+    )
     this.db.run(
       `INSERT INTO failures
          (run_id, test_file, test_name, failure_kind, error_message, error_stack, duration_ms, failed_at)
@@ -197,6 +236,7 @@ export class SqliteStore implements IStore {
         WHERE run_id = ?`,
       [runId],
     )
+    // biome-ignore lint/suspicious/noConsole: store runs inside the user's test process where no logger is available; this is a data-integrity warning users need to see.
     console.warn(
       `[flaky-tests] Run ${runId} exited with failure but preload recorded status=pass. Overriding to fail.`,
     )
@@ -212,7 +252,14 @@ export class SqliteStore implements IStore {
    * @param options - Window size and threshold overrides.
    * @returns Flaky patterns sorted by recent failure count descending.
    */
-  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
+  async getNewPatterns(
+    rawOptions: GetNewPatternsOptions = {},
+  ): Promise<FlakyPattern[]> {
+    const options = validateInput(
+      GetNewPatternsOptionsSchema,
+      rawOptions,
+      'getNewPatterns',
+    )
     const windowDays = options.windowDays ?? 7
     const threshold = options.threshold ?? 2
     const now = Date.now()
@@ -258,7 +305,15 @@ export class SqliteStore implements IStore {
         HAVING recent_fails >= ? AND prior_fails = 0
         ORDER BY recent_fails DESC`,
       )
-      .all(windowStart, windowStart, priorStart, windowStart, windowStart, priorStart, threshold)
+      .all(
+        windowStart,
+        windowStart,
+        priorStart,
+        windowStart,
+        windowStart,
+        priorStart,
+        threshold,
+      )
 
     return rows.map((r) => ({
       testFile: r.test_file,
@@ -266,62 +321,109 @@ export class SqliteStore implements IStore {
       recentFails: r.recent_fails,
       priorFails: r.prior_fails,
       failureKinds: coerceFailureKinds(r.failure_kinds),
-      lastErrorMessage: r.last_error_message_raw != null ? r.last_error_message_raw.slice(TS_LEN) : null,
-      lastErrorStack: r.last_error_stack_raw != null ? r.last_error_stack_raw.slice(TS_LEN) : null,
+      lastErrorMessage:
+        r.last_error_message_raw != null
+          ? r.last_error_message_raw.slice(TS_LEN)
+          : null,
+      lastErrorStack:
+        r.last_error_stack_raw != null
+          ? r.last_error_stack_raw.slice(TS_LEN)
+          : null,
       lastFailed: r.last_failed,
     }))
   }
 
-  async getRecentRuns(options: { limit?: number } = {}): Promise<RecentRun[]> {
+  async getRecentRuns(
+    rawOptions: GetRecentRunsOptions = {},
+  ): Promise<RecentRun[]> {
+    const options = validateInput(
+      GetRecentRunsOptionsSchema,
+      rawOptions,
+      'getRecentRuns',
+    )
     const limit = options.limit ?? 20
+    interface RunRow {
+      run_id: string
+      started_at: string
+      ended_at: string | null
+      duration_ms: number | null
+      status: string | null
+      total_tests: number | null
+      passed_tests: number | null
+      failed_tests: number | null
+      errors_between_tests: number | null
+      git_sha: string | null
+      git_dirty: number | null
+    }
     const rows = this.db
-      .query<any, [number]>(
+      .query<RunRow, [number]>(
         `SELECT run_id, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty FROM runs ORDER BY started_at DESC LIMIT ?`,
       )
       .all(limit)
 
-    return rows.map((r) => ({
-      runId: r.run_id,
-      startedAt: r.started_at,
-      endedAt: r.ended_at,
-      durationMs: r.duration_ms,
-      status: coerceRunStatus(r.status),
-      totalTests: r.total_tests,
-      passedTests: r.passed_tests,
-      failedTests: r.failed_tests,
-      errorsBetweenTests: r.errors_between_tests,
-      gitSha: r.git_sha,
-      gitDirty: r.git_dirty != null ? r.git_dirty === 1 : null,
+    return rows.map((row) => ({
+      runId: row.run_id,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      durationMs: row.duration_ms,
+      status: coerceRunStatus(row.status),
+      totalTests: row.total_tests,
+      passedTests: row.passed_tests,
+      failedTests: row.failed_tests,
+      errorsBetweenTests: row.errors_between_tests,
+      gitSha: row.git_sha,
+      gitDirty: row.git_dirty != null ? row.git_dirty === 1 : null,
     }))
   }
 
-  async getFailureKindBreakdown(options: { windowDays?: number } = {}): Promise<KindBreakdown[]> {
+  async getFailureKindBreakdown(
+    rawOptions: GetFailureKindBreakdownOptions = {},
+  ): Promise<KindBreakdown[]> {
+    const options = validateInput(
+      GetFailureKindBreakdownOptionsSchema,
+      rawOptions,
+      'getFailureKindBreakdown',
+    )
     const windowDays = options.windowDays ?? 30
+    interface KindRow {
+      failure_kind: string
+      count: number
+    }
     const rows = this.db
-      .query<any, []>(
+      .query<KindRow, []>(
         `SELECT failure_kind, COUNT(*) AS count FROM failures WHERE failed_at > datetime('now', '-${windowDays} days') GROUP BY failure_kind ORDER BY count DESC`,
       )
       .all()
 
-    return rows.map((r) => ({
-      failureKind: coerceFailureKind(r.failure_kind),
-      count: r.count,
+    return rows.map((row) => ({
+      failureKind: coerceFailureKind(row.failure_kind),
+      count: row.count,
     }))
   }
 
-  async getHotFiles(options: { windowDays?: number; limit?: number } = {}): Promise<HotFile[]> {
+  async getHotFiles(rawOptions: GetHotFilesOptions = {}): Promise<HotFile[]> {
+    const options = validateInput(
+      GetHotFilesOptionsSchema,
+      rawOptions,
+      'getHotFiles',
+    )
     const windowDays = options.windowDays ?? 30
     const limit = options.limit ?? 15
+    interface HotFileRow {
+      test_file: string
+      fails: number
+      distinct_tests: number
+    }
     const rows = this.db
-      .query<any, [number]>(
+      .query<HotFileRow, [number]>(
         `SELECT test_file, COUNT(*) AS fails, COUNT(DISTINCT test_name) AS distinct_tests FROM failures WHERE failed_at > datetime('now', '-${windowDays} days') GROUP BY test_file ORDER BY fails DESC LIMIT ?`,
       )
       .all(limit)
 
-    return rows.map((r) => ({
-      testFile: r.test_file,
-      fails: r.fails,
-      distinctTests: r.distinct_tests,
+    return rows.map((row) => ({
+      testFile: row.test_file,
+      fails: row.fails,
+      distinctTests: row.distinct_tests,
     }))
   }
 

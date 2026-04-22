@@ -19,21 +19,42 @@
  *   preload = ["./my-preload.ts"]
  */
 
-// biome-ignore-all lint/suspicious/noConsole: preload is dev tooling
-
 import * as bunTest from 'bun:test'
 import { afterAll, mock } from 'bun:test'
 import type { IStore } from '@flaky-tests/core'
-import { categorizeError, DescribeStack, extractMessage, extractStack } from '@flaky-tests/core'
+import {
+  categorizeError,
+  DescribeStack,
+  debugWarn,
+  extractMessage,
+  extractStack,
+} from '@flaky-tests/core'
 import { captureGitInfo } from './git'
 
 type TestCallback = (...args: unknown[]) => unknown | Promise<unknown>
 type TestFn = (name: string, fn: TestCallback, timeout?: number) => unknown
 type DescribeFn = (name: string, body: () => void) => unknown
 
+// Cap on stack scan for resolveTestFile — pathological stacks shouldn't
+// pin a test run while we grep every line.
+const STACK_SCAN_MAX_LINES = 200
+
+// Bounded accepted form for an externally-provided RUN_ID. Anything outside
+// this shape is rejected silently and a fresh UUID is generated instead.
+const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+// Module-level flag so a preload loaded twice does not double-register
+// process listeners or re-mock bun:test.
+let installed = false
+
+function sanitizedRunId(raw: string | undefined): string {
+  if (raw && RUN_ID_PATTERN.test(raw)) return raw
+  return crypto.randomUUID()
+}
+
 /** Fire-and-forget an async side-effect that must never throw into the caller. */
 function safeVoid(label: string, effect: () => Promise<void>): void {
-  effect().catch((error: unknown) => console.warn(`[flaky-tests] ${label}:`, error))
+  effect().catch((error: unknown) => debugWarn(label, error))
 }
 
 /**
@@ -41,11 +62,17 @@ function safeVoid(label: string, effect: () => Promise<void>): void {
  * first frame that isn't inside this package. Falls back to `'unknown'`.
  */
 function resolveTestFile(error: unknown): string {
-  if (!(error instanceof Error) || typeof error.stack !== 'string') return 'unknown'
-  for (const line of error.stack.split('\n')) {
+  if (!(error instanceof Error) || typeof error.stack !== 'string')
+    return 'unknown'
+  const lines = error.stack.split('\n')
+  const scanLimit = Math.min(lines.length, STACK_SCAN_MAX_LINES)
+  for (let i = 0; i < scanLimit; i++) {
+    const line = lines[i]
+    if (!line) continue
     const match = line.match(/\(([^)]+\.(?:ts|tsx|js|jsx|mjs|cjs)):\d+:\d+\)/)
     if (!match) continue
-    const file = match[1] ?? ''
+    const file = match[1]
+    if (!file) continue
     if (file.includes('/plugin-bun/')) continue
     return file
   }
@@ -57,16 +84,20 @@ function resolveTestFile(error: unknown): string {
  * record failures to the provided store. Registers an `afterAll` hook to
  * finalize the run with aggregate stats.
  *
+ * Idempotent: calling this twice within the same process is a no-op after
+ * the first call. Diagnostics use `debugWarn` — set `FLAKY_TESTS_DEBUG=1`
+ * to surface them; otherwise the preload is silent.
+ *
  * @param store - Storage backend implementing {@link IStore} (e.g. SQLite, Supabase).
  */
 export function createPreload(store: IStore): void {
-  // Use a run id provided by run-tracked (so it can reconcile the row post-exit)
-  // or generate a fresh one.
-  const providedRunId = process.env.FLAKY_TESTS_RUN_ID
-  const runId =
-    providedRunId !== undefined && providedRunId.length > 0
-      ? providedRunId
-      : crypto.randomUUID()
+  if (installed) {
+    debugWarn('createPreload called twice; ignoring second call')
+    return
+  }
+  installed = true
+
+  const runId = sanitizedRunId(process.env.FLAKY_TESTS_RUN_ID)
   const startedAt = new Date().toISOString()
   const startPerf = performance.now()
   const git = captureGitInfo()
@@ -155,7 +186,11 @@ export function createPreload(store: IStore): void {
     }
     return new Proxy(originalTest, {
       apply: (_t, _th, args) =>
-        callWrapped(args[0] as string, args[1] as TestCallback, args[2] as number | undefined),
+        callWrapped(
+          args[0] as string,
+          args[1] as TestCallback,
+          args[2] as number | undefined,
+        ),
       // Forward property access (.each, .skip, ...) to the original.
       // Bun's sub-APIs have strict `this` validation — bind to the real target.
       get: (target, prop) => {
@@ -192,13 +227,13 @@ export function createPreload(store: IStore): void {
       describe: wrapDescribe(bunTest.describe as unknown as DescribeFn),
     }))
   } catch (error) {
-    console.warn('[flaky-tests] monkey-patch bun:test failed:', error)
+    debugWarn('monkey-patch bun:test failed', error)
   }
 
   afterAll(async () => {
     const endedAt = new Date().toISOString()
     const durationMs = Math.round(performance.now() - startPerf)
-    const passedTests = testsRun - testsFailed
+    const passedTests = Math.max(0, testsRun - testsFailed)
     const status: 'pass' | 'fail' =
       testsFailed > 0 || errorsBetweenTests > 0 ? 'fail' : 'pass'
 
@@ -212,10 +247,10 @@ export function createPreload(store: IStore): void {
         failedTests: testsFailed,
         errorsBetweenTests,
       })
-      .catch((e: unknown) => console.warn('[flaky-tests] updateRun failed:', e))
+      .catch((error: unknown) => debugWarn('updateRun failed', error))
 
     await store
       .close()
-      .catch((e: unknown) => console.warn('[flaky-tests] close failed:', e))
+      .catch((error: unknown) => debugWarn('close failed', error))
   })
 }

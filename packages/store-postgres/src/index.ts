@@ -1,7 +1,9 @@
-import postgres from 'postgres'
 import type {
   FlakyPattern,
+  GetFailureKindBreakdownOptions,
+  GetHotFilesOptions,
   GetNewPatternsOptions,
+  GetRecentRunsOptions,
   HotFile,
   InsertFailureInput,
   InsertRunInput,
@@ -10,23 +12,55 @@ import type {
   RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
-import { coerceFailureKind, coerceFailureKinds, coerceRunStatus } from '@flaky-tests/core'
+import {
+  coerceFailureKind,
+  coerceFailureKinds,
+  coerceRunStatus,
+  GetFailureKindBreakdownOptionsSchema,
+  GetHotFilesOptionsSchema,
+  GetNewPatternsOptionsSchema,
+  GetRecentRunsOptionsSchema,
+  InsertFailureInputSchema,
+  InsertRunInputSchema,
+  UpdateRunInputSchema,
+  validateInput,
+} from '@flaky-tests/core'
+import postgres from 'postgres'
+import { z } from 'zod'
 
-export interface PostgresStoreOptions {
+/**
+ * Zod schema for {@link PostgresStoreOptions}. Either `connectionString` or
+ * the discrete host/port/database fields may be provided; when both are
+ * present `connectionString` wins. Validates SSL mode against the four
+ * settings accepted by the `postgres` package.
+ */
+export const PostgresStoreOptionsSchema = z.object({
   /** Full connection string, e.g. postgres://user:pass@host:5432/db */
-  connectionString?: string
-  host?: string
-  port?: number
-  database?: string
-  username?: string
-  password?: string
-  ssl?: boolean | 'require' | 'prefer' | 'allow'
+  connectionString: z.string().min(1).max(4096).optional(),
+  host: z.string().min(1).max(255).optional(),
+  port: z.number().int().min(1).max(65_535).optional(),
+  database: z.string().min(1).max(128).optional(),
+  username: z.string().min(1).max(128).optional(),
+  password: z.string().max(1024).optional(),
+  ssl: z
+    .union([z.boolean(), z.enum(['require', 'prefer', 'allow'])])
+    .optional(),
   /**
    * Table name prefix. Defaults to `flaky_test`, producing tables
    * `flaky_test_runs` and `flaky_test_failures`.
    */
-  tablePrefix?: string
-}
+  tablePrefix: z
+    .string()
+    .regex(
+      /^[a-zA-Z_][a-zA-Z0-9_]*$/,
+      'tablePrefix must be a valid SQL identifier',
+    )
+    .max(32)
+    .optional(),
+})
+
+/** Runtime-validated Postgres connection options. See {@link PostgresStoreOptionsSchema}. */
+export type PostgresStoreOptions = z.infer<typeof PostgresStoreOptionsSchema>
 
 /**
  * PostgreSQL-backed implementation of the flaky-tests store.
@@ -38,7 +72,12 @@ export class PostgresStore implements IStore {
   private runsTable: string
   private failuresTable: string
 
-  constructor(options: PostgresStoreOptions = {}) {
+  constructor(rawOptions: PostgresStoreOptions = {}) {
+    const options = validateInput(
+      PostgresStoreOptionsSchema,
+      rawOptions,
+      'PostgresStore',
+    )
     const prefix = options.tablePrefix ?? 'flaky_test'
     this.runsTable = `${prefix}_runs`
     this.failuresTable = `${prefix}_failures`
@@ -49,16 +88,23 @@ export class PostgresStore implements IStore {
       this.sql = postgres({
         host: options.host ?? 'localhost',
         port: options.port ?? 5432,
-        database: options.database,
-        username: options.username,
-        password: options.password,
-        ssl: options.ssl,
+        ...(options.database !== undefined
+          ? { database: options.database }
+          : {}),
+        ...(options.username !== undefined
+          ? { username: options.username }
+          : {}),
+        ...(options.password !== undefined
+          ? { password: options.password }
+          : {}),
+        ...(options.ssl !== undefined ? { ssl: options.ssl } : {}),
       })
     }
   }
 
   /** Insert a new test run record. Must be called before any failures reference this run. */
-  async insertRun(input: InsertRunInput): Promise<void> {
+  async insertRun(rawInput: InsertRunInput): Promise<void> {
+    const input = validateInput(InsertRunInputSchema, rawInput, 'insertRun')
     const runs = this.runsTable
     await this.sql`
       INSERT INTO ${this.sql(runs)}
@@ -71,7 +117,8 @@ export class PostgresStore implements IStore {
   }
 
   /** Update a run with final results (duration, status, test counts) after it completes. */
-  async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+  async updateRun(runId: string, rawInput: UpdateRunInput): Promise<void> {
+    const input = validateInput(UpdateRunInputSchema, rawInput, 'updateRun')
     const runs = this.runsTable
     await this.sql`
       UPDATE ${this.sql(runs)} SET
@@ -87,7 +134,12 @@ export class PostgresStore implements IStore {
   }
 
   /** Record a single test failure associated with an existing run. */
-  async insertFailure(input: InsertFailureInput): Promise<void> {
+  async insertFailure(rawInput: InsertFailureInput): Promise<void> {
+    const input = validateInput(
+      InsertFailureInputSchema,
+      rawInput,
+      'insertFailure',
+    )
     const failures = this.failuresTable
     await this.sql`
       INSERT INTO ${this.sql(failures)}
@@ -107,7 +159,14 @@ export class PostgresStore implements IStore {
    * Returns tests that failed >= `threshold` times in the recent window but zero times
    * in the prior window, filtering out runs with 10+ failures (likely infrastructure issues).
    */
-  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
+  async getNewPatterns(
+    rawOptions: GetNewPatternsOptions = {},
+  ): Promise<FlakyPattern[]> {
+    const options = validateInput(
+      GetNewPatternsOptionsSchema,
+      rawOptions,
+      'getNewPatterns',
+    )
     const windowDays = options.windowDays ?? 7
     const threshold = options.threshold ?? 2
     const now = Date.now()
@@ -116,16 +175,18 @@ export class PostgresStore implements IStore {
     const runs = this.runsTable
     const failures = this.failuresTable
 
-    const rows = await this.sql<Array<{
-      test_file: string
-      test_name: string
-      recent_fails: string
-      prior_fails: string
-      failure_kinds: string[]
-      last_error_message: string | null
-      last_error_stack: string | null
-      last_failed: Date
-    }>>`
+    const rows = await this.sql<
+      Array<{
+        test_file: string
+        test_name: string
+        recent_fails: string
+        prior_fails: string
+        failure_kinds: string[]
+        last_error_message: string | null
+        last_error_stack: string | null
+        last_failed: Date
+      }>
+    >`
       SELECT
         f.test_file,
         f.test_name,
@@ -159,23 +220,32 @@ export class PostgresStore implements IStore {
   }
 
   /** Return the most recent test runs, ordered by start time descending. */
-  async getRecentRuns(options: { limit?: number } = {}): Promise<RecentRun[]> {
+  async getRecentRuns(
+    rawOptions: GetRecentRunsOptions = {},
+  ): Promise<RecentRun[]> {
+    const options = validateInput(
+      GetRecentRunsOptionsSchema,
+      rawOptions,
+      'getRecentRuns',
+    )
     const limit = options.limit ?? 20
     const runs = this.runsTable
 
-    const rows = await this.sql<Array<{
-      run_id: string
-      started_at: string
-      ended_at: string | null
-      duration_ms: number | null
-      status: string | null
-      total_tests: number | null
-      passed_tests: number | null
-      failed_tests: number | null
-      errors_between_tests: number | null
-      git_sha: string | null
-      git_dirty: boolean | null
-    }>>`
+    const rows = await this.sql<
+      Array<{
+        run_id: string
+        started_at: string
+        ended_at: string | null
+        duration_ms: number | null
+        status: string | null
+        total_tests: number | null
+        passed_tests: number | null
+        failed_tests: number | null
+        errors_between_tests: number | null
+        git_sha: string | null
+        git_dirty: boolean | null
+      }>
+    >`
       SELECT run_id, started_at, ended_at, duration_ms, status,
              total_tests, passed_tests, failed_tests, errors_between_tests,
              git_sha, git_dirty
@@ -193,21 +263,31 @@ export class PostgresStore implements IStore {
       totalTests: r.total_tests != null ? Number(r.total_tests) : null,
       passedTests: r.passed_tests != null ? Number(r.passed_tests) : null,
       failedTests: r.failed_tests != null ? Number(r.failed_tests) : null,
-      errorsBetweenTests: r.errors_between_tests != null ? Number(r.errors_between_tests) : null,
+      errorsBetweenTests:
+        r.errors_between_tests != null ? Number(r.errors_between_tests) : null,
       gitSha: r.git_sha,
       gitDirty: r.git_dirty != null ? Boolean(r.git_dirty) : null,
     }))
   }
 
   /** Return failure counts grouped by failure_kind within a time window. */
-  async getFailureKindBreakdown(options: { windowDays?: number } = {}): Promise<KindBreakdown[]> {
+  async getFailureKindBreakdown(
+    rawOptions: GetFailureKindBreakdownOptions = {},
+  ): Promise<KindBreakdown[]> {
+    const options = validateInput(
+      GetFailureKindBreakdownOptionsSchema,
+      rawOptions,
+      'getFailureKindBreakdown',
+    )
     const days = options.windowDays ?? 30
     const failures = this.failuresTable
 
-    const rows = await this.sql<Array<{
-      failure_kind: string
-      count: string
-    }>>`
+    const rows = await this.sql<
+      Array<{
+        failure_kind: string
+        count: string
+      }>
+    >`
       SELECT failure_kind, COUNT(*) AS count
       FROM ${this.sql(failures)}
       WHERE failed_at > NOW() - ${`${days} days`}::interval
@@ -222,16 +302,23 @@ export class PostgresStore implements IStore {
   }
 
   /** Return the test files with the most failures within a time window. */
-  async getHotFiles(options: { windowDays?: number; limit?: number } = {}): Promise<HotFile[]> {
+  async getHotFiles(rawOptions: GetHotFilesOptions = {}): Promise<HotFile[]> {
+    const options = validateInput(
+      GetHotFilesOptionsSchema,
+      rawOptions,
+      'getHotFiles',
+    )
     const days = options.windowDays ?? 30
     const limit = options.limit ?? 15
     const failures = this.failuresTable
 
-    const rows = await this.sql<Array<{
-      test_file: string
-      fails: string
-      distinct_tests: string
-    }>>`
+    const rows = await this.sql<
+      Array<{
+        test_file: string
+        fails: string
+        distinct_tests: string
+      }>
+    >`
       SELECT test_file,
              COUNT(*) AS fails,
              COUNT(DISTINCT test_name) AS distinct_tests

@@ -1,8 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
   FlakyPattern,
+  GetFailureKindBreakdownOptions,
+  GetHotFilesOptions,
   GetNewPatternsOptions,
+  GetRecentRunsOptions,
   HotFile,
   InsertFailureInput,
   InsertRunInput,
@@ -11,19 +12,49 @@ import type {
   RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
-import { coerceFailureKind, coerceFailureKinds, coerceRunStatus } from '@flaky-tests/core'
+import {
+  coerceFailureKind,
+  coerceFailureKinds,
+  coerceRunStatus,
+  GetFailureKindBreakdownOptionsSchema,
+  GetHotFilesOptionsSchema,
+  GetNewPatternsOptionsSchema,
+  GetRecentRunsOptionsSchema,
+  InsertFailureInputSchema,
+  InsertRunInputSchema,
+  UpdateRunInputSchema,
+  validateInput,
+} from '@flaky-tests/core'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 
-export interface SupabaseStoreOptions {
+/**
+ * Zod schema for {@link SupabaseStoreOptions}. `url` must be a valid HTTP(S)
+ * URL (the Supabase project endpoint); `key` is the anon or service-role
+ * token and is bounded to a sane length to catch obvious misconfigs.
+ */
+export const SupabaseStoreOptionsSchema = z.object({
   /** Supabase project URL */
-  url: string
+  url: z.string().url().max(2048),
   /** Supabase anon or service role key */
-  key: string
+  key: z.string().min(1).max(4096),
   /**
    * Table name prefix. Defaults to `flaky_test`, producing tables
    * `flaky_test_runs` and `flaky_test_failures`.
    */
-  tablePrefix?: string
-}
+  tablePrefix: z
+    .string()
+    .regex(
+      /^[a-zA-Z_][a-zA-Z0-9_]*$/,
+      'tablePrefix must be a valid SQL identifier',
+    )
+    .max(32)
+    .optional(),
+})
+
+/** Runtime-validated Supabase connection options. See {@link SupabaseStoreOptionsSchema}. */
+export type SupabaseStoreOptions = z.infer<typeof SupabaseStoreOptionsSchema>
 
 /**
  * Supabase-backed implementation of the {@link IStore} interface.
@@ -34,7 +65,12 @@ export class SupabaseStore implements IStore {
   private runsTable: string
   private failuresTable: string
 
-  constructor(options: SupabaseStoreOptions) {
+  constructor(rawOptions: SupabaseStoreOptions) {
+    const options = validateInput(
+      SupabaseStoreOptionsSchema,
+      rawOptions,
+      'SupabaseStore',
+    )
     this.client = createClient(options.url, options.key)
     const prefix = options.tablePrefix ?? 'flaky_test'
     this.runsTable = `${prefix}_runs`
@@ -42,7 +78,8 @@ export class SupabaseStore implements IStore {
   }
 
   /** Insert a new test run record. Throws on Supabase errors. */
-  async insertRun(input: InsertRunInput): Promise<void> {
+  async insertRun(rawInput: InsertRunInput): Promise<void> {
+    const input = validateInput(InsertRunInputSchema, rawInput, 'insertRun')
     const { error } = await this.client.from(this.runsTable).insert({
       run_id: input.runId,
       started_at: input.startedAt,
@@ -51,7 +88,10 @@ export class SupabaseStore implements IStore {
       runtime_version: input.runtimeVersion ?? null,
       test_args: input.testArgs ?? null,
     })
-    if (error) throw new Error(`[flaky-tests/store-supabase] insertRun: ${error.message}`)
+    if (error)
+      throw new Error(
+        `[flaky-tests/store-supabase] insertRun: ${error.message}`,
+      )
   }
 
   /**
@@ -59,7 +99,8 @@ export class SupabaseStore implements IStore {
    * @param runId - The run to update (matched via `run_id` column).
    * @param input - Fields to set (nulls are written explicitly).
    */
-  async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+  async updateRun(runId: string, rawInput: UpdateRunInput): Promise<void> {
+    const input = validateInput(UpdateRunInputSchema, rawInput, 'updateRun')
     const { error } = await this.client
       .from(this.runsTable)
       .update({
@@ -72,11 +113,19 @@ export class SupabaseStore implements IStore {
         errors_between_tests: input.errorsBetweenTests ?? null,
       })
       .eq('run_id', runId)
-    if (error) throw new Error(`[flaky-tests/store-supabase] updateRun: ${error.message}`)
+    if (error)
+      throw new Error(
+        `[flaky-tests/store-supabase] updateRun: ${error.message}`,
+      )
   }
 
   /** Record a single test failure. `durationMs` is rounded to the nearest integer. */
-  async insertFailure(input: InsertFailureInput): Promise<void> {
+  async insertFailure(rawInput: InsertFailureInput): Promise<void> {
+    const input = validateInput(
+      InsertFailureInputSchema,
+      rawInput,
+      'insertFailure',
+    )
     const { error } = await this.client.from(this.failuresTable).insert({
       run_id: input.runId,
       test_file: input.testFile,
@@ -84,10 +133,14 @@ export class SupabaseStore implements IStore {
       failure_kind: input.failureKind,
       error_message: input.errorMessage ?? null,
       error_stack: input.errorStack ?? null,
-      duration_ms: input.durationMs != null ? Math.round(input.durationMs) : null,
+      duration_ms:
+        input.durationMs != null ? Math.round(input.durationMs) : null,
       failed_at: input.failedAt,
     })
-    if (error) throw new Error(`[flaky-tests/store-supabase] insertFailure: ${error.message}`)
+    if (error)
+      throw new Error(
+        `[flaky-tests/store-supabase] insertFailure: ${error.message}`,
+      )
   }
 
   /**
@@ -96,7 +149,14 @@ export class SupabaseStore implements IStore {
    * prior window, sorted by failure count descending. Only considers runs with
    * fewer than 10 total failures and a non-null `ended_at`.
    */
-  async getNewPatterns(options: GetNewPatternsOptions = {}): Promise<FlakyPattern[]> {
+  async getNewPatterns(
+    rawOptions: GetNewPatternsOptions = {},
+  ): Promise<FlakyPattern[]> {
+    const options = validateInput(
+      GetNewPatternsOptionsSchema,
+      rawOptions,
+      'getNewPatterns',
+    )
     const windowDays = options.windowDays ?? 7
     const threshold = options.threshold ?? 2
     const now = Date.now()
@@ -112,20 +172,64 @@ export class SupabaseStore implements IStore {
       .lt(`${this.runsTable}.failed_tests`, 10)
       .not(`${this.runsTable}.ended_at`, 'is', null)
 
-    if (error) throw new Error(`[flaky-tests/store-supabase] getNewPatterns: ${error.message}`)
+    if (error)
+      throw new Error(
+        `[flaky-tests/store-supabase] getNewPatterns: ${error.message}`,
+      )
 
-    type Row = { test_file: string; test_name: string; failure_kind: string; error_message: string | null; error_stack: string | null; failed_at: string }
-    const rows = (data ?? []) as Row[]
+    interface Row {
+      test_file: string
+      test_name: string
+      failure_kind: string
+      error_message: string | null
+      error_stack: string | null
+      failed_at: string
+    }
+    function isRow(value: unknown): value is Row {
+      if (value === null || typeof value !== 'object') return false
+      const candidate = value as Record<string, unknown>
+      return (
+        typeof candidate.test_file === 'string' &&
+        typeof candidate.test_name === 'string' &&
+        typeof candidate.failure_kind === 'string' &&
+        typeof candidate.failed_at === 'string'
+      )
+    }
+    const rows: Row[] = Array.isArray(data)
+      ? (data as unknown[]).filter(isRow)
+      : []
 
     // Group and compute counts per test
-    const map = new Map<string, { testFile: string; testName: string; recentFails: number; priorFails: number; kinds: Set<string>; lastMsg: string | null; lastStack: string | null; lastFailed: string }>()
+    const map = new Map<
+      string,
+      {
+        testFile: string
+        testName: string
+        recentFails: number
+        priorFails: number
+        kinds: Set<string>
+        lastMsg: string | null
+        lastStack: string | null
+        lastFailed: string
+      }
+    >()
 
     for (const row of rows) {
       const key = `${row.test_file}::${row.test_name}`
-      if (!map.has(key)) {
-        map.set(key, { testFile: row.test_file, testName: row.test_name, recentFails: 0, priorFails: 0, kinds: new Set(), lastMsg: null, lastStack: null, lastFailed: row.failed_at })
+      let entry = map.get(key)
+      if (entry === undefined) {
+        entry = {
+          testFile: row.test_file,
+          testName: row.test_name,
+          recentFails: 0,
+          priorFails: 0,
+          kinds: new Set(),
+          lastMsg: null,
+          lastStack: null,
+          lastFailed: row.failed_at,
+        }
+        map.set(key, entry)
       }
-      const entry = map.get(key)!
       if (row.failed_at > windowStart) {
         entry.recentFails++
         entry.kinds.add(row.failure_kind)
@@ -154,15 +258,27 @@ export class SupabaseStore implements IStore {
       }))
   }
 
-  async getRecentRuns(options: { limit?: number } = {}): Promise<RecentRun[]> {
+  async getRecentRuns(
+    rawOptions: GetRecentRunsOptions = {},
+  ): Promise<RecentRun[]> {
+    const options = validateInput(
+      GetRecentRunsOptionsSchema,
+      rawOptions,
+      'getRecentRuns',
+    )
     const limit = options.limit ?? 20
     const { data, error } = await this.client
       .from(this.runsTable)
-      .select('run_id, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty')
+      .select(
+        'run_id, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty',
+      )
       .order('started_at', { ascending: false })
       .limit(limit)
 
-    if (error) throw new Error(`[flaky-tests/store-supabase] getRecentRuns: ${error.message}`)
+    if (error)
+      throw new Error(
+        `[flaky-tests/store-supabase] getRecentRuns: ${error.message}`,
+      )
 
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
       runId: row.run_id as string,
@@ -179,16 +295,28 @@ export class SupabaseStore implements IStore {
     }))
   }
 
-  async getFailureKindBreakdown(options: { windowDays?: number } = {}): Promise<KindBreakdown[]> {
+  async getFailureKindBreakdown(
+    rawOptions: GetFailureKindBreakdownOptions = {},
+  ): Promise<KindBreakdown[]> {
+    const options = validateInput(
+      GetFailureKindBreakdownOptionsSchema,
+      rawOptions,
+      'getFailureKindBreakdown',
+    )
     const windowDays = options.windowDays ?? 30
-    const windowStart = new Date(Date.now() - windowDays * 86400000).toISOString()
+    const windowStart = new Date(
+      Date.now() - windowDays * 86400000,
+    ).toISOString()
 
     const { data, error } = await this.client
       .from(this.failuresTable)
       .select('failure_kind')
       .gt('failed_at', windowStart)
 
-    if (error) throw new Error(`[flaky-tests/store-supabase] getFailureKindBreakdown: ${error.message}`)
+    if (error)
+      throw new Error(
+        `[flaky-tests/store-supabase] getFailureKindBreakdown: ${error.message}`,
+      )
 
     const counts = new Map<string, number>()
     for (const row of (data ?? []) as Array<{ failure_kind: string }>) {
@@ -196,34 +324,55 @@ export class SupabaseStore implements IStore {
     }
 
     return [...counts.entries()]
-      .map(([failureKind, count]) => ({ failureKind: coerceFailureKind(failureKind), count }))
+      .map(([failureKind, count]) => ({
+        failureKind: coerceFailureKind(failureKind),
+        count,
+      }))
       .sort((a, b) => b.count - a.count)
   }
 
-  async getHotFiles(options: { windowDays?: number; limit?: number } = {}): Promise<HotFile[]> {
+  async getHotFiles(rawOptions: GetHotFilesOptions = {}): Promise<HotFile[]> {
+    const options = validateInput(
+      GetHotFilesOptionsSchema,
+      rawOptions,
+      'getHotFiles',
+    )
     const windowDays = options.windowDays ?? 30
     const limit = options.limit ?? 15
-    const windowStart = new Date(Date.now() - windowDays * 86400000).toISOString()
+    const windowStart = new Date(
+      Date.now() - windowDays * 86400000,
+    ).toISOString()
 
     const { data, error } = await this.client
       .from(this.failuresTable)
       .select('test_file, test_name')
       .gt('failed_at', windowStart)
 
-    if (error) throw new Error(`[flaky-tests/store-supabase] getHotFiles: ${error.message}`)
+    if (error)
+      throw new Error(
+        `[flaky-tests/store-supabase] getHotFiles: ${error.message}`,
+      )
 
     const fileMap = new Map<string, { fails: number; tests: Set<string> }>()
-    for (const row of (data ?? []) as Array<{ test_file: string; test_name: string }>) {
-      if (!fileMap.has(row.test_file)) {
-        fileMap.set(row.test_file, { fails: 0, tests: new Set() })
+    for (const row of (data ?? []) as Array<{
+      test_file: string
+      test_name: string
+    }>) {
+      let entry = fileMap.get(row.test_file)
+      if (entry === undefined) {
+        entry = { fails: 0, tests: new Set() }
+        fileMap.set(row.test_file, entry)
       }
-      const entry = fileMap.get(row.test_file)!
       entry.fails++
       entry.tests.add(row.test_name)
     }
 
     return [...fileMap.entries()]
-      .map(([testFile, v]) => ({ testFile, fails: v.fails, distinctTests: v.tests.size }))
+      .map(([testFile, v]) => ({
+        testFile,
+        fails: v.fails,
+        distinctTests: v.tests.size,
+      }))
       .sort((a, b) => b.fails - a.fails)
       .slice(0, limit)
   }

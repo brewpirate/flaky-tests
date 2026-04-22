@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * flaky-tests check
  *
@@ -25,178 +26,253 @@
 
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
-import type { IStore, FlakyPattern } from '@flaky-tests/core'
-import { copyToClipboard, generatePrompt } from './prompt'
-import { createIssue, findExistingIssue, resolveRepo } from './github'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { FlakyPattern, IStore } from '@flaky-tests/core'
+import { type CliConfig, parseCliConfig } from './args'
+import { CliError, ConfigError } from './errors'
+import { createIssue, findExistingIssue, resolveRepo } from './github'
 import { generateHtml } from './html'
+import { copyToClipboard, generatePrompt } from './prompt'
 
-
-async function resolveStore(): Promise<IStore> {
-  const storeType = process.env.FLAKY_TESTS_STORE ?? 'sqlite'
-  const connStr = process.env.FLAKY_TESTS_CONNECTION_STRING
-  const authToken = process.env.FLAKY_TESTS_AUTH_TOKEN
-
+async function resolveStore(config: CliConfig): Promise<IStore> {
+  const { storeType, connectionString, authToken, sqliteDbPath } = config
   switch (storeType) {
     case 'turso': {
-      if (!connStr) throw new Error('FLAKY_TESTS_CONNECTION_STRING is required for store=turso')
+      if (!connectionString) {
+        throw new ConfigError(
+          'FLAKY_TESTS_CONNECTION_STRING is required for store=turso',
+        )
+      }
       const { TursoStore } = await import('@flaky-tests/store-turso')
-      return new TursoStore({ url: connStr, authToken })
+      return new TursoStore({
+        url: connectionString,
+        ...(authToken !== undefined ? { authToken } : {}),
+      })
     }
     case 'supabase': {
-      if (!connStr || !authToken) throw new Error('FLAKY_TESTS_CONNECTION_STRING and FLAKY_TESTS_AUTH_TOKEN are required for store=supabase')
+      if (!connectionString || !authToken) {
+        throw new ConfigError(
+          'FLAKY_TESTS_CONNECTION_STRING and FLAKY_TESTS_AUTH_TOKEN are required for store=supabase',
+        )
+      }
       const { SupabaseStore } = await import('@flaky-tests/store-supabase')
-      return new SupabaseStore({ url: connStr, key: authToken })
+      return new SupabaseStore({ url: connectionString, key: authToken })
     }
     case 'postgres': {
       const { PostgresStore } = await import('@flaky-tests/store-postgres')
-      return new PostgresStore({ connectionString: connStr })
+      return new PostgresStore(
+        connectionString !== undefined ? { connectionString } : {},
+      )
+    }
+    case 'sqlite': {
+      const { SqliteStore } = await import('@flaky-tests/store-sqlite')
+      return new SqliteStore(
+        sqliteDbPath !== undefined ? { dbPath: sqliteDbPath } : {},
+      )
     }
     default: {
-      const { SqliteStore } = await import('@flaky-tests/store-sqlite')
-      return new SqliteStore({ dbPath: process.env.FLAKY_TESTS_DB ?? undefined })
+      const _exhaustive: never = storeType
+      throw new ConfigError(`Unknown store type: ${String(_exhaustive)}`)
     }
   }
 }
 
-// --- Argument parsing (no deps, just process.argv) -----------------------
-
-function flag(name: string): boolean {
-  return process.argv.includes(`--${name}`)
+interface Snapshot {
+  patterns: FlakyPattern[]
+  recentRuns: Awaited<ReturnType<IStore['getRecentRuns']>>
+  kindBreakdown: Awaited<ReturnType<IStore['getFailureKindBreakdown']>>
+  hotFiles: Awaited<ReturnType<IStore['getHotFiles']>>
 }
 
-function option(name: string, fallbackEnv?: string): string | undefined {
-  const idx = process.argv.indexOf(`--${name}`)
-  if (idx !== -1 && idx + 1 < process.argv.length) return process.argv[idx + 1]
-  if (fallbackEnv) return process.env[fallbackEnv]
-  return undefined
+async function gatherSnapshot(
+  store: IStore,
+  config: CliConfig,
+): Promise<Snapshot> {
+  const { windowDays, threshold } = config
+  const patterns = await store.getNewPatterns({ windowDays, threshold })
+  const [recentRuns, kindBreakdown, hotFiles] = await Promise.all([
+    store.getRecentRuns({ limit: 20 }),
+    store.getFailureKindBreakdown({ windowDays }),
+    store.getHotFiles({ windowDays, limit: 15 }),
+  ])
+  return { patterns, recentRuns, kindBreakdown, hotFiles }
 }
 
-const windowDays = Number(option('window', 'FLAKY_TESTS_WINDOW') ?? 7)
-const threshold = Number(option('threshold', 'FLAKY_TESTS_THRESHOLD') ?? 2)
-const showPrompts = flag('prompt') || flag('copy')
-const doCopy = flag('copy')
-const doCreateIssue = flag('create-issue')
-const doHtml = flag('html')
-const htmlOut = option('out')
+function printPatterns(patterns: FlakyPattern[], windowDays: number): void {
+  const plural = patterns.length === 1 ? 'pattern' : 'patterns'
+  console.log(`\n✗ ${patterns.length} new flaky test ${plural} detected\n`)
 
-// --- Main ----------------------------------------------------------------
+  for (let index = 0; index < patterns.length; index++) {
+    const pattern = patterns[index]
+    if (!pattern) continue
+    const kindStr = pattern.failureKinds.join(', ')
+    console.log(`  ${index + 1}. ${pattern.testName}`)
+    console.log(
+      `     ${pattern.testFile} · ${kindStr} · ${pattern.recentFails} fail${pattern.recentFails === 1 ? '' : 's'} in ${windowDays}d`,
+    )
+    if (pattern.lastErrorMessage) {
+      const firstLine =
+        pattern.lastErrorMessage.split('\n')[0] ?? pattern.lastErrorMessage
+      console.log(
+        `     ${firstLine.slice(0, 120)}${firstLine.length > 120 ? '…' : ''}`,
+      )
+    }
+    console.log()
+  }
+}
 
-async function main(): Promise<void> {
-  const store = await resolveStore()
+function printInvestigationPrompts(
+  patterns: FlakyPattern[],
+  windowDays: number,
+): void {
+  console.log('─'.repeat(60))
+  for (let index = 0; index < patterns.length; index++) {
+    const pattern = patterns[index]
+    if (!pattern) continue
+    console.log(`\n── Pattern ${index + 1} of ${patterns.length} ──\n`)
+    console.log(generatePrompt(pattern, windowDays))
+  }
+  console.log()
+}
 
-  let patterns: FlakyPattern[]
-  let recentRuns: Awaited<ReturnType<IStore['getRecentRuns']>>
-  let kindBreakdown: Awaited<ReturnType<IStore['getFailureKindBreakdown']>>
-  let hotFiles: Awaited<ReturnType<IStore['getHotFiles']>>
+function printUsageHints(): void {
+  console.log(`  Run with --prompt        to print investigation prompts`)
+  console.log(
+    `  Run with --copy          to copy the first prompt to clipboard`,
+  )
+  console.log(
+    `  Run with --create-issue  to open a GitHub issue for each pattern`,
+  )
+  console.log()
+}
+
+function copyFirstPromptIfRequested(
+  patterns: FlakyPattern[],
+  config: CliConfig,
+): void {
+  if (!config.doCopy) return
+  const first = patterns[0]
+  if (!first) return
+  const ok = copyToClipboard(generatePrompt(first, config.windowDays))
+  console.log(
+    ok
+      ? '✓ First prompt copied to clipboard\n'
+      : '⚠ Could not copy to clipboard — print with --prompt instead\n',
+  )
+}
+
+async function openGitHubIssues(
+  patterns: FlakyPattern[],
+  config: CliConfig,
+): Promise<void> {
+  const token = config.githubToken
+  if (!token) {
+    console.log('⚠ --create-issue requires GITHUB_TOKEN to be set\n')
+    return
+  }
+
+  const repoInfo = resolveRepo()
+  if (!repoInfo) {
+    console.log(
+      '⚠ --create-issue: could not determine owner/repo. Set GITHUB_REPOSITORY or pass --repo owner/repo\n',
+    )
+    return
+  }
+
+  const githubConfig = { token, ...repoInfo }
+  console.log(`Opening issues in ${repoInfo.owner}/${repoInfo.repo}...\n`)
+
+  for (const pattern of patterns) {
+    try {
+      const existing = await findExistingIssue(githubConfig, pattern.testName)
+      if (existing !== null) {
+        console.log(`  ↩ #${existing} already open for: ${pattern.testName}`)
+        continue
+      }
+      const url = await createIssue(githubConfig, pattern, config.windowDays)
+      console.log(`  ✓ Opened: ${url}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.log(`  ✗ Failed for "${pattern.testName}": ${message}`)
+    }
+  }
+  console.log()
+}
+
+function writeHtmlReport(snapshot: Snapshot, config: CliConfig): void {
+  const { patterns, recentRuns, kindBreakdown, hotFiles } = snapshot
+  const html = generateHtml(patterns, config.windowDays, {
+    recentRuns,
+    kindBreakdown,
+    hotFiles,
+  })
+  const outPath =
+    config.htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
+  writeFileSync(outPath, html, 'utf8')
+  console.log(`✓ Report written to ${outPath}`)
+
+  let opener = 'xdg-open'
+  if (process.platform === 'darwin') opener = 'open'
+  else if (process.platform === 'win32') opener = 'start'
+  Bun.spawnSync({ cmd: [opener, outPath], stdout: 'ignore', stderr: 'ignore' })
+  console.log('  Opening in browser…\n')
+}
+
+async function main(): Promise<number> {
+  const config = parseCliConfig()
+  const store = await resolveStore(config)
+
+  let snapshot: Snapshot
   try {
-    patterns = await store.getNewPatterns({ windowDays, threshold })
-      ;[recentRuns, kindBreakdown, hotFiles] = await Promise.all([
-        store.getRecentRuns({ limit: 20 }),
-        store.getFailureKindBreakdown({ windowDays }),
-        store.getHotFiles({ windowDays, limit: 15 }),
-      ])
+    snapshot = await gatherSnapshot(store, config)
   } finally {
     await store.close()
   }
 
+  const { patterns } = snapshot
+
   if (patterns.length === 0) {
-    console.log(`✓ No new flaky test patterns detected (window: ${windowDays}d, threshold: ${threshold})`)
-    process.exit(0)
+    console.log(
+      `✓ No new flaky test patterns detected (window: ${config.windowDays}d, threshold: ${config.threshold})`,
+    )
+    if (config.doHtml) {
+      writeHtmlReport(snapshot, config)
+    }
+    return 0
   }
 
-  const plural = patterns.length === 1 ? 'pattern' : 'patterns'
-  console.log(`\n✗ ${patterns.length} new flaky test ${plural} detected\n`)
+  printPatterns(patterns, config.windowDays)
 
-  for (let i = 0; i < patterns.length; i++) {
-    const p = patterns[i]!
-    const kindStr = p.failureKinds.join(', ')
-    console.log(`  ${i + 1}. ${p.testName}`)
-    console.log(`     ${p.testFile} · ${kindStr} · ${p.recentFails} fail${p.recentFails === 1 ? '' : 's'} in ${windowDays}d`)
-    if (p.lastErrorMessage) {
-      const msg = p.lastErrorMessage.split('\n')[0] ?? p.lastErrorMessage
-      console.log(`     ${msg.slice(0, 120)}${msg.length > 120 ? '…' : ''}`)
-    }
-    console.log()
-  }
-
-  if (showPrompts) {
-    console.log('─'.repeat(60))
-    for (let i = 0; i < patterns.length; i++) {
-      console.log(`\n── Pattern ${i + 1} of ${patterns.length} ──\n`)
-      console.log(generatePrompt(patterns[i]!, windowDays))
-    }
-    console.log()
+  if (config.showPrompts) {
+    printInvestigationPrompts(patterns, config.windowDays)
   } else {
-    console.log(`  Run with --prompt        to print investigation prompts`)
-    console.log(`  Run with --copy          to copy the first prompt to clipboard`)
-    console.log(`  Run with --create-issue  to open a GitHub issue for each pattern`)
-    console.log()
+    printUsageHints()
   }
 
-  if (doCopy && patterns[0]) {
-    const prompt = generatePrompt(patterns[0], windowDays)
-    const ok = copyToClipboard(prompt)
-    if (ok) {
-      console.log('✓ First prompt copied to clipboard\n')
-    } else {
-      console.log('⚠ Could not copy to clipboard — print with --prompt instead\n')
-    }
+  copyFirstPromptIfRequested(patterns, config)
+
+  if (config.doCreateIssue) {
+    await openGitHubIssues(patterns, config)
   }
 
-  if (doCreateIssue) {
-    await openGitHubIssues(patterns, windowDays)
-    if (doHtml) {
-      const html = generateHtml(patterns, windowDays, { recentRuns, kindBreakdown, hotFiles })
-      const outPath = htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
-      writeFileSync(outPath, html, 'utf8')
-      console.log(`✓ Report written to ${outPath}`)
-
-      // Open in default browser
-      const opener =
-        process.platform === 'darwin' ? 'open' :
-          process.platform === 'win32' ? 'start' :
-            'xdg-open'
-      Bun.spawnSync({ cmd: [opener, outPath], stdout: 'ignore', stderr: 'ignore' })
-      console.log('  Opening in browser…\n')
-    }
-
-    process.exit(1)
+  if (config.doHtml) {
+    writeHtmlReport(snapshot, config)
   }
 
-  async function openGitHubIssues(patterns: FlakyPattern[], windowDays: number): Promise<void> {
-    const token = process.env.GITHUB_TOKEN
-    if (!token) {
-      console.log('⚠ --create-issue requires GITHUB_TOKEN to be set\n')
-      return
-    }
-
-    const repoInfo = resolveRepo()
-    if (!repoInfo) {
-      console.log('⚠ --create-issue: could not determine owner/repo. Set GITHUB_REPOSITORY or pass --repo owner/repo\n')
-      return
-    }
-
-    const config = { token, ...repoInfo }
-    console.log(`Opening issues in ${repoInfo.owner}/${repoInfo.repo}...\n`)
-
-    for (const pattern of patterns) {
-      try {
-        const existing = await findExistingIssue(config, pattern.testName)
-        if (existing !== null) {
-          console.log(`  ↩ #${existing} already open for: ${pattern.testName}`)
-          continue
-        }
-        const url = await createIssue(config, pattern, windowDays)
-        console.log(`  ✓ Opened: ${url}`)
-      } catch (error) {
-        console.log(`  ✗ Failed for "${pattern.testName}": ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
-    console.log()
-  }
-
-  await main()
+  return 1
 }
+
+main()
+  .then((code) => process.exit(code))
+  .catch((error: unknown) => {
+    if (error instanceof CliError) {
+      console.error(`✗ ${error.message}`)
+      process.exit(error.exitCode)
+    }
+    const msg =
+      error instanceof Error ? (error.stack ?? error.message) : String(error)
+    console.error(`✗ Unexpected error:\n${msg}`)
+    process.exit(1)
+  })
