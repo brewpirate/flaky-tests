@@ -35,6 +35,7 @@ import {
   updateRunInputSchema,
 } from '@flaky-tests/core'
 import { captureGitInfo } from './git'
+import { createPendingWriteTracker } from './pending-writes'
 
 const log = createLogger('plugin-bun')
 
@@ -51,9 +52,29 @@ const STACK_SCAN_MAX_LINES = 200
 /** Module-level idempotency guard — double-registration would double-count everything. */
 let installed = false
 
-/** Fire-and-forget an async side-effect that must never throw into the caller. */
+/**
+ * Test-only introspection so `preload.test.ts` can skip itself when a
+ * real preload (e.g. the monorepo's own dogfood bunfig) has already
+ * wired bun:test. The guard is irreversible (mock.module and afterAll
+ * can't be cleanly undone), so the test's `createPreload(mockStore)`
+ * call would no-op against an active real install — the right move is
+ * to skip the self-test when that state is detected.
+ */
+export function isInstalledForTesting(): boolean {
+  return installed
+}
+
+/** Outstanding fire-and-forget writes tracked so `afterAll` can drain them
+ *  before the run is finalized. Without the drain, remote-store writes
+ *  (Turso / Supabase / Postgres) get orphaned mid-flight when Bun exits
+ *  and silently drop test data. See issue #44. */
+const pendingWrites = createPendingWriteTracker(log)
+
+/** Kick off an async side-effect that must never throw into the caller.
+ *  The returned promise is tracked in {@link pendingWrites} so the run's
+ *  `afterAll` can wait for in-flight writes before closing the store. */
 function safeVoid(label: string, effect: () => Promise<void>): void {
-  effect().catch((error: unknown) => log.warn(`${label}:`, error))
+  pendingWrites.track(label, effect)
 }
 
 /**
@@ -106,14 +127,16 @@ export function createPreload(store: IStore): void {
   const startedAt = new Date().toISOString()
   const startPerf = performance.now()
   const git = captureGitInfo()
+  const project = resolveConfig().project ?? null
   log.debug(
-    `createPreload: runId=${runId} (source=${runIdFromEnv ? 'FLAKY_TESTS_RUN_ID' : 'generated'}), gitSha=${git.sha ?? 'none'}, gitDirty=${git.dirty}, bunVersion=${Bun.version}`,
+    `createPreload: runId=${runId} (source=${runIdFromEnv ? 'FLAKY_TESTS_RUN_ID' : 'generated'}), project=${project ?? '<null>'}, gitSha=${git.sha ?? 'none'}, gitDirty=${git.dirty}, bunVersion=${Bun.version}`,
   )
 
   safeVoid('insertRun', () =>
     store.insertRun(
       parse(insertRunInputSchema, {
         runId,
+        project,
         startedAt,
         gitSha: git.sha,
         gitDirty: git.dirty,
@@ -263,8 +286,11 @@ export function createPreload(store: IStore): void {
     const status: 'pass' | 'fail' =
       testsFailed > 0 || errorsBetweenTests > 0 ? 'fail' : 'pass'
     log.debug(
-      `afterAll: runId=${runId}, status=${status}, total=${testsRun}, passed=${passedTests}, failed=${testsFailed}, errorsBetweenTests=${errorsBetweenTests}, durationMs=${durationMs}`,
+      `afterAll: runId=${runId}, status=${status}, total=${testsRun}, passed=${passedTests}, failed=${testsFailed}, errorsBetweenTests=${errorsBetweenTests}, durationMs=${durationMs}, pendingWrites=${pendingWrites.size}`,
     )
+
+    // Drain in-flight writes before finalizing. See pending-writes.ts.
+    await pendingWrites.drain()
 
     await store
       .updateRun(

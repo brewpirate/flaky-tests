@@ -49,6 +49,9 @@ function createMockStore(): { store: IStore; calls: StoreCalls } {
     ): Promise<FlakyPattern[]> {
       return []
     },
+    async getRecentRuns() {
+      return []
+    },
     async close() {
       calls.closed = true
     },

@@ -34,7 +34,7 @@
   "license": "MIT",
   "dependencies": {
     "@flaky-tests/core": "workspace:*",
-    "@libsql/client": "^0.14.0",
+    "@libsql/client": "^0.17.0",
     "arktype": "^2.1.0"
   },
   "devDependencies": {

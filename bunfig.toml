@@ -1,0 +1,12 @@
+# Dogfood the preload on our own test suite. `bun test` captures every
+# failure to the store configured in `.env` (defaults to local sqlite
+# when no env is set — CI and contributors without creds get safe
+# local capture). `packages/plugin-bun/src/preload.test.ts` detects the
+# active install via `isInstalledForTesting()` and skips itself so the
+# real preload's monkey-patch isn't fighting the test's mock.
+#
+# Relative path (not a package specifier) because the root package.json
+# doesn't list `@flaky-tests/plugin-bun` as a dep — so a bare specifier
+# wouldn't resolve from the repo root.
+[test]
+preload = ["./packages/plugin-bun/src/preload-default.ts"]

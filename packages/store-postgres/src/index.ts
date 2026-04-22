@@ -8,6 +8,7 @@ import {
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
+  type GetRecentRunsOptions,
   getNewPatternsOptionsSchema,
   type InsertFailureInput,
   type InsertRunInput,
@@ -110,6 +111,7 @@ export class PostgresStore implements IStore {
       await this.sql`
         CREATE TABLE IF NOT EXISTS ${this.sql(runs)} (
           run_id                TEXT PRIMARY KEY,
+          project               TEXT,
           started_at            TIMESTAMPTZ NOT NULL,
           ended_at              TIMESTAMPTZ,
           duration_ms           INTEGER,
@@ -153,6 +155,11 @@ export class PostgresStore implements IStore {
         CREATE INDEX IF NOT EXISTS ${this.sql(`idx_${runs}_status`)}
           ON ${this.sql(runs)}(ended_at, failed_tests)
       `
+      // Idempotent column add for DBs created before `project` existed.
+      await this.sql`
+        ALTER TABLE ${this.sql(runs)}
+          ADD COLUMN IF NOT EXISTS project TEXT
+      `
     })
   }
 
@@ -163,11 +170,11 @@ export class PostgresStore implements IStore {
     await this.wrap('insertRun', async () => {
       await this.sql`
         INSERT INTO ${this.sql(runs)}
-          (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
+          (run_id, project, started_at, git_sha, git_dirty, runtime_version, test_args)
         VALUES
-          (${input.runId}, ${input.startedAt}, ${input.gitSha ?? null},
-           ${input.gitDirty ?? null}, ${input.runtimeVersion ?? null},
-           ${input.testArgs ?? null})
+          (${input.runId}, ${input.project ?? null}, ${input.startedAt},
+           ${input.gitSha ?? null}, ${input.gitDirty ?? null},
+           ${input.runtimeVersion ?? null}, ${input.testArgs ?? null})
       `
     })
   }
@@ -245,11 +252,16 @@ export class PostgresStore implements IStore {
     const validated = parse(getNewPatternsOptionsSchema, options)
     const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
     const threshold = validated.threshold ?? DEFAULT_THRESHOLD
+    const project = validated.project ?? null
     const now = Date.now()
     const windowStart = new Date(now - windowDays * MS_PER_DAY)
     const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY)
     const runs = this.runsTable
     const failures = this.failuresTable
+    const projectFilter =
+      project === null
+        ? this.sql`r.project IS NULL`
+        : this.sql`r.project = ${project}`
 
     const rows = await this.wrap(
       'getNewPatterns',
@@ -280,6 +292,7 @@ export class PostgresStore implements IStore {
         WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
           AND r.ended_at IS NOT NULL
           AND f.failed_at > ${priorStart}
+          AND ${projectFilter}
         GROUP BY f.test_file, f.test_name
         HAVING COUNT(*) FILTER (WHERE f.failed_at > ${windowStart}) >= ${threshold}
            AND COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart}) = 0
@@ -294,15 +307,21 @@ export class PostgresStore implements IStore {
     return patterns
   }
 
-  /** Return the N most recent runs ordered by `startedAt` DESC. */
-  async getRecentRuns(limit: number): Promise<RecentRun[]> {
+  /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
+  async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
+    const { limit, project = null } = options
     const runs = this.runsTable
+    const projectFilter =
+      project === null
+        ? this.sql`project IS NULL`
+        : this.sql`project = ${project}`
     const rows = await this.wrap(
       'getRecentRuns',
       () =>
         this.sql<
           Array<{
             run_id: string
+            project: string | null
             started_at: Date
             ended_at: Date | null
             duration_ms: number | null
@@ -315,10 +334,11 @@ export class PostgresStore implements IStore {
             git_dirty: boolean | null
           }>
         >`
-        SELECT run_id, started_at, ended_at, duration_ms, status,
+        SELECT run_id, project, started_at, ended_at, duration_ms, status,
                total_tests, passed_tests, failed_tests,
                errors_between_tests, git_sha, git_dirty
           FROM ${this.sql(runs)}
+         WHERE ${projectFilter}
          ORDER BY started_at DESC
          LIMIT ${limit}
       `,
@@ -330,6 +350,7 @@ export class PostgresStore implements IStore {
     }
     return rows.map((row) => ({
       runId: row.run_id,
+      project: row.project,
       startedAt: toIso(row.started_at) ?? '',
       endedAt: toIso(row.ended_at),
       durationMs: row.duration_ms,

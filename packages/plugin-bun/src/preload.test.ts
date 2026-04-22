@@ -19,8 +19,18 @@ import type {
   InsertRunInput,
   IStore,
 } from '@flaky-tests/core'
+import { isInstalledForTesting } from './preload'
 
-describe('createPreload store contract', () => {
+// Skip when a real preload already wired bun:test (e.g. the monorepo's
+// own dogfood bunfig at the repo root). The `installed` guard is
+// irreversible — mock.module and afterAll registrations can't be
+// cleanly undone — so a second createPreload call against this already-
+// mounted state would no-op and the assertion below would fail.
+// Coverage for this path lives in the pending-writes + live-integration
+// tests when dogfood is active.
+const SKIP_IF_PRELOAD_ACTIVE = isInstalledForTesting()
+
+describe.skipIf(SKIP_IF_PRELOAD_ACTIVE)('createPreload store contract', () => {
   test('createPreload calls insertRun on initialization', async () => {
     const insertRunCalls: InsertRunInput[] = []
 
@@ -35,6 +45,9 @@ describe('createPreload store contract', () => {
       async getNewPatterns(
         _options?: GetNewPatternsOptions,
       ): Promise<FlakyPattern[]> {
+        return []
+      },
+      async getRecentRuns() {
         return []
       },
       async close() {},

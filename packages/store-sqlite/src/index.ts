@@ -9,6 +9,7 @@ import {
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
+  type GetRecentRunsOptions,
   getNewPatternsOptionsSchema,
   type InsertFailureInput,
   type InsertRunInput,
@@ -42,6 +43,7 @@ const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS runs (
   run_id                TEXT PRIMARY KEY,
+  project               TEXT,
   started_at            TEXT NOT NULL,
   ended_at              TEXT,
   duration_ms           INTEGER,
@@ -124,6 +126,7 @@ export class SqliteStore implements IStore {
       'ALTER TABLE runs ADD COLUMN errors_between_tests INTEGER',
       'ALTER TABLE runs ADD COLUMN runtime_version TEXT',
       'ALTER TABLE runs ADD COLUMN test_args TEXT',
+      'ALTER TABLE runs ADD COLUMN project TEXT',
     ]
     for (const stmt of migrations) {
       try {
@@ -141,10 +144,11 @@ export class SqliteStore implements IStore {
   async insertRun(input: InsertRunInput): Promise<void> {
     parse(insertRunInputSchema, input)
     this.db.run(
-      `INSERT INTO runs (run_id, started_at, git_sha, git_dirty, runtime_version, test_args)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO runs (run_id, project, started_at, git_sha, git_dirty, runtime_version, test_args)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         input.runId,
+        input.project ?? null,
         input.startedAt,
         input.gitSha ?? null,
         input.gitDirty != null ? Number(input.gitDirty) : null,
@@ -275,10 +279,9 @@ export class SqliteStore implements IStore {
     const now = Date.now()
     const windowStart = new Date(now - windowDays * MS_PER_DAY).toISOString()
     const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY).toISOString()
-
-    // Prefixing values with the timestamp lets MAX() select the most-recent
-    // row's payload. CHAR(1) is a control character that won't appear in messages.
-    // stripTimestampPrefix() removes the prefix dynamically after the query.
+    const project = validated.project ?? null
+    const projectClause =
+      project === null ? 'r.project IS NULL' : 'r.project = ?'
 
     type Row = {
       test_file: string
@@ -291,8 +294,24 @@ export class SqliteStore implements IStore {
       last_failed: string
     }
 
+    // Argument order matches the `?` placeholders in the SQL below:
+    // 6x window/prior timestamps, then the project filter (only when
+    // `project !== null`; `IS NULL` takes no placeholder), then threshold.
+    const preFilterArgs = [
+      windowStart,
+      windowStart,
+      priorStart,
+      windowStart,
+      windowStart,
+      priorStart,
+    ] as const
+    const queryArgs =
+      project === null
+        ? ([...preFilterArgs, threshold] as const)
+        : ([...preFilterArgs, project, threshold] as const)
+
     const rows = this.db
-      .query<Row, [string, string, string, string, string, string, number]>(
+      .query<Row, (string | number)[]>(
         `SELECT
            f.test_file,
            f.test_name,
@@ -309,31 +328,26 @@ export class SqliteStore implements IStore {
         WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
           AND r.ended_at IS NOT NULL
           AND f.failed_at > ?
+          AND ${projectClause}
         GROUP BY f.test_file, f.test_name
         HAVING recent_fails >= ? AND prior_fails = 0
         ORDER BY recent_fails DESC`,
       )
-      .all(
-        windowStart,
-        windowStart,
-        priorStart,
-        windowStart,
-        windowStart,
-        priorStart,
-        threshold,
-      )
+      .all(...queryArgs)
 
     const patterns = parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
     log.debug(
-      `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
+      `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, project=${project ?? '<null>'}, returned=${patterns.length} patterns`,
     )
     return patterns
   }
 
-  /** Return the N most recent runs ordered by `startedAt` DESC. */
-  async getRecentRuns(limit: number): Promise<RecentRun[]> {
+  /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
+  async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
+    const { limit, project = null } = options
     type Row = {
       run_id: string
+      project: string | null
       started_at: string
       ended_at: string | null
       duration_ms: number | null
@@ -345,18 +359,23 @@ export class SqliteStore implements IStore {
       git_sha: string | null
       git_dirty: number | null
     }
+    const projectClause = project === null ? 'project IS NULL' : 'project = ?'
+    const args: (string | number)[] =
+      project === null ? [limit] : [project, limit]
     const rows = this.db
-      .query<Row, [number]>(
-        `SELECT run_id, started_at, ended_at, duration_ms, status,
+      .query<Row, (string | number)[]>(
+        `SELECT run_id, project, started_at, ended_at, duration_ms, status,
                 total_tests, passed_tests, failed_tests,
                 errors_between_tests, git_sha, git_dirty
            FROM runs
+          WHERE ${projectClause}
           ORDER BY started_at DESC
           LIMIT ?`,
       )
-      .all(limit)
+      .all(...args)
     return rows.map((row) => ({
       runId: row.run_id,
+      project: row.project,
       startedAt: row.started_at,
       endedAt: row.ended_at,
       durationMs: row.duration_ms,

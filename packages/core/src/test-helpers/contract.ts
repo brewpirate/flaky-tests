@@ -321,11 +321,58 @@ export function runContractTests(
         failedTests: 0,
       })
 
-      const runs = await store.getRecentRuns(100)
+      const runs = await store.getRecentRuns({ limit: 100 })
       const ours = runs
         .filter((run) => [oldest, middle, newest].includes(run.runId))
         .map((run) => run.runId)
       expect(ours).toEqual([newest, middle, oldest])
+    })
+
+    test('project filter isolates runs: getRecentRuns only returns rows for the requested project', async () => {
+      // Seed one run under project "alpha" and one with NULL project.
+      const alphaRunId = `proj-alpha-${crypto.randomUUID().slice(0, 8)}`
+      const nullRunId = `proj-null-${crypto.randomUUID().slice(0, 8)}`
+
+      await store.insertRun({
+        runId: alphaRunId,
+        project: 'alpha',
+        startedAt: daysAgo(1).toISOString(),
+      })
+      await store.updateRun(alphaRunId, {
+        endedAt: new Date().toISOString(),
+        status: 'pass',
+        totalTests: 1,
+        passedTests: 1,
+        failedTests: 0,
+      })
+      await store.insertRun({
+        runId: nullRunId,
+        startedAt: daysAgo(1).toISOString(),
+      })
+      await store.updateRun(nullRunId, {
+        endedAt: new Date().toISOString(),
+        status: 'pass',
+        totalTests: 1,
+        passedTests: 1,
+        failedTests: 0,
+      })
+
+      const alphaRuns = await store.getRecentRuns({
+        limit: 100,
+        project: 'alpha',
+      })
+      const nullRuns = await store.getRecentRuns({ limit: 100, project: null })
+
+      const alphaIds = alphaRuns.map((run) => run.runId)
+      const nullIds = nullRuns.map((run) => run.runId)
+      expect(alphaIds).toContain(alphaRunId)
+      expect(alphaIds).not.toContain(nullRunId)
+      expect(nullIds).toContain(nullRunId)
+      expect(nullIds).not.toContain(alphaRunId)
+
+      // Every returned row's `project` field matches the filter.
+      for (const run of alphaRuns) expect(run.project).toBe('alpha')
+      for (const run of nullRuns) expect(run.project).toBeNull()
     })
 
     test('close() is idempotent — a second call does not throw', async () => {

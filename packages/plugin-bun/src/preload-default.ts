@@ -15,12 +15,14 @@
 // biome-ignore-all lint/suspicious/noConsole: preload is dev tooling
 
 import {
+  createLogger,
   createStoreFromConfig,
   MissingStorePackageError,
   resolveConfig,
 } from '@flaky-tests/core'
 import { createPreload } from './preload'
 
+const log = createLogger('plugin-bun:preload')
 const config = resolveConfig()
 if (!config.plugin.disabled) {
   try {
@@ -28,6 +30,20 @@ if (!config.plugin.disabled) {
     // against plugin-bun's own `node_modules` — core can't see the
     // consumer's linked store packages from its own location.
     const store = await createStoreFromConfig(config, (spec) => import(spec))
+    // Remote stores need their schema created before the first write —
+    // without this, fresh Turso/Postgres DBs fail every insertRun /
+    // insertFailure with "no such table" and the safeVoid wrapper
+    // silently swallows the error, leaving the DB empty.
+    // migrate() is idempotent on every adapter so running it on each
+    // test process startup is safe (CREATE TABLE IF NOT EXISTS).
+    try {
+      await store.migrate()
+    } catch (migrateError) {
+      log.warn(
+        'migrate failed — writes will likely drop until the schema is in place:',
+        migrateError instanceof Error ? migrateError.message : migrateError,
+      )
+    }
     createPreload(store)
   } catch (error) {
     // Fail fast with actionable text. Bun treats a preload throw as a
