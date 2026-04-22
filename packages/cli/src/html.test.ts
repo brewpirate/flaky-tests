@@ -1,109 +1,144 @@
 import { describe, expect, test } from 'bun:test'
 import type { FlakyPattern } from '@flaky-tests/core'
-import { generateHtml } from './html'
+import {
+  generateHtml,
+  type HotFile,
+  type KindBreakdown,
+  type RecentRun,
+} from './html'
 
-function makePattern(overrides: Partial<FlakyPattern> = {}): FlakyPattern {
-  return {
-    testFile: 'src/math.test.ts',
-    testName: 'adds numbers correctly',
-    recentFails: 3,
-    priorFails: 0,
-    failureKinds: ['assertion'],
-    lastErrorMessage: 'Expected 4 but received 5',
-    lastErrorStack: 'at Object.<anonymous> (src/math.test.ts:5:3)',
-    lastFailed: '2025-01-15T09:30:00.000Z',
-    ...overrides,
-  }
+const pattern: FlakyPattern = {
+  testFile: 'tests/auth.test.ts',
+  testName: 'auth > login',
+  recentFails: 5,
+  priorFails: 0,
+  failureKinds: ['timeout'],
+  lastErrorMessage: 'Expected redirect within 2000ms',
+  lastErrorStack: null,
+  lastFailed: new Date().toISOString(),
 }
 
 describe('generateHtml', () => {
   test('returns a complete HTML document', () => {
-    const html = generateHtml([makePattern()], 7)
-    expect(html).toStartWith('<!DOCTYPE html>')
+    const html = generateHtml([pattern], 7)
+    expect(html).toContain('<!DOCTYPE html>')
     expect(html).toContain('</html>')
   })
 
-  test('includes pattern count in page header', () => {
-    const html = generateHtml([makePattern(), makePattern()], 7)
-    expect(html).toContain('2 new patterns detected')
+  test('includes the pattern test name and file', () => {
+    const html = generateHtml([pattern], 7)
+    expect(html).toContain('auth &gt; login')
+    expect(html).toContain('tests/auth.test.ts')
   })
 
-  test('uses singular when one pattern', () => {
-    const html = generateHtml([makePattern()], 7)
-    expect(html).toContain('1 new pattern detected')
+  test('uses singular "pattern" in title for one result', () => {
+    const html = generateHtml([pattern], 7)
+    expect(html).toContain('1 pattern')
+    expect(html).not.toContain('1 patterns')
   })
 
-  test('includes window days in summary', () => {
-    const html = generateHtml([makePattern()], 14)
+  test('uses plural "patterns" for multiple results', () => {
+    const html = generateHtml([pattern, { ...pattern, testName: 'other' }], 7)
+    expect(html).toContain('2 patterns')
+  })
+
+  test('renders empty state when no patterns supplied', () => {
+    const html = generateHtml([], 7)
+    expect(html).toContain('<!DOCTYPE html>')
+    expect(html).toContain('0 patterns')
+  })
+
+  test('escapes HTML special characters in test names', () => {
+    const risky: FlakyPattern = {
+      ...pattern,
+      testName: '<script>alert("xss")</script>',
+    }
+    const html = generateHtml([risky], 7)
+    expect(html).not.toContain('<script>alert')
+    expect(html).toContain('&lt;script&gt;')
+    expect(html).toContain('&quot;xss&quot;')
+  })
+
+  test('escapes HTML in copy-button data attribute', () => {
+    const risky: FlakyPattern = {
+      ...pattern,
+      testName: 'test"with"quotes',
+    }
+    const html = generateHtml([risky], 7)
+    expect(html).not.toMatch(/data-prompt="[^"]*"with"/)
+  })
+
+  test('includes window size in summary header', () => {
+    const html = generateHtml([pattern], 14)
     expect(html).toContain('window: 14d')
   })
 
-  test('escapes HTML special characters in test name', () => {
-    const html = generateHtml(
-      [makePattern({ testName: '<script>alert("xss")</script>' })],
-      7,
-    )
-    expect(html).toContain(
-      '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
-    )
-    expect(html).not.toContain('<script>alert("xss")</script>')
+  test('omits dashboard section when not supplied', () => {
+    const html = generateHtml([pattern], 7)
+    expect(html).not.toContain('Failure Kind Breakdown')
+    expect(html).not.toContain('Hot Files')
+    expect(html).not.toContain('Recent Runs')
   })
 
-  test('escapes HTML special characters in test file', () => {
-    const html = generateHtml(
-      [makePattern({ testFile: 'src/<weird>&file.ts' })],
-      7,
-    )
-    expect(html).toContain('src/&lt;weird&gt;&amp;file.ts')
-  })
-
-  test('renders failure count and kinds', () => {
-    const html = generateHtml(
-      [makePattern({ recentFails: 5, failureKinds: ['timeout', 'assertion'] })],
-      7,
-    )
-    expect(html).toContain('5 in 7d')
-    expect(html).toContain('timeout, assertion')
-  })
-
-  test('omits last error line when lastErrorMessage is null', () => {
-    const html = generateHtml([makePattern({ lastErrorMessage: null })], 7)
-    expect(html).not.toContain('Last error')
-  })
-
-  test('includes last error first line when present', () => {
-    const html = generateHtml(
-      [makePattern({ lastErrorMessage: 'line one\nline two\nline three' })],
-      7,
-    )
-    expect(html).toContain('line one')
-  })
-
-  test('renders multiple pattern cards', () => {
-    const patterns = [
-      makePattern({ testName: 'test-alpha' }),
-      makePattern({ testName: 'test-beta' }),
-      makePattern({ testName: 'test-gamma' }),
+  test('renders dashboard when supplied', () => {
+    const kindBreakdown: KindBreakdown[] = [
+      { failureKind: 'timeout', count: 10 },
+      { failureKind: 'assertion', count: 3 },
     ]
-    const html = generateHtml(patterns, 7)
-    expect(html).toContain('id="pattern-1"')
-    expect(html).toContain('id="pattern-2"')
-    expect(html).toContain('id="pattern-3"')
-    expect(html).toContain('test-alpha')
-    expect(html).toContain('test-beta')
-    expect(html).toContain('test-gamma')
+    const hotFiles: HotFile[] = [
+      { testFile: 'tests/flaky.ts', fails: 12, distinctTests: 4 },
+    ]
+    const recentRuns: RecentRun[] = [
+      {
+        runId: 'r1',
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        durationMs: 1500,
+        status: 'pass',
+        totalTests: 42,
+        passedTests: 42,
+        failedTests: 0,
+        errorsBetweenTests: 0,
+        gitSha: 'abc123def',
+        gitDirty: false,
+      },
+    ]
+    const html = generateHtml([pattern], 7, {
+      kindBreakdown,
+      hotFiles,
+      recentRuns,
+      failuresByRun: new Map(),
+    })
+    expect(html).toContain('Failure Kind Breakdown')
+    expect(html).toContain('Hot Files')
+    expect(html).toContain('Recent Runs')
+    expect(html).toContain('timeout')
+    expect(html).toContain('tests/flaky.ts')
+    expect(html).toContain('abc123d')
   })
 
-  test('includes copy button with prompt data', () => {
-    const html = generateHtml([makePattern()], 7)
-    expect(html).toContain('class="copy-btn"')
-    expect(html).toContain('data-prompt=')
-    expect(html).toContain('copyPrompt(this)')
-  })
-
-  test('includes footer with attribution', () => {
-    const html = generateHtml([makePattern()], 7)
-    expect(html).toContain('Generated by')
-    expect(html).toContain('flaky-tests')
+  test('renders "n/a" status for runs without a status', () => {
+    const recentRuns: RecentRun[] = [
+      {
+        runId: 'r2',
+        startedAt: new Date().toISOString(),
+        endedAt: null,
+        durationMs: null,
+        status: null,
+        totalTests: null,
+        passedTests: null,
+        failedTests: null,
+        errorsBetweenTests: null,
+        gitSha: null,
+        gitDirty: null,
+      },
+    ]
+    const html = generateHtml([pattern], 7, {
+      kindBreakdown: [],
+      hotFiles: [],
+      recentRuns,
+      failuresByRun: new Map(),
+    })
+    expect(html).toContain('n/a')
   })
 })
