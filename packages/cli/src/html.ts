@@ -474,6 +474,8 @@ export function generateHtml(
       --red: #ff4d6d;
       --red-rgb: 255, 77, 109;
       --red-dim: #3d1525;
+      --coral: #ff7a59;
+      --coral-rgb: 255, 122, 89;
       --orange: #ff9e4d;
       --orange-rgb: 255, 158, 77;
       --green: #3ddc97;
@@ -507,6 +509,8 @@ export function generateHtml(
       --red: #d6336c;
       --red-rgb: 214, 51, 108;
       --red-dim: #fce6ee;
+      --coral: #e5541f;
+      --coral-rgb: 229, 84, 31;
       --orange: #e8590c;
       --orange-rgb: 232, 89, 12;
       --green: #2b8a3e;
@@ -556,6 +560,8 @@ export function generateHtml(
         --red: #d6336c;
         --red-rgb: 214, 51, 108;
         --red-dim: #fce6ee;
+        --coral: #e5541f;
+        --coral-rgb: 229, 84, 31;
         --orange: #e8590c;
         --orange-rgb: 232, 89, 12;
         --green: #2b8a3e;
@@ -771,7 +777,7 @@ export function generateHtml(
       border-radius: 50%;
     }
     .toc-sev.sev-critical { background: var(--red); box-shadow: 0 0 6px rgba(var(--red-rgb), 0.7); }
-    .toc-sev.sev-high { background: var(--red); }
+    .toc-sev.sev-high { background: var(--coral); }
     .toc-sev.sev-medium { background: var(--orange); }
     .toc-sev.sev-low { background: var(--yellow); }
     .toc-num {
@@ -839,7 +845,7 @@ export function generateHtml(
       border-left: 4px solid var(--red);
       background: linear-gradient(90deg, rgba(var(--red-rgb), 0.09) 0%, transparent 22%), var(--bg-elev);
     }
-    .card.sev-high { border-left: 4px solid var(--red); }
+    .card.sev-high { border-left: 4px solid var(--coral); }
     .card.sev-medium { border-left: 4px solid var(--orange); }
     .card.sev-low { border-left: 4px solid var(--yellow); }
 
@@ -871,7 +877,7 @@ export function generateHtml(
       border-radius: 4px;
     }
     .sev-critical .sev-pill { background: rgba(var(--red-rgb), 0.22); color: var(--red); }
-    .sev-high .sev-pill { background: rgba(var(--red-rgb), 0.14); color: var(--red); }
+    .sev-high .sev-pill { background: rgba(var(--coral-rgb), 0.18); color: var(--coral); }
     .sev-medium .sev-pill { background: rgba(var(--orange-rgb), 0.16); color: var(--orange); }
     .sev-low .sev-pill { background: rgba(var(--yellow-rgb), 0.14); color: var(--yellow); }
 
@@ -919,7 +925,7 @@ export function generateHtml(
       line-height: 1;
     }
     .sev-critical .stat-value { color: var(--red); }
-    .sev-high .stat-value { color: var(--red); }
+    .sev-high .stat-value { color: var(--coral); }
     .sev-medium .stat-value { color: var(--orange); }
     .stat-label {
       font-size: 0.7rem;
