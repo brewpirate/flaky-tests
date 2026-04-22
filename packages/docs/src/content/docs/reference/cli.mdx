@@ -85,6 +85,26 @@ Override the repository for issue creation. Defaults to `GITHUB_REPOSITORY` env 
 bunx @flaky-tests/cli --create-issue --repo acme/api
 ```
 
+### `--html`
+
+Generate a self-contained HTML report (single file, inline CSS + JS) and open it in the default browser.
+
+```sh
+bunx @flaky-tests/cli --html
+```
+
+Works even when there are no newly-flaky patterns — the report falls back to run history. See [Using the HTML report](/guides/html-report/) for what's included and how to share it.
+
+### `--out <path>`
+
+Destination path for `--html`. Defaults to a timestamped temp file.
+
+```sh
+bunx @flaky-tests/cli --html --out flaky-report.html
+```
+
+Use this to commit the report, attach it to a PR, or upload it as a CI artifact.
+
 ## Exit codes
 
 | Code | Meaning |

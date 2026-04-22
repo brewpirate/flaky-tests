@@ -1,0 +1,133 @@
+---
+title: Using the HTML report
+description: Generate and interpret the self-contained HTML report produced by the flaky-tests CLI.
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components'
+import { PackageManagers } from 'starlight-package-managers'
+
+The CLI can emit a **self-contained HTML report** — a single `.html` file with inline CSS and a minimal inline script for interactivity. No build step, no bundler, no external assets; you can email it, attach it to a ticket, or archive it as a CI artifact and it still works opened via `file://`.
+
+## Generate a report
+
+<Steps>
+
+1. **Run the CLI with `--html`**
+
+   <Tabs syncKey="runner">
+
+   <TabItem label="Bun">
+
+   <PackageManagers type="exec" pkg="@flaky-tests/cli" args="--html" />
+
+   </TabItem>
+
+   <TabItem label="Vitest">
+
+   <PackageManagers type="exec" pkg="@flaky-tests/cli" args="--html" />
+
+   </TabItem>
+
+   </Tabs>
+
+   The CLI writes the report to a temp file, prints its path, and opens it in your default browser.
+
+2. **Or write to a specific location with `--out`**
+
+   ```sh
+   bunx @flaky-tests/cli --html --out flaky-report.html
+   ```
+
+   Use this when you want to commit the file, attach it to a PR, or upload it as a CI artifact.
+
+</Steps>
+
+<Aside type="tip">
+`--html` works even when there are no newly-flaky patterns. The report falls back to showing run history, so a "clean" run still produces something useful.
+</Aside>
+
+## What's in the report
+
+### Header stat strip
+
+Five at-a-glance counters across the top:
+
+| Cell | What it means |
+|---|---|
+| **patterns** | Tests failing ≥ threshold in the window |
+| **critical** | Tests with ≥ 10 recent fails |
+| **fails / Nd** | Total failure events inside the window |
+| **hot files** | Distinct source files producing failures |
+| **last run** | Relative time since the most recent recorded run |
+
+### Sticky table of contents
+
+A left-rail navigator with a severity dot per pattern (red / coral / orange / yellow for critical / high / medium / low) and jump links to each dashboard section. Stays pinned as you scroll; collapses to a static list on narrow viewports.
+
+### Pattern cards
+
+One card per newly-flaky test, sorted by recent-fail count descending. Each card shows:
+
+- A severity pill and card number
+- The test path (`outer > inner > name`) and file location
+- Recent/prior fail counts
+- The first line of the most recent error
+- A collapsible **investigation prompt** with a **Copy** button
+
+The copy button writes the full prompt to the clipboard (via `navigator.clipboard` when available, falling back to range-selection). Paste into Claude, Cursor, Copilot, or any chat UI to start investigating.
+
+### Recent runs table
+
+Chronological view of the last 20 recorded runs, filtered to the current project. Columns: status, when, duration, total / passed / failed / errors, short git SHA.
+
+Click or press <kbd>Enter</kbd> on any run row to expand its per-failure breakdown — test name, failure kind, error preview, and relative timestamp. The chevron rotates to indicate the expanded state.
+
+## Theme toggle
+
+Top-right of the header: a sun / moon toggle. Three modes:
+
+1. **System default** (first visit) — follows `prefers-color-scheme`
+2. **Light** — forced light palette, persisted to `localStorage`
+3. **Dark** — forced dark palette, persisted to `localStorage`
+
+The choice survives reloads and follows you across any reports opened from the same origin.
+
+## Sharing and archiving
+
+Because the report is a single `.html` file with no external dependencies, it travels well:
+
+- **Email / Slack attachment** — open directly from the download
+- **Commit to the repo** — diff-friendly for tracking trends over time
+- **CI artifact** — upload once per scheduled detection run
+
+```yaml title=".github/workflows/flaky-check.yml"
+- name: Generate flaky report
+  run: bunx @flaky-tests/cli --html --out flaky-report.html
+
+- name: Upload report
+  uses: actions/upload-artifact@v4
+  with:
+    name: flaky-report
+    path: flaky-report.html
+    retention-days: 30
+```
+
+<Aside type="note">
+The report contains your test names, file paths, and error messages. If any of those are sensitive, treat the HTML file with the same care you'd treat your test logs — don't upload to public artifact storage without reviewing first.
+</Aside>
+
+## Interactivity cheatsheet
+
+| Action | How |
+|---|---|
+| Jump to a pattern | Click its entry in the sticky TOC |
+| Expand the investigation prompt | Click the **Investigation prompt** summary |
+| Copy a prompt | Click **Copy** on any card |
+| Drill into a run | Click or <kbd>Enter</kbd> on a recent-runs row |
+| Toggle light / dark | Click the sun / moon icon in the header |
+
+## Related
+
+- [CLI commands](/reference/cli/) — full reference for `--html`, `--out`, and every other flag
+- [Scheduled detection](/guides/scheduled-detection/) — wire the report into a weekly CI cron
+- [CI setup](/guides/ci-setup/) — upload the report as a workflow artifact

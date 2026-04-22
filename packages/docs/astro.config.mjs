@@ -36,6 +36,10 @@ export default defineConfig({
           label: 'Getting Started',
           items: [
             { label: 'Introduction', slug: 'getting-started/introduction' },
+            {
+              label: 'What is a flaky test?',
+              slug: 'getting-started/what-is-a-flaky-test',
+            },
             { label: 'Quick Start', slug: 'getting-started/quick-start' },
           ],
         },
@@ -46,6 +50,7 @@ export default defineConfig({
             { label: 'Setting up with Vitest', slug: 'guides/vitest' },
             { label: 'Choosing a store', slug: 'guides/choosing-a-store' },
             { label: 'Custom stores', slug: 'guides/custom-stores' },
+            { label: 'HTML report', slug: 'guides/html-report' },
             { label: 'CI setup', slug: 'guides/ci-setup' },
             {
               label: 'Scheduled detection',
