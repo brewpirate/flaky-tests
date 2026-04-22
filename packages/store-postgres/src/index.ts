@@ -34,18 +34,20 @@ export const postgresStoreOptionsSchema = type({
   'tablePrefix?': 'string',
 })
 
+/** Inferred options type for constructing a {@link PostgresStore}. */
 export type PostgresStoreOptions = typeof postgresStoreOptionsSchema.infer
 
 /**
- * PostgreSQL-backed implementation of the flaky-tests store.
- * Persists test runs and failures into two configurable tables
- * and supports querying for newly-emerging flaky patterns.
+ * `IStore` implementation targeting Postgres (including Neon serverless) via the
+ * pg-compatible `postgres` driver. Persists runs and failures into two prefix-configurable
+ * tables and queries for newly-emerging flaky patterns.
  */
 export class PostgresStore implements IStore {
   private sql: ReturnType<typeof postgres>
   private runsTable: string
   private failuresTable: string
 
+  /** Accepts either a full `connectionString` or individual host/port/credentials fields. */
   constructor(options: PostgresStoreOptions = {}) {
     const validated = parse(postgresStoreOptionsSchema, options)
     const prefix = validated.tablePrefix ?? 'flaky_test'

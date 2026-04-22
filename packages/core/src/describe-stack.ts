@@ -67,6 +67,7 @@ export class DescribeStack {
     return `${this.frames.join(' > ')} > ${testName}`
   }
 
+  /** Current nesting depth, used by preloads to decide whether a test is top-level. */
   get depth(): number {
     return this.frames.length
   }

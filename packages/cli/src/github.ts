@@ -56,6 +56,7 @@ export const gitHubConfigSchema = type({
   repo: type.string.atLeastLength(1),
 })
 
+/** Validated GitHub API credentials and repository target. */
 export type GitHubConfig = typeof gitHubConfigSchema.infer
 
 /**
@@ -106,6 +107,8 @@ export function resolveRepo(): { owner: string; repo: string } | null {
   return null
 }
 
+/** Standard header bundle for GitHub's REST v3 API — pinned API version
+ *  shields us from silent behavior changes when GitHub rolls a new default. */
 function githubHeaders(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
@@ -172,10 +175,14 @@ export async function createIssue(
   return data.html_url
 }
 
+/** Deterministic issue title so the duplicate-detection search is an
+ *  exact-title match rather than fuzzy keyword lookup. */
 function issueTitle(testName: string): string {
   return `[flaky-test] ${testName}`
 }
 
+/** Renders the issue body: the investigation prompt in a code block so
+ *  reviewers can paste it straight into an AI assistant. */
 function issueBody(pattern: FlakyPattern, windowDays: number): string {
   const prompt = generatePrompt(pattern, windowDays)
 

@@ -19,6 +19,10 @@ export class StoreError extends Error {
   readonly package: string
   readonly method: string
 
+  /**
+   * Accepts an options object so callers name package/method/message at the
+   * call site — prevents accidental argument reordering across adapters.
+   */
   constructor(options: {
     package: string
     method: string

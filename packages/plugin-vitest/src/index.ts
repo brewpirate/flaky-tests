@@ -33,6 +33,7 @@ import {
   updateRunInputSchema,
 } from '@flaky-tests/core'
 
+/** Synchronous subprocess runner injected into core git helpers; swallows errors so missing git never breaks the reporter. */
 const runCommand: RunCommand = (command, args) => {
   try {
     return execFileSync(command, args, {
@@ -44,6 +45,7 @@ const runCommand: RunCommand = (command, args) => {
   }
 }
 
+/** Thin wrapper binding the local subprocess runner to core's git capture so callers get sha/dirty without plumbing. */
 function captureGitInfo() {
   return captureGitInfoCore(runCommand)
 }
