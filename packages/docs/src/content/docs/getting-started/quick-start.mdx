@@ -1,11 +1,14 @@
 ---
 title: Quick Start
-description: Get flaky-tests running in under two minutes with Bun and SQLite.
+description: Get flaky-tests running in under two minutes.
 ---
 
 import { Steps, Tabs, TabItem } from '@astrojs/starlight/components'
 
-This guide uses **Bun** and the default **SQLite** store — the fastest path to capturing test failures locally.
+Pick your test runner and follow the steps — you'll be capturing failures in under two minutes.
+
+<Tabs>
+<TabItem label="Bun">
 
 <Steps>
 
@@ -21,8 +24,6 @@ This guide uses **Bun** and the default **SQLite** store — the fastest path to
    [test]
    preload = ["@flaky-tests/plugin-bun/preload"]
    ```
-
-   That's it. The next time you run `bun test`, failures are captured automatically.
 
 3. **Run your tests**
 
@@ -62,8 +63,79 @@ This guide uses **Bun** and the default **SQLite** store — the fastest path to
 
 </Steps>
 
+</TabItem>
+<TabItem label="Vitest">
+
+<Steps>
+
+1. **Install the plugin and a store**
+
+   ```sh
+   npm install -D @flaky-tests/plugin-vitest @flaky-tests/store-sqlite
+   ```
+
+   :::note
+   `store-sqlite` requires Bun's runtime for `bun:sqlite`. For Node-based Vitest, use `store-turso` with a local file URL or `store-postgres` instead.
+   :::
+
+2. **Add the reporter to `vitest.config.ts`**
+
+   ```ts
+   import { defineConfig } from 'vitest/config'
+   import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+   import { SqliteStore } from '@flaky-tests/store-sqlite'
+
+   export default defineConfig({
+     test: {
+       reporters: [
+         'default',
+         new FlakyTestsReporter(new SqliteStore()),
+       ],
+     },
+   })
+   ```
+
+3. **Run your tests**
+
+   ```sh
+   npx vitest run
+   ```
+
+   Failures are captured automatically alongside your normal test output.
+
+4. **Check for flaky patterns**
+
+   ```sh
+   npx @flaky-tests/cli
+   ```
+
+   If new patterns are detected you'll see something like:
+
+   ```
+   ✗ 1 new flaky test pattern detected
+
+     1. auth > login > should redirect on success
+        tests/auth.test.ts · timeout · 8 fails in 7d
+        Expected redirect within 2000ms
+
+     Run with --prompt to print investigation prompts
+   ```
+
+5. **Generate an investigation prompt**
+
+   ```sh
+   npx @flaky-tests/cli --prompt
+   ```
+
+   Copy the output into Claude, Cursor, or Copilot to investigate.
+
+</Steps>
+
+</TabItem>
+</Tabs>
+
 ## What's next?
 
-- **Using Vitest?** → [Setting up with Vitest](/guides/vitest/)
-- **Working in a team?** → [Choosing a store](/guides/choosing-a-store/) — SQLite is local only
-- **Want automatic detection in CI?** → [Scheduled detection](/guides/scheduled-detection/)
+- **Working in a team?** → [Choosing a store](/flaky-tests/guides/choosing-a-store/) — SQLite is local only
+- **Want automatic detection in CI?** → [Scheduled detection](/flaky-tests/guides/scheduled-detection/)
+- **Using a remote store?** → [Turso](/flaky-tests/stores/turso/) · [Supabase](/flaky-tests/stores/supabase/) · [Postgres](/flaky-tests/stores/postgres/)

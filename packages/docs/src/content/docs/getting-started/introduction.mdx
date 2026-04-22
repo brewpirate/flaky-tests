@@ -3,6 +3,8 @@ title: Introduction
 description: What flaky-tests is, why it exists, and how it works.
 ---
 
+import TechGrid from '../../../components/TechGrid.astro'
+
 ## What is flaky-tests?
 
 **flaky-tests** is a lightweight test telemetry tool. It hooks into your test runner, records every failure to a database, and gives you a CLI to detect when tests have _newly_ started failing intermittently.
@@ -25,19 +27,21 @@ flaky-tests is the alternative: a local-first, zero-account tool that just store
 3. **Investigate** — The CLI generates a structured prompt ready to paste into Claude, Cursor, or Copilot. Either a test issue (bad setup, timing, wrong assertion) or a code issue (regression, race condition)
 4. **Notify** — The CLI can open a GitHub issue with the investigation prompt embedded, or you can schedule a GitHub Action to do it automatically
 
+## Supported tech
+
+<TechGrid />
+
 ## Architecture
 
-flaky-tests is a monorepo of focused packages:
+flaky-tests is a monorepo of focused packages. You only install what you need.
 
 | Package | Role |
 |---|---|
-| `@flaky-tests/core` | Shared types and `IStore` interface |
+| `@flaky-tests/core` | Shared types, ArkType schemas, prompt generation |
 | `@flaky-tests/plugin-bun` | Bun test preload |
 | `@flaky-tests/plugin-vitest` | Vitest reporter |
 | `@flaky-tests/store-sqlite` | Local SQLite (Bun built-in) |
 | `@flaky-tests/store-turso` | Turso — remote SQLite, free tier |
 | `@flaky-tests/store-supabase` | Supabase |
 | `@flaky-tests/store-postgres` | PostgreSQL / Neon |
-| `@flaky-tests/cli` | Pattern detection and issue creation |
-
-You only install what you need.
+| `@flaky-tests/cli` | Pattern detection, HTML reports, and issue creation |

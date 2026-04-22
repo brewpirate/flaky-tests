@@ -15,7 +15,8 @@
       "!!**/dist",
       "!!**/tests",
       "!!scripts",
-      "!!**/node_modules"
+      "!!**/node_modules",
+      "!!**/*.astro"
     ]
   },
   "formatter": {

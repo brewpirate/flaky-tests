@@ -31,6 +31,34 @@ import { Card, CardGrid } from '@astrojs/starlight/components'
   </Card>
 </CardGrid>
 
+## Supported test runners
+
+<CardGrid>
+  <Card title="Bun" icon="bun">
+    Zero-config preload — hooks into `bun:test` automatically. Just add one line to `bunfig.toml`. [Setup guide →](/flaky-tests/guides/bun/)
+  </Card>
+  <Card title="Vitest" icon="seti:vitest">
+    Custom reporter compatible with Vitest 1.x, 2.x, and 3.x. Works with any Vitest config. [Setup guide →](/flaky-tests/guides/vitest/)
+  </Card>
+</CardGrid>
+
+## Supported storage backends
+
+<CardGrid>
+  <Card title="SQLite" icon="seti:db">
+    Local-only, zero setup. Uses Bun's built-in `bun:sqlite`. Great for local dev and solo projects. [Docs →](/flaky-tests/stores/sqlite/)
+  </Card>
+  <Card title="Turso" icon="cloud-download">
+    Remote SQLite via libSQL. Free tier with 500 databases. Share data across CI and teammates. [Docs →](/flaky-tests/stores/turso/)
+  </Card>
+  <Card title="Supabase" icon="seti:bolt">
+    Uses the Supabase REST API. Free tier available. Ideal if you already use Supabase. [Docs →](/flaky-tests/stores/supabase/)
+  </Card>
+  <Card title="PostgreSQL" icon="seti:database">
+    Any Postgres host — Neon, AWS RDS, self-hosted. For teams with existing Postgres infrastructure. [Docs →](/flaky-tests/stores/postgres/)
+  </Card>
+</CardGrid>
+
 ## How it works
 
 1. **Install a plugin** — add `@flaky-tests/plugin-bun` or `@flaky-tests/plugin-vitest` as a preload. It hooks into your test runner and records every run to a local or remote database.
