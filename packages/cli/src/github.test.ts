@@ -1,5 +1,5 @@
-import type { Config } from '@flaky-tests/core'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import type { Config } from '@flaky-tests/core'
 import { resolveRepo } from './github'
 
 function configWithRepo(repository: string | undefined): Config {

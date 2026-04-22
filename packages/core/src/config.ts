@@ -112,7 +112,9 @@ function parsePositiveInt(
   return parsed
 }
 
-function resolveLogLevelValue(value: string | undefined): Config['log']['level'] {
+function resolveLogLevelValue(
+  value: string | undefined,
+): Config['log']['level'] {
   const lowered = value?.toLowerCase()
   if (
     lowered === 'silent' ||
@@ -125,9 +127,7 @@ function resolveLogLevelValue(value: string | undefined): Config['log']['level']
   return 'warn'
 }
 
-function resolveStoreConfig(
-  env: NodeJS.ProcessEnv,
-): Config['store'] {
+function resolveStoreConfig(env: NodeJS.ProcessEnv): Config['store'] {
   const storeType = env.FLAKY_TESTS_STORE ?? 'sqlite'
   const connectionString = env.FLAKY_TESTS_CONNECTION_STRING
   const authToken = env.FLAKY_TESTS_AUTH_TOKEN
@@ -196,9 +196,7 @@ function isConfigObject(value: unknown): value is Config {
  *   - a `NodeJS.ProcessEnv` record → parse that instead (fresh each call)
  *   - a pre-built `Config` → install it as the cached resolution (useful in tests)
  */
-export function resolveConfig(
-  source?: NodeJS.ProcessEnv | Config,
-): Config {
+export function resolveConfig(source?: NodeJS.ProcessEnv | Config): Config {
   if (isConfigObject(source)) {
     cachedConfig = source
     cachedEnv = process.env

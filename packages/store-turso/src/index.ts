@@ -1,9 +1,9 @@
 import {
   type Config,
   createLogger,
-  definePlugin,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
+  definePlugin,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,

@@ -19,12 +19,6 @@ export {
 } from './defaults'
 export { DescribeStack } from './describe-stack'
 export { ConfigError, StoreError } from './errors'
-export {
-  definePlugin,
-  type FlakyPluginDescriptor,
-  listRegisteredPlugins,
-  resetPluginRegistryForTesting,
-} from './plugin'
 export { captureGitInfo, type RunCommand } from './git'
 export { escapeHtml } from './html-utils'
 export {
@@ -34,6 +28,12 @@ export {
   resolveLogLevel,
 } from './log'
 export { mapRowToPattern, type PatternRow } from './pattern-mapper'
+export {
+  definePlugin,
+  type FlakyPluginDescriptor,
+  listRegisteredPlugins,
+  resetPluginRegistryForTesting,
+} from './plugin'
 export { generatePrompt } from './prompt'
 export {
   failureKindSchema,

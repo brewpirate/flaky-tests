@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { ConfigError } from './errors'
 import { resolveConfig } from './config'
+import { ConfigError } from './errors'
 
 function env(overrides: Record<string, string | undefined>): NodeJS.ProcessEnv {
   return overrides as NodeJS.ProcessEnv
@@ -68,27 +68,27 @@ describe('resolveConfig', () => {
   })
 
   test('unknown store type throws ConfigError', () => {
-    expect(() =>
-      resolveConfig(env({ FLAKY_TESTS_STORE: 'dynamo' })),
-    ).toThrow(ConfigError)
+    expect(() => resolveConfig(env({ FLAKY_TESTS_STORE: 'dynamo' }))).toThrow(
+      ConfigError,
+    )
   })
 
   test('invalid window/threshold values throw ConfigError', () => {
-    expect(() =>
-      resolveConfig(env({ FLAKY_TESTS_WINDOW: 'abc' })),
-    ).toThrow(ConfigError)
-    expect(() =>
-      resolveConfig(env({ FLAKY_TESTS_THRESHOLD: '0' })),
-    ).toThrow(ConfigError)
-    expect(() =>
-      resolveConfig(env({ FLAKY_TESTS_THRESHOLD: '1.5' })),
-    ).toThrow(ConfigError)
+    expect(() => resolveConfig(env({ FLAKY_TESTS_WINDOW: 'abc' }))).toThrow(
+      ConfigError,
+    )
+    expect(() => resolveConfig(env({ FLAKY_TESTS_THRESHOLD: '0' }))).toThrow(
+      ConfigError,
+    )
+    expect(() => resolveConfig(env({ FLAKY_TESTS_THRESHOLD: '1.5' }))).toThrow(
+      ConfigError,
+    )
   })
 
   test('parses FLAKY_TESTS_DISABLE as boolean', () => {
-    expect(resolveConfig(env({ FLAKY_TESTS_DISABLE: '1' })).plugin.disabled).toBe(
-      true,
-    )
+    expect(
+      resolveConfig(env({ FLAKY_TESTS_DISABLE: '1' })).plugin.disabled,
+    ).toBe(true)
     expect(
       resolveConfig(env({ FLAKY_TESTS_DISABLE: 'true' })).plugin.disabled,
     ).toBe(true)

@@ -71,16 +71,16 @@ describe('parseCliConfig', () => {
   })
 
   test('recognizes --help and --version', () => {
-    expect(
-      parseCliConfig({ argv: ['--help'], defaults: DEFAULTS }).help,
-    ).toBe(true)
+    expect(parseCliConfig({ argv: ['--help'], defaults: DEFAULTS }).help).toBe(
+      true,
+    )
     expect(parseCliConfig({ argv: ['-h'], defaults: DEFAULTS }).help).toBe(true)
     expect(
       parseCliConfig({ argv: ['--version'], defaults: DEFAULTS }).version,
     ).toBe(true)
-    expect(
-      parseCliConfig({ argv: ['-v'], defaults: DEFAULTS }).version,
-    ).toBe(true)
+    expect(parseCliConfig({ argv: ['-v'], defaults: DEFAULTS }).version).toBe(
+      true,
+    )
   })
 
   test('captures --out and --repo when provided', () => {
