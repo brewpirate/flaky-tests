@@ -197,6 +197,7 @@ export class SupabaseStore implements IStore {
   async getNewPatterns(
     options: GetNewPatternsOptions = {},
   ): Promise<FlakyPattern[]> {
+    options.signal?.throwIfAborted()
     const validated = parse(getNewPatternsOptionsSchema, options)
     const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
     const threshold = validated.threshold ?? DEFAULT_THRESHOLD
@@ -218,8 +219,14 @@ export class SupabaseStore implements IStore {
       project === null
         ? query.is(`${this.runsTable}.project`, null)
         : query.eq(`${this.runsTable}.project`, project)
-    const { data, error } = await query
+    const finalized =
+      options.signal !== undefined ? query.abortSignal(options.signal) : query
+    const { data, error } = await finalized
 
+    // postgrest-js surfaces an aborted fetch as a regular error; the signal
+    // itself is the authoritative source — if it aborted mid-flight, throw
+    // its reason so callers see a native AbortError across adapters.
+    options.signal?.throwIfAborted()
     if (error)
       throw new StoreError({
         package: PACKAGE,
@@ -309,7 +316,8 @@ export class SupabaseStore implements IStore {
 
   /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
-    const { limit, project = null } = options
+    options.signal?.throwIfAborted()
+    const { limit, project = null, signal } = options
     let query = this.client
       .from(this.runsTable)
       .select(
@@ -321,7 +329,9 @@ export class SupabaseStore implements IStore {
       project === null
         ? query.is('project', null)
         : query.eq('project', project)
-    const { data, error } = await query
+    const finalized = signal !== undefined ? query.abortSignal(signal) : query
+    const { data, error } = await finalized
+    signal?.throwIfAborted()
     if (error)
       throw new StoreError({
         package: PACKAGE,

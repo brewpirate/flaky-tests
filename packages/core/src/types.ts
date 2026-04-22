@@ -27,8 +27,16 @@ export type InsertFailureInput = typeof insertFailureInputSchema.infer
 /** A test that has newly become flaky — present in the current window but absent in the prior. */
 export type FlakyPattern = typeof flakyPatternSchema.infer
 
-/** Options for querying new flaky patterns. */
-export type GetNewPatternsOptions = typeof getNewPatternsOptionsSchema.infer
+/**
+ * Options for querying new flaky patterns. `signal` is a TS-only extension
+ * on top of the arktype-validated fields — arktype drops it during parse so
+ * adapters read it directly from the caller's options instead of from the
+ * validated copy.
+ */
+export type GetNewPatternsOptions = typeof getNewPatternsOptionsSchema.infer & {
+  /** Abort the query when this signal aborts; caller receives an `AbortError`. */
+  signal?: AbortSignal
+}
 
 /** Git metadata captured at test-run start. */
 export type GitInfo = typeof gitInfoSchema.infer
@@ -58,6 +66,8 @@ export interface GetRecentRunsOptions {
   limit: number
   /** Filter to a single project. Null-or-undefined matches rows whose `project` column is NULL. */
   project?: string | null
+  /** Abort the query when this signal aborts; caller receives an `AbortError`. */
+  signal?: AbortSignal
 }
 
 /**

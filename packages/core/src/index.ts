@@ -1,3 +1,4 @@
+export { raceAbort } from './abort'
 export { categorizeError, extractMessage, extractStack } from './categorize'
 export {
   type Config,

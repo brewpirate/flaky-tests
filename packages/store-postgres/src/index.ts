@@ -52,6 +52,37 @@ export type PostgresStoreOptions = typeof postgresStoreOptionsSchema.infer
 const DEFAULT_POSTGRES_PORT = 5432
 
 /**
+ * postgres-js exposes `.cancel()` on pending queries for server-side cancel.
+ * On abort we fire the cancel, then the pending query rejects with postgres-js's
+ * cancellation error, which we rethrow as the signal's `reason` (an AbortError)
+ * so callers see a uniform abort shape across adapters.
+ */
+function cancelOnAbort<T>(
+  query: PromiseLike<T> & { cancel?: () => void },
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  if (signal === undefined) return Promise.resolve(query)
+  signal.throwIfAborted()
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      query.cancel?.()
+      reject(signal.reason)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    Promise.resolve(query).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      },
+    )
+  })
+}
+
+/**
  * `IStore` implementation targeting Postgres (including Neon serverless) via the
  * pg-compatible `postgres` driver. Persists runs and failures into two prefix-configurable
  * tables and queries for newly-emerging flaky patterns.
@@ -249,6 +280,7 @@ export class PostgresStore implements IStore {
   async getNewPatterns(
     options: GetNewPatternsOptions = {},
   ): Promise<FlakyPattern[]> {
+    options.signal?.throwIfAborted()
     const validated = parse(getNewPatternsOptionsSchema, options)
     const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
     const threshold = validated.threshold ?? DEFAULT_THRESHOLD
@@ -263,21 +295,19 @@ export class PostgresStore implements IStore {
         ? this.sql`r.project IS NULL`
         : this.sql`r.project = ${project}`
 
-    const rows = await this.wrap(
-      'getNewPatterns',
-      () =>
-        this.sql<
-          Array<{
-            test_file: string
-            test_name: string
-            recent_fails: string
-            prior_fails: string
-            failure_kinds: string[]
-            last_error_message_raw: string | null
-            last_error_stack_raw: string | null
-            last_failed: Date
-          }>
-        >`
+    const rows = await this.wrap('getNewPatterns', () => {
+      const query = this.sql<
+        Array<{
+          test_file: string
+          test_name: string
+          recent_fails: string
+          prior_fails: string
+          failure_kinds: string[]
+          last_error_message_raw: string | null
+          last_error_stack_raw: string | null
+          last_failed: Date
+        }>
+      >`
         SELECT
           f.test_file,
           f.test_name,
@@ -297,8 +327,9 @@ export class PostgresStore implements IStore {
         HAVING COUNT(*) FILTER (WHERE f.failed_at > ${windowStart}) >= ${threshold}
            AND COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart}) = 0
         ORDER BY recent_fails DESC
-      `,
-    )
+      `
+      return cancelOnAbort(query, options.signal)
+    })
 
     const patterns = parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
     log.debug(
@@ -309,31 +340,30 @@ export class PostgresStore implements IStore {
 
   /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
-    const { limit, project = null } = options
+    options.signal?.throwIfAborted()
+    const { limit, project = null, signal } = options
     const runs = this.runsTable
     const projectFilter =
       project === null
         ? this.sql`project IS NULL`
         : this.sql`project = ${project}`
-    const rows = await this.wrap(
-      'getRecentRuns',
-      () =>
-        this.sql<
-          Array<{
-            run_id: string
-            project: string | null
-            started_at: Date
-            ended_at: Date | null
-            duration_ms: number | null
-            status: string | null
-            total_tests: number | null
-            passed_tests: number | null
-            failed_tests: number | null
-            errors_between_tests: number | null
-            git_sha: string | null
-            git_dirty: boolean | null
-          }>
-        >`
+    const rows = await this.wrap('getRecentRuns', () => {
+      const query = this.sql<
+        Array<{
+          run_id: string
+          project: string | null
+          started_at: Date
+          ended_at: Date | null
+          duration_ms: number | null
+          status: string | null
+          total_tests: number | null
+          passed_tests: number | null
+          failed_tests: number | null
+          errors_between_tests: number | null
+          git_sha: string | null
+          git_dirty: boolean | null
+        }>
+      >`
         SELECT run_id, project, started_at, ended_at, duration_ms, status,
                total_tests, passed_tests, failed_tests,
                errors_between_tests, git_sha, git_dirty
@@ -341,8 +371,9 @@ export class PostgresStore implements IStore {
          WHERE ${projectFilter}
          ORDER BY started_at DESC
          LIMIT ${limit}
-      `,
-    )
+      `
+      return cancelOnAbort(query, signal)
+    })
     const toIso = (value: Date | string | null): string | null => {
       if (value === null) return null
       if (value instanceof Date) return value.toISOString()

@@ -379,5 +379,33 @@ export function runContractTests(
       await store.close()
       await expect(store.close()).resolves.toBeUndefined()
     })
+
+    // --- AbortSignal support (read methods) --------------------------------
+
+    test('getNewPatterns rejects with AbortError when signal is pre-aborted', async () => {
+      const controller = new AbortController()
+      controller.abort()
+      const error = await store
+        .getNewPatterns({ signal: controller.signal })
+        .then(
+          () => null,
+          (rejection: unknown) => rejection,
+        )
+      expect(error).not.toBeNull()
+      expect((error as { name: string }).name).toBe('AbortError')
+    })
+
+    test('getRecentRuns rejects with AbortError when signal is pre-aborted', async () => {
+      const controller = new AbortController()
+      controller.abort()
+      const error = await store
+        .getRecentRuns({ limit: 10, signal: controller.signal })
+        .then(
+          () => null,
+          (rejection: unknown) => rejection,
+        )
+      expect(error).not.toBeNull()
+      expect((error as { name: string }).name).toBe('AbortError')
+    })
   })
 }
