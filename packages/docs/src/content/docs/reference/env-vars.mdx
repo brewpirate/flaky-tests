@@ -3,60 +3,70 @@ title: Environment variables
 description: All environment variables recognized by flaky-tests packages.
 ---
 
-## Plugin variables
+Every `process.env` read in flaky-tests flows through a single `resolveConfig()`
+function in `@flaky-tests/core`. The variables below are the complete surface —
+nothing else is read anywhere in the codebase.
 
-These are read by `@flaky-tests/plugin-bun` and `@flaky-tests/plugin-vitest` during test runs.
-
-| Variable | Package | Description | Default |
-|---|---|---|---|
-| `FLAKY_TESTS_DISABLED` | All plugins | Set to `1` to disable failure capture entirely | — |
-| `FLAKY_TESTS_SQLITE_PATH` | `store-sqlite` | Path to the SQLite database file | `node_modules/.cache/flaky-tests/failures.db` |
-| `FLAKY_TESTS_STORE` | CLI | Which store to use: `sqlite`, `turso`, `supabase`, `postgres` | `sqlite` |
-
-## Store variables
-
-### SQLite
+## Runtime config
 
 | Variable | Description | Default |
 |---|---|---|
-| `FLAKY_TESTS_SQLITE_PATH` | Path to the SQLite database file | `node_modules/.cache/flaky-tests/failures.db` |
+| `FLAKY_TESTS_LOG` | Log level: `silent`, `error`, `warn`, `debug` | `warn` |
+| `FLAKY_TESTS_DISABLE` | Set to `1` or `true` to turn the capture plugins into a no-op | — |
+| `FLAKY_TESTS_RUN_ID` | Override the generated run id. Set automatically by `@flaky-tests/plugin-bun/run-tracked` when it spawns `bun test` — most users never set this manually. | — |
 
-### Turso
-
-| Variable | Description | Required |
-|---|---|---|
-| `TURSO_URL` | `libsql://` URL for your Turso database | Yes |
-| `TURSO_AUTH_TOKEN` | Turso auth token | Yes (for remote DBs) |
-
-### Supabase
-
-| Variable | Description | Required |
-|---|---|---|
-| `SUPABASE_URL` | Your Supabase project URL (`https://...supabase.co`) | Yes |
-| `SUPABASE_KEY` | Anon key or service role key | Yes |
-
-### Postgres
-
-| Variable | Description | Required |
-|---|---|---|
-| `POSTGRES_URL` | PostgreSQL connection string | Yes |
-
-## CLI variables
-
-These are read by `@flaky-tests/cli` when running `bunx @flaky-tests/cli`.
+## Store selection
 
 | Variable | Description | Default |
 |---|---|---|
-| `FLAKY_TESTS_STORE` | Which store backend to use | `sqlite` |
-| `GITHUB_TOKEN` | Token used to create issues (also `GH_TOKEN`) | — |
-| `GITHUB_REPOSITORY` | `owner/repo` for issue creation (set automatically in Actions) | — |
+| `FLAKY_TESTS_STORE` | Which backend to use: `sqlite`, `turso`, `supabase`, `postgres`, or any custom type you've registered via `definePlugin`. | `sqlite` |
+| `FLAKY_TESTS_STORE_MODULE` | Explicit module specifier for the dispatcher to `import()`. Overrides the `@flaky-tests/store-<type>` convention — use this for forks or third-party adapters that live under a different package name. | — |
+| `FLAKY_TESTS_DB` | SQLite database path (used only when `FLAKY_TESTS_STORE=sqlite`). | `node_modules/.cache/flaky-tests/failures.db` |
+| `FLAKY_TESTS_CONNECTION_STRING` | Connection string for the chosen remote store. `libsql://…` for Turso, `postgres://…` for Postgres, `https://…supabase.co` for Supabase. | — |
+| `FLAKY_TESTS_AUTH_TOKEN` | Auth token for Turso (optional for local file DBs) or Supabase (anon / service role key). | — |
+
+## Detection tuning
+
+| Variable | Description | Default |
+|---|---|---|
+| `FLAKY_TESTS_WINDOW` | Detection window length in days. Also settable via `--window <n>` on the CLI. | `7` |
+| `FLAKY_TESTS_THRESHOLD` | Minimum recent failures required to flag a test as flaky. Also settable via `--threshold <n>` on the CLI. | `2` |
+
+## GitHub integration (CLI only)
+
+| Variable | Description | Default |
+|---|---|---|
+| `GITHUB_TOKEN` | Token used to open issues when the CLI is invoked with `--create-issue`. | — |
+| `GITHUB_REPOSITORY` | `owner/repo` for issue creation. Set automatically inside GitHub Actions. | — |
+
+## Report display (CLI only)
+
+| Variable | Description | Default |
+|---|---|---|
+| `BROWSER` | Override the command used to open the generated HTML report. Standard xdg convention. | platform default |
+
+## Integration-test credentials
+
+These are only read by `getTestCredentials()` in integration test files. They
+do not affect production runtime.
+
+| Variable | Description |
+|---|---|
+| `INTEGRATION` | Set to `1` to opt into integration-tier tests. |
+| `TURSO_TEST_URL` | libSQL URL for the Turso integration suite. |
+| `POSTGRES_TEST_URL` | Postgres URL for the Postgres integration suite. |
+| `SUPABASE_TEST_URL` | Supabase project URL for the Supabase integration suite. |
+| `SUPABASE_TEST_KEY` | Supabase anon/service-role key for the Supabase integration suite. |
 
 ## GitHub Action inputs
 
-When using the `brewpirate/flaky-tests` GitHub Action, inputs map to environment variables automatically. See [Action inputs](/github-action/inputs/) for the full list.
+When using the `brewpirate/flaky-tests` GitHub Action, inputs map to
+`FLAKY_TESTS_*` env vars automatically. See
+[Action inputs](/github-action/inputs/) for the mapping.
 
 ## Precedence
 
-Constructor options → environment variables → defaults.
-
-If you pass `path` to `new SqliteStore({ path: '...' })`, that overrides `FLAKY_TESTS_SQLITE_PATH`. If neither is set, the default path is used.
+For the CLI: `--flag` > environment variable > default. For stores: options
+passed to the constructor > environment variable > default. If you pass
+`dbPath` to `new SqliteStore({ dbPath: '...' })`, that wins over
+`FLAKY_TESTS_DB`.

@@ -1,0 +1,205 @@
+---
+title: Custom stores
+description: Author your own IStore adapter and plug it in without modifying flaky-tests.
+---
+
+flaky-tests ships four store adapters — sqlite, turso, supabase, postgres —
+but none of them are hardcoded into the CLI or the plugin. A store adapter
+is just any package that:
+
+1. **Implements `IStore`** (the interface exported from `@flaky-tests/core`).
+2. **Calls `definePlugin({ name: 'store-<type>', create })`** at module import time.
+
+The dispatcher in `@flaky-tests/core` (`createStoreFromConfig`) looks up
+`store-<type>` in a runtime registry. Adding a new backend means shipping a
+new package; nothing in flaky-tests itself needs to change.
+
+This guide walks through authoring and using a custom adapter.
+
+## Write the adapter
+
+```ts
+// @acme/store-dynamodb/src/index.ts
+import type {
+  Config,
+  FlakyPattern,
+  GetNewPatternsOptions,
+  InsertFailureInput,
+  InsertRunInput,
+  IStore,
+  UpdateRunInput,
+} from '@flaky-tests/core'
+import {
+  definePlugin,
+  extractMessage,
+  parse,
+  insertRunInputSchema,
+  insertFailureInputSchema,
+  updateRunInputSchema,
+  StoreError,
+} from '@flaky-tests/core'
+
+const PACKAGE = '@acme/store-dynamodb'
+
+export class DynamoStore implements IStore {
+  constructor(private readonly options: { tableName: string }) {}
+
+  private async wrap<T>(method: string, fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn()
+    } catch (error) {
+      throw new StoreError({
+        package: PACKAGE,
+        method,
+        message: extractMessage(error),
+        cause: error,
+      })
+    }
+  }
+
+  async migrate(): Promise<void> {
+    await this.wrap('migrate', async () => {
+      /* create-if-not-exists */
+    })
+  }
+
+  async insertRun(input: InsertRunInput): Promise<void> {
+    parse(insertRunInputSchema, input)
+    await this.wrap('insertRun', async () => {
+      /* put item */
+    })
+  }
+
+  async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
+    parse(updateRunInputSchema, input)
+    await this.wrap('updateRun', async () => {
+      /* update item */
+    })
+  }
+
+  async insertFailure(input: InsertFailureInput): Promise<void> {
+    parse(insertFailureInputSchema, input)
+    await this.wrap('insertFailure', async () => {
+      /* put item */
+    })
+  }
+
+  async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
+    if (inputs.length === 0) return
+    await this.wrap('insertFailures', async () => {
+      /* batch write */
+    })
+  }
+
+  async getNewPatterns(
+    _options: GetNewPatternsOptions = {},
+  ): Promise<FlakyPattern[]> {
+    return this.wrap('getNewPatterns', async () => [])
+  }
+
+  async close(): Promise<void> {
+    // release any pooled clients
+  }
+}
+
+// Register at module import time — this is what makes the dispatcher find it.
+export const dynamoStorePlugin = definePlugin({
+  name: 'store-dynamodb',
+  create(config: Config): IStore {
+    if (config.store.type !== 'dynamodb') {
+      throw new Error(
+        `store-dynamodb invoked with config.store.type="${config.store.type}"`,
+      )
+    }
+    return new DynamoStore({ tableName: 'flaky_tests' })
+  },
+})
+```
+
+### Test it against the contract suite
+
+Every first-party adapter runs the shared `runContractTests` suite from
+`@flaky-tests/core/test-helpers`. Authoring your own adapter is no different:
+
+```ts
+// @acme/store-dynamodb/src/index.test.ts
+import { runContractTests } from '@flaky-tests/core/test-helpers'
+import { DynamoStore } from './index'
+
+runContractTests('dynamodb', () => new DynamoStore({ tableName: 'test' }))
+```
+
+This asserts the 15 `IStore` scenarios every built-in adapter satisfies.
+
+## Consume the adapter
+
+### With `@flaky-tests/plugin-bun` (recommended)
+
+Write a short preload file that imports your adapter (so it registers) and
+then delegates to flaky-tests's generic preload wiring:
+
+```ts
+// my-preload.ts
+import '@acme/store-dynamodb' // triggers definePlugin at import time
+import {
+  createStoreFromConfig,
+  resolveConfig,
+} from '@flaky-tests/core'
+import { createPreload } from '@flaky-tests/plugin-bun'
+
+const config = resolveConfig()
+if (!config.plugin.disabled) {
+  const store = await createStoreFromConfig(config)
+  createPreload(store)
+}
+```
+
+```toml
+# bunfig.toml
+[test]
+preload = ["./my-preload.ts"]
+```
+
+### With `FLAKY_TESTS_STORE_MODULE` (no custom preload)
+
+If you don't want to write a preload wrapper, tell the dispatcher to import
+your module directly:
+
+```sh
+FLAKY_TESTS_STORE=dynamodb \
+FLAKY_TESTS_STORE_MODULE=@acme/store-dynamodb \
+bunx flaky-tests
+```
+
+The dispatcher tries `FLAKY_TESTS_STORE_MODULE` first, falls through to the
+`@flaky-tests/store-<type>` convention second, and throws
+`MissingStorePackageError` if neither resolves.
+
+## How dispatch works
+
+```
+FLAKY_TESTS_STORE=dynamodb
+  ↓
+resolveConfig()             # Config { store: { type: 'dynamodb', module?: ... } }
+  ↓
+createStoreFromConfig(config)
+  ├─ 1. listRegisteredPlugins().find(d => d.name === 'store-dynamodb')
+  │      └─ hit? → use it. (user imported @acme/store-dynamodb in their preload)
+  ├─ 2. miss → import(config.store.module) ?? import('@flaky-tests/store-dynamodb')
+  │      └─ each success triggers the adapter's own definePlugin call
+  └─ 3. miss → throw MissingStorePackageError('dynamodb', '@flaky-tests/store-dynamodb')
+```
+
+Zero hardcoded adapter names anywhere in the dispatcher. Adding a store
+means shipping a package; nothing upstream changes.
+
+## Checklist for adapter authors
+
+- [ ] Implements every `IStore` method (`migrate` is required even if it's a no-op).
+- [ ] Wraps every driver error in `StoreError` with `package`, `method`, `message`, `cause`.
+- [ ] Calls `parse(insertRunInputSchema, input)` etc. at the top of each write method so bad input surfaces as `ValidationError` before hitting the DB.
+- [ ] Validates any user-provided identifier via `validateTablePrefix` if the adapter interpolates table names.
+- [ ] Calls `definePlugin({ name: 'store-<name>', create })` at module top-level (not inside a function).
+- [ ] Runs `runContractTests('<name>', makeStore)` and passes all 15 scenarios.
+
+That's the contract. The rest is up to the adapter.

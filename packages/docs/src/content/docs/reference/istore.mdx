@@ -3,25 +3,55 @@ title: IStore interface
 description: The storage interface that all store adapters implement.
 ---
 
-All store packages implement a common `IStore` interface from `@flaky-tests/core`. This means you can swap backends without changing any other code.
+All store packages implement a common `IStore` interface from `@flaky-tests/core`. This is what makes backends swappable — the rest of the system never depends on a concrete store implementation, only on this contract.
 
 ## Interface definition
 
 ```ts
-import type { IStore, InsertRunInput, UpdateRunInput, InsertFailureInput, GetNewPatternsOptions, FlakyPattern } from '@flaky-tests/core'
+import type {
+  IStore,
+  InsertRunInput,
+  UpdateRunInput,
+  InsertFailureInput,
+  GetNewPatternsOptions,
+  FlakyPattern,
+} from '@flaky-tests/core'
 ```
 
 ```ts
 interface IStore {
+  migrate(): Promise<void>
   insertRun(input: InsertRunInput): Promise<void>
   updateRun(runId: string, input: UpdateRunInput): Promise<void>
   insertFailure(input: InsertFailureInput): Promise<void>
+  insertFailures(inputs: readonly InsertFailureInput[]): Promise<void>
   getNewPatterns(options?: GetNewPatternsOptions): Promise<FlakyPattern[]>
   close(): Promise<void>
 }
 ```
 
-All methods return `Promise<void>` (or `Promise<FlakyPattern[]>`) so that both synchronous stores (SQLite, wrapped in async) and truly async stores (Turso, Supabase, Postgres) implement the same interface.
+Every method is async so adapters backed by an HTTP client (Turso, Supabase, Postgres) share the same signature as the synchronous SQLite adapter.
+
+### Error contract
+
+Implementations **must** wrap any driver-level error thrown by a public method in a `StoreError` with `{ package, method, message, cause }` set. The `cause` field preserves the original stack for inspection. Validation errors raised by `arktype` (surfaced as `ValidationError`) propagate unwrapped so bad input stays distinguishable from a downstream driver failure.
+
+### Registering with the plugin registry
+
+Every adapter registers a descriptor at module import time so the dispatcher in `@flaky-tests/core` can find it by `name`. There is **no hardcoded list of adapters** anywhere in the dispatcher.
+
+```ts
+import { definePlugin, type Config, type IStore } from '@flaky-tests/core'
+
+export const myStorePlugin = definePlugin({
+  name: 'store-mything',
+  create(config: Config): IStore {
+    return new MyStore(/* unpack config */)
+  },
+})
+```
+
+See the [custom stores guide](/guides/custom-stores/) for a complete walkthrough.
 
 ## Types
 
@@ -29,8 +59,12 @@ All methods return `Promise<void>` (or `Promise<FlakyPattern[]>`) so that both s
 
 ```ts
 interface InsertRunInput {
-  id: string          // UUID v4
-  startedAt: string   // ISO 8601 timestamp
+  runId: string                    // stable id for the run (UUID)
+  startedAt: string                // ISO 8601 timestamp
+  gitSha?: string | null
+  gitDirty?: boolean | null
+  runtimeVersion?: string | null
+  testArgs?: string | null
 }
 ```
 
@@ -38,8 +72,13 @@ interface InsertRunInput {
 
 ```ts
 interface UpdateRunInput {
-  finishedAt: string   // ISO 8601 timestamp
-  exitCode: number
+  endedAt?: string                 // ISO 8601 timestamp
+  durationMs?: number
+  status?: 'pass' | 'fail'
+  totalTests?: number
+  passedTests?: number
+  failedTests?: number
+  errorsBetweenTests?: number
 }
 ```
 
@@ -47,14 +86,14 @@ interface UpdateRunInput {
 
 ```ts
 interface InsertFailureInput {
-  id: string              // UUID v4
   runId: string
-  testFile: string        // relative path to test file
-  testName: string        // full test name including describe blocks, e.g. "auth > login > should redirect"
+  testFile: string                 // relative path to test file
+  testName: string                 // full test name including describe blocks
   failureKind: FailureKind
-  errorMessage: string | null
-  errorStack: string | null
-  failedAt: string        // ISO 8601 timestamp
+  errorMessage?: string | null
+  errorStack?: string | null
+  durationMs?: number | null
+  failedAt: string                 // ISO 8601 timestamp
 }
 ```
 
@@ -91,45 +130,20 @@ interface GetNewPatternsOptions {
 interface FlakyPattern {
   testFile: string
   testName: string
-  recentFails: number         // failures in the current window
-  priorFails: number          // failures in the prior window (always 0 for new patterns)
-  failureKinds: string[]      // distinct FailureKind values seen recently
+  recentFails: number              // failures in the current window
+  priorFails: number               // failures in the prior window (always 0 for new patterns)
+  failureKinds: FailureKind[]      // distinct kinds seen in the current window
   lastErrorMessage: string | null
   lastErrorStack: string | null
-  lastFailed: string          // ISO 8601 timestamp of most recent failure
+  lastFailed: string               // ISO 8601 timestamp of most recent failure
 }
 ```
 
-## Writing a custom store
+## Contract suite
 
-To implement a custom store, create a class that satisfies `IStore`:
+`@flaky-tests/core/test-helpers` exports a shared `runContractTests(label, makeStore)` that exercises 15 scenarios covering the full `IStore` surface — round-trip, validation, window-edge, threshold, multi-pattern sorting, distinct kinds, last-error capture, infra-blowup filter, and `close()` idempotency. Every built-in adapter passes it; custom adapters should invoke it too.
 
 ```ts
-import type { IStore, InsertRunInput, UpdateRunInput, InsertFailureInput, GetNewPatternsOptions, FlakyPattern } from '@flaky-tests/core'
-
-export class MyCustomStore implements IStore {
-  async insertRun(input: InsertRunInput): Promise<void> {
-    // ...
-  }
-
-  async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
-    // ...
-  }
-
-  async insertFailure(input: InsertFailureInput): Promise<void> {
-    // ...
-  }
-
-  async getNewPatterns(options?: GetNewPatternsOptions): Promise<FlakyPattern[]> {
-    const { windowDays = 7, threshold = 2 } = options ?? {}
-    // implement detection logic
-    return []
-  }
-
-  async close(): Promise<void> {
-    // close connections, flush buffers, etc.
-  }
-}
+import { runContractTests } from '@flaky-tests/core/test-helpers'
+runContractTests('mything', () => new MyStore({ /* test config */ }))
 ```
-
-The store can then be passed directly to `createPreload`, `FlakyTestsReporter`, or the CLI's `resolveStore`.

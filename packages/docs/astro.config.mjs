@@ -45,6 +45,7 @@ export default defineConfig({
             { label: 'Setting up with Bun', slug: 'guides/bun' },
             { label: 'Setting up with Vitest', slug: 'guides/vitest' },
             { label: 'Choosing a store', slug: 'guides/choosing-a-store' },
+            { label: 'Custom stores', slug: 'guides/custom-stores' },
             { label: 'CI setup', slug: 'guides/ci-setup' },
             {
               label: 'Scheduled detection',
