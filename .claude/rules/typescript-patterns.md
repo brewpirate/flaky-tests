@@ -1,10 +1,17 @@
+---
+trigger_phrase:
+  haiku: "typescript safety patterns enforced"
+  opus: "strict typescript type safety rules"
+  sonnet: "strict typescript safety enforcement rules"
+---
+
 # TypeScript Patterns
 
 ## Enforced Patterns (Active in Codebase)
 
 ### No `any` Type
 
-Use `unknown` with arktype validation or type guards.
+Use `unknown` with Zod validation or type guards.
 
 ```typescript
 // WRONG
@@ -13,14 +20,14 @@ function processData(data: any) { return data.value }
 // WRONG — unsafe cast
 function processData(data: unknown) { return (data as Issue).title }
 
-// CORRECT — arktype validation via shared `parse` helper
+// CORRECT — Zod validation
 function processData(data: unknown): Issue {
-  return parse(issueSchema, data)
+  return IssueSchema.parse(data)
 }
 
 // CORRECT — type guard
 function isIssue(data: unknown): data is Issue {
-  return !(issueSchema(data) instanceof type.errors)
+  return IssueSchema.safeParse(data).success
 }
 ```
 
@@ -85,9 +92,9 @@ const limit = options.limit ?? 20
 
 **Exception**: `|| 0` is correct when guarding against `NaN` (e.g., `parseInt(value) || 0`), since `NaN ?? 0` does not catch `NaN`.
 
-### Discriminated Unions via arktype
+### Discriminated Unions via Zod
 
-Prefer an arktype union schema (`type("'a' | 'b' | 'c'")` for string literals, or an object union with a discriminator key) over hand-written TypeScript type unions when the shape also needs runtime validation. See `packages/core/src/schemas.ts` for examples like `failureKindSchema` and `runStatusSchema`.
+Prefer `z.discriminatedUnion()` over hand-written type unions. See `zod-schemas.md`.
 
 ## Patterns to Adopt
 
@@ -112,7 +119,9 @@ function isContextOverflow(error: unknown): error is ContextOverflowError {
 
 ### Exhaustive Switch with `never`
 
-Recommended for all enum-like discriminated unions:
+**REQUIRED for `IssueState`** — all switch statements on `IssueState` must include a `never` exhaustiveness check. See `zod-schemas.md` for the full pattern.
+
+Recommended for other enums:
 
 ```typescript
 function handleOutcome(outcome: IterationOutcome): void {

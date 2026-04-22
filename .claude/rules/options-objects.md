@@ -1,3 +1,10 @@
+---
+trigger_phrase:
+  haiku: "options objects over positional parameters"
+  opus: "options object over positional params"
+  sonnet: "options object over positional params"
+---
+
 # Options Objects Over Positional Parameters
 
 Functions with more than 2 parameters MUST use a single options object instead of positional arguments.

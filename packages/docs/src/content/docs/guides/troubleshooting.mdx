@@ -1,0 +1,201 @@
+---
+title: Troubleshooting
+description: Common failures when setting up flaky-tests and how to fix them.
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+If you just set up flaky-tests and something isn't working the way you
+expect, work through the checks below in order. Each section starts
+with the symptom so you can grep for the error text.
+
+## "MissingStorePackageError" at startup
+
+**Symptom:**
+
+```
+flaky-tests: configured store type "turso" requires the
+"@flaky-tests/store-turso" package, which is not installed.
+Install it with:  bun add @flaky-tests/store-turso  —  or change
+FLAKY_TESTS_STORE to a type whose package is installed.
+```
+
+**Cause:** store adapters ship as `optionalDependencies` of the
+plugin, so the package manager won't pull them in automatically. The
+default preload / reporter tries to dynamic-import the one matching
+`FLAKY_TESTS_STORE` and fails when it isn't in `node_modules`.
+
+**Fix:** install the store package the error names, or change
+`FLAKY_TESTS_STORE` to one whose adapter you already have.
+
+```sh
+bun add -D @flaky-tests/store-turso
+# or
+FLAKY_TESTS_STORE=sqlite bun test
+```
+
+## Preload loaded, but no failures were recorded
+
+**Symptom:** `bun test` runs normally, failing tests are reported in
+the terminal, but the SQLite file stays empty and the CLI reports
+nothing.
+
+Work through these in order:
+
+1. **Is capture disabled?** `FLAKY_TESTS_DISABLE=1` silently no-ops
+   the plugin. Check your shell env and any `.env` files being
+   loaded.
+
+2. **Did the preload even run?** Add `FLAKY_TESTS_LOG=debug` and
+   re-run — you should see
+   `[flaky-tests:plugin-bun] createPreload: runId=…` on the first
+   line. Missing means `bunfig.toml` isn't being picked up; check the
+   file is in the project root and has a `[test]` table.
+
+3. **Did `migrate` fail?** At `FLAKY_TESTS_LOG=debug` a `migrate
+   failed — writes will likely drop until the schema is in place`
+   warning points at credentials / connectivity. Re-check
+   `FLAKY_TESTS_CONNECTION_STRING` and `FLAKY_TESTS_AUTH_TOKEN`.
+
+4. **Are you looking at the right database?** SQLite's default lives
+   at `node_modules/.cache/flaky-tests/failures.db`. Override with
+   `FLAKY_TESTS_DB=./my.db` if you want a known path.
+
+## Vitest reporter crashes on startup
+
+**Symptom:**
+
+```
+TypeError: Cannot read properties of undefined (reading 'migrate')
+```
+
+…from inside `FlakyTestsReporter.onInit`.
+
+**Cause:** the reporter constructor is `new FlakyTestsReporter(store)`
+— a required positional `IStore`. `new FlakyTestsReporter()` leaves
+`this.store` undefined and every method call on it blows up.
+
+**Fix:** pass a store instance.
+
+```ts title="vitest.config.ts"
+import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+import { SqliteStore } from '@flaky-tests/store-sqlite'
+
+export default defineConfig({
+  test: {
+    reporters: ['default', new FlakyTestsReporter(new SqliteStore())],
+  },
+})
+```
+
+## `StoreError: [@flaky-tests/store-turso] insertFailure: ...`
+
+**Symptom:** errors with the `[@flaky-tests/store-<adapter>] <method>`
+prefix appear in your logs or bubble out of CLI runs.
+
+**Cause:** every adapter wraps driver errors in `StoreError`. The
+prefix tells you which adapter and which call failed; the original
+driver error hangs off `.cause`.
+
+**Fix:** inspect `.cause` for the real problem — network,
+credentials, permissions, schema mismatch. Example:
+
+```ts
+try {
+  await store.insertFailure(input)
+} catch (error) {
+  if (error instanceof StoreError) {
+    console.error(error.package, error.method, error.cause)
+  }
+}
+```
+
+Network hiccups auto-retry with backoff on reads (`withRetry`); writes
+don't retry, so a transient 5xx during a test run just drops the
+failure. See the [retry reference](/reference/istore/#retry-behavior).
+
+## CI run's failures don't appear in `getRecentRuns`
+
+**Symptom:** scheduled `bunx @flaky-tests/cli` runs locally show no
+recent runs even though CI tests ran minutes ago.
+
+Likely causes, in order of frequency:
+
+1. **Process killed mid-write.** On CI, `bun test` / `vitest` can exit
+   before remote stores finish their async writes.
+   `@flaky-tests/plugin-bun` drains pending writes at process exit to
+   mitigate this; if you're on an older version upgrade, or switch
+   the invocation to the `run-tracked` wrapper.
+
+2. **Different project name between CI and local.** flaky-tests
+   namespaces runs by project name — resolved from
+   `FLAKY_TESTS_PROJECT`, falling back to the nearest `package.json`
+   `name`, then the cwd basename. A CI runner cloning into a
+   different path can produce a different project label. Set
+   `FLAKY_TESTS_PROJECT` explicitly on both sides.
+
+3. **Different store.** CI writes to Turso, local reads from SQLite
+   (or vice versa). Double-check `FLAKY_TESTS_STORE` +
+   `FLAKY_TESTS_CONNECTION_STRING` in both environments.
+
+## "no such table: runs" or equivalent schema errors
+
+**Symptom:** the very first test run on a fresh remote database
+errors with a missing-table or missing-column message.
+
+**Cause:** the preload / reporter calls `store.migrate()` at startup
+so fresh DBs come up with the schema in place. If you see this, the
+migrate call failed and was swallowed as a warning (see the debug log
+check above).
+
+**Fix:** run migrate manually once:
+
+```ts
+import { TursoStore } from '@flaky-tests/store-turso'
+const store = new TursoStore({ url: '...', authToken: '...' })
+await store.migrate()
+await store.close()
+```
+
+## SQLite "database is locked" under parallel workers
+
+**Symptom:** intermittent `SQLITE_BUSY` or `database is locked`
+errors when running Vitest with `--pool=threads` or a high
+`poolOptions.threads.maxThreads`.
+
+**Cause:** SQLite handles concurrent writes via file locking. WAL
+mode (enabled by default) makes this rare, but high-concurrency test
+suites can still saturate the single writer.
+
+**Fix:** either (a) use a remote store for CI — Turso is free and
+drop-in compatible — or (b) serialize writes by lowering
+`poolOptions.threads.maxThreads` for the run that produces the
+flaky-tests writes.
+
+## The HTML report opens but `--create-issue` does nothing
+
+**Symptom:** `--create-issue` prints a one-line warning and exits
+without opening any issues.
+
+**Cause:** one of the required env vars is missing. The CLI logs tell
+you which:
+
+- `⚠ --create-issue requires GITHUB_TOKEN to be set` — set
+  `GITHUB_TOKEN` (use an Actions secret in CI).
+- `⚠ --create-issue: could not determine owner/repo` — set
+  `GITHUB_REPOSITORY=owner/repo` or pass `--repo owner/repo`. Inside
+  GitHub Actions this is set automatically.
+
+<Aside type="tip">
+Enable `FLAKY_TESTS_LOG=debug` for most of the troubleshooting above.
+The logs name the exact code path and surface otherwise-swallowed
+errors.
+</Aside>
+
+## Still stuck?
+
+- File an issue with your debug log:
+  [github.com/brewpirate/flaky-tests/issues](https://github.com/brewpirate/flaky-tests/issues)
+- Double-check the [Environment variables reference](/reference/env-vars/)
+  — the biggest category of "doesn't work" bugs is an env var that's
+  subtly wrong.

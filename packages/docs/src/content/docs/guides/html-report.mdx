@@ -101,6 +101,66 @@ One card per newly-flaky test, sorted by recent-fail count descending. Each card
 
 The copy button writes the full prompt to the clipboard (via `navigator.clipboard` when available, falling back to range-selection). Paste into Claude, Cursor, Copilot, or any chat UI to start investigating.
 
+### Investigation prompts
+
+Every pattern card ships with a **collapsible investigation prompt** —
+the same structured prompt the CLI emits under `--prompt`. It's the
+fastest path from "something's flaky" to "I have a working hypothesis".
+
+**What's in each prompt**
+
+Each prompt is a single block of plain text assembled from the
+failure's context — enough for an LLM to reason about the failure
+without round-trips:
+
+- The test name and file path
+- The failure category (`assertion` / `timeout` / `uncaught` /
+  `unknown`) and the first error line
+- Recent-vs-prior failure counts in the current window
+- Trimmed stack frames (stripped of timestamps so diffs are stable)
+- The git SHA at capture time — so the investigator can check out the
+  exact state that produced the failure
+
+No PII is added; the prompt is a subset of rows already in your store.
+See [Data model & privacy](/reference/data-model/) for exactly what's
+captured.
+
+**How to use them**
+
+1. **Click the summary row** ("Investigation prompt · click to
+   expand") to see the full text inline.
+2. **Click Copy** to put the full prompt on your clipboard. The
+   button flashes `Copied ✓` on success.
+3. **Paste into any LLM surface.** The prompt is plain text — Claude,
+   Cursor's inline chat, Copilot Chat, a terminal LLM wrapper, all
+   work the same.
+4. **Fallback path** — if clipboard write is blocked (Safari in some
+   iframes, older file:// contexts) the button silently selects the
+   prompt text so you can <kbd>Cmd</kbd> / <kbd>Ctrl</kbd>+<kbd>C</kbd>
+   manually.
+
+**Prompt parity with the CLI**
+
+The same text is available headlessly:
+
+```sh
+bun run flaky:prompt     # if you added the script
+# or
+bunx @flaky-tests/cli --prompt
+```
+
+Useful when you want to pipe prompts into a tool instead of opening
+the report UI — for example, a bot that posts the first prompt of
+the day into Slack.
+
+**Hot-file prompts**
+
+The Hot Files table has its own per-row Copy button. These emit a
+shorter, file-level prompt ("Investigate &lt;path&gt;: N failures across M
+distinct tests in the last D days") — useful when a whole module
+has gone shaky and individual-test prompts miss the forest for the
+trees.
+
 ### Recent runs table
 
 Chronological view of the last 20 recorded runs, filtered to the current project. Columns: status, when, duration, total / passed / failed / errors, short git SHA.
