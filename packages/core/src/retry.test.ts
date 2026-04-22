@@ -83,7 +83,9 @@ describe('withRetry', () => {
     const result = await withRetry(
       async () => {
         calls++
-        if (calls < 3) throw new Error('ECONNRESET')
+        if (calls < 3) {
+          throw new Error('ECONNRESET')
+        }
         return 'eventually'
       },
       { attempts: 5, sleep: instantSleep },
@@ -183,7 +185,9 @@ describe('withRetry', () => {
     const result = await withRetry(
       async () => {
         calls++
-        if (calls < 2) throw new Error('totally custom error we chose to retry')
+        if (calls < 2) {
+          throw new Error('totally custom error we chose to retry')
+        }
         return 'done'
       },
       { attempts: 3, sleep: instantSleep, isRetryable: () => true },

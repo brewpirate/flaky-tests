@@ -44,7 +44,9 @@ async function fetchWithTimeout(
     return await fetch(url, { ...init, signal: controller.signal })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`GitHub request timed out after ${timeoutMs}ms: ${url}`)
+      throw new Error(`GitHub request timed out after ${timeoutMs}ms: ${url}`, {
+        cause: error,
+      })
     }
     throw error
   } finally {
@@ -86,7 +88,9 @@ export function resolveRepo(
   const index = process.argv.indexOf('--repo')
   if (index !== -1 && index + 1 < process.argv.length) {
     const value = process.argv[index + 1]
-    if (!value) return null
+    if (!value) {
+      return null
+    }
     const [owner, repo] = value.split('/')
     if (owner && repo && isValidSlug(owner) && isValidSlug(repo)) {
       log.debug(`resolveRepo: source=--repo flag, owner=${owner}, repo=${repo}`)
@@ -156,7 +160,9 @@ export async function findExistingIssue(
   log.debug(
     `findExistingIssue: ${res.status} in ${Math.round(performance.now() - start)}ms (testName=${testName})`,
   )
-  if (!res.ok) return null
+  if (!res.ok) {
+    return null
+  }
   const data = (await res.json()) as { items: Array<{ number: number }> }
   return data.items[0]?.number ?? null
 }

@@ -12,7 +12,9 @@ export function raceAbort<T>(
   promise: Promise<T>,
   signal: AbortSignal | undefined,
 ): Promise<T> {
-  if (signal === undefined) return promise
+  if (signal === undefined) {
+    return promise
+  }
   signal.throwIfAborted()
   return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => {

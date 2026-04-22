@@ -120,7 +120,9 @@ function parsePositiveNumber(
   fallback: number,
   label: string,
 ): number {
-  if (value === undefined || value === '') return fallback
+  if (value === undefined || value === '') {
+    return fallback
+  }
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new ConfigError(`${label} must be a positive number, got "${value}"`)
@@ -133,7 +135,9 @@ function parsePositiveInt(
   fallback: number,
   label: string,
 ): number {
-  if (value === undefined || value === '') return fallback
+  if (value === undefined || value === '') {
+    return fallback
+  }
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
     throw new ConfigError(`${label} must be a positive integer, got "${value}"`)
@@ -159,7 +163,9 @@ function readNearestPackageName(start: string): string | null {
       // No package.json here or parse failed — walk up.
     }
     const parent = dirname(dir)
-    if (parent === dir) return null
+    if (parent === dir) {
+      return null
+    }
     dir = parent
   }
   return null
@@ -174,7 +180,9 @@ function resolveProjectName(env: NodeJS.ProcessEnv): string | null {
     return explicit === '' ? null : explicit
   }
   const fromPackage = readNearestPackageName(process.cwd())
-  if (fromPackage !== null) return fromPackage
+  if (fromPackage !== null) {
+    return fromPackage
+  }
   const cwdName = basename(process.cwd())
   return cwdName.length > 0 ? cwdName : null
 }
@@ -325,6 +333,7 @@ export function resolveConfig(source?: NodeJS.ProcessEnv | Config): Config {
   } catch (error) {
     throw new ConfigError(
       error instanceof Error ? error.message : String(error),
+      { cause: error },
     )
   }
 

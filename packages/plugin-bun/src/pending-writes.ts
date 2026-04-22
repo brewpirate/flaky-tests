@@ -36,7 +36,9 @@ export function createPendingWriteTracker(log: Logger): PendingWriteTracker {
   }
 
   async function drain(): Promise<void> {
-    if (pending.size === 0) return
+    if (pending.size === 0) {
+      return
+    }
     // allSettled (not all) so one slow/failed write doesn't mask another's
     // error and doesn't short-circuit the drain itself.
     await Promise.allSettled([...pending])

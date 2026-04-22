@@ -17,8 +17,8 @@
  */
 /** Thrown by `resolveConfig()` and `parseCliConfig()` when input validation fails. */
 export class ConfigError extends Error {
-  constructor(message: string) {
-    super(message)
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options)
     this.name = 'ConfigError'
   }
 }

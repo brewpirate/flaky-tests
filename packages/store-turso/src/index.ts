@@ -123,7 +123,7 @@ export class TursoStore implements IStore {
           : detectBaselineVersion(SQLITE_MIGRATIONS, inspector)
       if (baseline > current) {
         const now = new Date().toISOString()
-        const seedStatements = []
+        const seedStatements: { sql: string; args: InArgs }[] = []
         for (let version = current + 1; version <= baseline; version++) {
           seedStatements.push({
             sql: `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`,
@@ -148,7 +148,9 @@ export class TursoStore implements IStore {
       | { version: number | bigint | null }
       | undefined
     const raw = row?.version
-    if (raw == null) return 0
+    if (raw == null) {
+      return 0
+    }
     return typeof raw === 'bigint' ? Number(raw) : raw
   }
 
@@ -164,7 +166,9 @@ export class TursoStore implements IStore {
     )
     for (const row of tables.rows) {
       const { name } = row as unknown as { name: string }
-      if (typeof name === 'string' && name.length > 0) tableNames.add(name)
+      if (typeof name === 'string' && name.length > 0) {
+        tableNames.add(name)
+      }
     }
     for (const tableName of tableNames) {
       // PRAGMA doesn't accept bind parameters; table names come from our
@@ -173,7 +177,9 @@ export class TursoStore implements IStore {
       const columns = new Set<string>()
       for (const row of info.rows) {
         const { name } = row as unknown as { name: string }
-        if (typeof name === 'string') columns.add(name)
+        if (typeof name === 'string') {
+          columns.add(name)
+        }
       }
       columnsByTable.set(tableName, columns)
     }
@@ -290,7 +296,9 @@ export class TursoStore implements IStore {
 
   /** Insert multiple failures in a single batch transaction. */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
-    if (inputs.length === 0) return
+    if (inputs.length === 0) {
+      return
+    }
     await this.wrap('insertFailures', () =>
       this.client.batch(
         inputs.map((input) => {
@@ -449,8 +457,9 @@ export class TursoStore implements IStore {
 
   /** Close the underlying libSQL connection. */
   async close(): Promise<void> {
-    await this.wrap('close', async () => {
+    await this.wrap('close', () => {
       this.client.close()
+      return Promise.resolve()
     })
   }
 }

@@ -88,7 +88,9 @@ function makeSqliteInspector(db: Database): SchemaInspector {
 /** Create the parent directory for the DB file if missing so SQLite can open it. */
 function ensureDirectory(dbPath: string): void {
   const lastSlash = dbPath.lastIndexOf('/')
-  if (lastSlash <= 0) return
+  if (lastSlash <= 0) {
+    return
+  }
   const parent = dbPath.slice(0, lastSlash)
   try {
     mkdirSync(parent, { recursive: true })
@@ -267,7 +269,9 @@ export class SqliteStore implements IStore {
 
   /** Insert multiple failures in a single SQLite transaction. */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
-    if (inputs.length === 0) return
+    if (inputs.length === 0) {
+      return
+    }
     this.db.transaction(() => {
       for (const input of inputs) {
         parse(insertFailureInputSchema, input)
@@ -300,7 +304,9 @@ export class SqliteStore implements IStore {
       .query('SELECT status FROM runs WHERE run_id = ?')
       .get(runId) as { status: string | null } | null
 
-    if (row === null || row.status !== 'pass') return
+    if (row === null || row.status !== 'pass') {
+      return
+    }
 
     this.db.run(
       `UPDATE runs

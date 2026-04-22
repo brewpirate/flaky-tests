@@ -240,9 +240,15 @@ function loadData(): {
 
 /** Bucket a failure count into a CSS severity class so the UI can colour-code it. */
 function severityClass(count: number): string {
-  if (count >= SEVERITY_HIGH_THRESHOLD) return 'sev-high'
-  if (count >= SEVERITY_MEDIUM_THRESHOLD) return 'sev-med'
-  if (count >= SEVERITY_LOW_THRESHOLD) return 'sev-low'
+  if (count >= SEVERITY_HIGH_THRESHOLD) {
+    return 'sev-high'
+  }
+  if (count >= SEVERITY_MEDIUM_THRESHOLD) {
+    return 'sev-med'
+  }
+  if (count >= SEVERITY_LOW_THRESHOLD) {
+    return 'sev-low'
+  }
   return 'sev-single'
 }
 
@@ -254,16 +260,24 @@ function kindBadge(kind: string): string {
 
 /** Humanize a millisecond duration as ms/s/min so run rows stay scannable. */
 function formatDuration(ms: number | null): string {
-  if (ms === null) return '—'
-  if (ms < MS_PER_SECOND) return `${ms}ms`
+  if (ms === null) {
+    return '—'
+  }
+  if (ms < MS_PER_SECOND) {
+    return `${ms}ms`
+  }
   const s = ms / MS_PER_SECOND
-  if (s < SECONDS_PER_MINUTE) return `${s.toFixed(1)}s`
+  if (s < SECONDS_PER_MINUTE) {
+    return `${s.toFixed(1)}s`
+  }
   return `${Math.floor(s / SECONDS_PER_MINUTE)}m ${Math.round(s % SECONDS_PER_MINUTE)}s`
 }
 
 /** Trim a git SHA to the conventional 7-char prefix for compact display. */
 function shortSha(sha: string | null): string {
-  if (sha === null) return '—'
+  if (sha === null) {
+    return '—'
+  }
   return sha.slice(0, SHORT_SHA_LENGTH)
 }
 
@@ -272,27 +286,40 @@ function formatRelative(iso: string): string {
   const diffSec = Math.floor(
     (Date.now() - new Date(iso).getTime()) / MS_PER_SECOND,
   )
-  if (diffSec < SECONDS_PER_MINUTE) return `${diffSec}s ago`
-  if (diffSec < SECONDS_PER_HOUR)
+  if (diffSec < SECONDS_PER_MINUTE) {
+    return `${diffSec}s ago`
+  }
+  if (diffSec < SECONDS_PER_HOUR) {
     return `${Math.floor(diffSec / SECONDS_PER_MINUTE)}m ago`
-  if (diffSec < SECONDS_PER_DAY)
+  }
+  if (diffSec < SECONDS_PER_DAY) {
     return `${Math.floor(diffSec / SECONDS_PER_HOUR)}h ago`
+  }
   return `${Math.floor(diffSec / SECONDS_PER_DAY)}d ago`
 }
 
 /** Map a pass-rate percentage to a tone class so the summary card reflects health at a glance. */
 function passRateTone(pct: number | null): string {
-  if (pct === null) return 'tone-muted'
-  if (pct >= PASS_RATE_GOOD_THRESHOLD) return 'tone-good'
-  if (pct >= PASS_RATE_WARN_THRESHOLD) return 'tone-warn'
+  if (pct === null) {
+    return 'tone-muted'
+  }
+  if (pct >= PASS_RATE_GOOD_THRESHOLD) {
+    return 'tone-good'
+  }
+  if (pct >= PASS_RATE_WARN_THRESHOLD) {
+    return 'tone-warn'
+  }
   return 'tone-bad'
 }
 
 /** Render the four top-of-page summary cards (flaky count, pass rate, dominant kind, worst file). */
 function renderSummary(s: Summary): string {
   let flakyTone = 'tone-bad'
-  if (s.activeFlakyTests === 0) flakyTone = 'tone-good'
-  else if (s.activeFlakyTests <= WARN_FLAKY_TEST_LIMIT) flakyTone = 'tone-warn'
+  if (s.activeFlakyTests === 0) {
+    flakyTone = 'tone-good'
+  } else if (s.activeFlakyTests <= WARN_FLAKY_TEST_LIMIT) {
+    flakyTone = 'tone-warn'
+  }
   const flakyLabel =
     s.activeFlakyTests === 0
       ? 'none'
@@ -356,8 +383,9 @@ function flakyRowToPattern(row: FlakyRow): FlakyPattern {
 
 /** Render the flaky-tests table with per-row copyable AI prompts for triage. */
 function renderFlaky(rows: FlakyRow[]): string {
-  if (rows.length === 0)
+  if (rows.length === 0) {
     return '<p class="empty">No failures in the last 30 days. Clean house.</p>'
+  }
   const items = rows
     .map((r) => {
       const kinds = r.kinds
@@ -390,7 +418,9 @@ function renderFlaky(rows: FlakyRow[]): string {
 
 /** Render the failure-kind distribution grid with absolute counts and percentages. */
 function renderKinds(rows: KindRow[]): string {
-  if (rows.length === 0) return '<p class="empty">No data.</p>'
+  if (rows.length === 0) {
+    return '<p class="empty">No data.</p>'
+  }
   const total = rows.reduce((s, r) => s + r.count, 0)
   return `<div class="kind-grid">${rows
     .map((r) => {
@@ -407,14 +437,20 @@ function renderKinds(rows: KindRow[]): string {
 
 /** Map a run status to its badge CSS class; null is treated as a crash. */
 function statusClass(status: string | null): string {
-  if (status === 'pass') return 'status-pass'
-  if (status === 'fail') return 'status-fail'
+  if (status === 'pass') {
+    return 'status-pass'
+  }
+  if (status === 'fail') {
+    return 'status-fail'
+  }
   return 'status-crashed'
 }
 
 /** Render the recent-runs table showing status, timing, counts, and git context. */
 function renderRuns(rows: RunRow[]): string {
-  if (rows.length === 0) return '<p class="empty">No runs recorded.</p>'
+  if (rows.length === 0) {
+    return '<p class="empty">No runs recorded.</p>'
+  }
   const items = rows
     .map((r) => {
       const dirty =
@@ -444,7 +480,9 @@ function renderRuns(rows: RunRow[]): string {
 
 /** Render the per-file hot-spot table, attaching the flakiest test's AI prompt when available. */
 function renderHotFiles(rows: HotFileRow[], flakyRows: FlakyRow[]): string {
-  if (rows.length === 0) return '<p class="empty">No data.</p>'
+  if (rows.length === 0) {
+    return '<p class="empty">No data.</p>'
+  }
   const items = rows
     .map((r) => {
       const worstTest = flakyRows.find((f) => f.test_file === r.test_file)
@@ -663,10 +701,15 @@ function openInBrowser(filePath: string): void {
   const url = `file://${abs}`
   const envBrowser = reportConfig.report.browser
   let cmd: string[]
-  if (envBrowser) cmd = [envBrowser, url]
-  else if (process.platform === 'darwin') cmd = ['open', url]
-  else if (process.platform === 'win32') cmd = ['cmd', '/c', 'start', '', url]
-  else cmd = ['xdg-open', url]
+  if (envBrowser) {
+    cmd = [envBrowser, url]
+  } else if (process.platform === 'darwin') {
+    cmd = ['open', url]
+  } else if (process.platform === 'win32') {
+    cmd = ['cmd', '/c', 'start', '', url]
+  } else {
+    cmd = ['xdg-open', url]
+  }
   try {
     Bun.spawn({ cmd, stdout: 'ignore', stderr: 'ignore' }).unref?.()
   } catch (e) {
@@ -688,7 +731,9 @@ async function main(): Promise<void> {
   console.log(
     `[flaky-tests] Wrote ${OUT_PATH} (${data.totalRuns} runs, ${data.totalFailures} failures)`,
   )
-  if (process.argv.includes('--open')) openInBrowser(OUT_PATH)
+  if (process.argv.includes('--open')) {
+    openInBrowser(OUT_PATH)
+  }
 }
 
 await main()

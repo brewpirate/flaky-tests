@@ -58,7 +58,9 @@ function buildConfig(): Config {
 
 describe.skipIf(SKIP)('TursoStore — live E2E via dispatcher', () => {
   beforeAll(() => {
-    if (SKIP) return
+    if (SKIP) {
+      return
+    }
     console.log(
       `[live-turso] running against ${LIVE_URL} with prefix ${RUN_PREFIX}`,
     )
@@ -129,7 +131,9 @@ describe.skipIf(SKIP)('TursoStore — live E2E via dispatcher', () => {
   //   DELETE FROM failures WHERE test_name LIKE 'live-%';
   //   DELETE FROM runs     WHERE run_id LIKE 'live-%';
   afterAll(() => {
-    if (SKIP) return
+    if (SKIP) {
+      return
+    }
     console.log(
       `[live-turso] done. Prune test rows matching prefix '${RUN_PREFIX}' if you want a clean slate.`,
     )

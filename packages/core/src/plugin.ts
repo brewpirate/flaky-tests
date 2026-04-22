@@ -31,7 +31,9 @@ const REGISTRY_KEY = Symbol.for('flaky-tests.plugin-registry')
 function getRegistry(): Registry {
   const globals = globalThis as unknown as Record<symbol, Registry | undefined>
   const existing = globals[REGISTRY_KEY]
-  if (existing !== undefined) return existing
+  if (existing !== undefined) {
+    return existing
+  }
   const fresh: Registry = new Map()
   globals[REGISTRY_KEY] = fresh
   return fresh
@@ -57,7 +59,7 @@ export function definePlugin<Instance>(
 }
 
 /** Read-only snapshot of every registered plugin descriptor. */
-export function listRegisteredPlugins(): ReadonlyArray<FlakyPluginDescriptor> {
+export function listRegisteredPlugins(): readonly FlakyPluginDescriptor[] {
   return Array.from(getRegistry().values())
 }
 

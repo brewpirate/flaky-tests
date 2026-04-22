@@ -93,9 +93,13 @@ function resolveTestFile(error: unknown): string {
   for (let i = 0; i < limit; i++) {
     const line = lines[i] ?? ''
     const match = line.match(/\(([^)]+\.(?:ts|tsx|js|jsx|mjs|cjs)):\d+:\d+\)/)
-    if (!match) continue
+    if (!match) {
+      continue
+    }
     const file = match[1] ?? ''
-    if (file.includes('/plugin-bun/')) continue
+    if (file.includes('/plugin-bun/')) {
+      continue
+    }
     return file
   }
   log.debug(
@@ -206,7 +210,9 @@ export function createPreload(store: IStore): void {
     const callWrapped: TestFn = (name, fn, timeout) => {
       // Preserve `done`-callback style — wrapping would change arity and
       // trigger Bun's async-done timeout.
-      if (fn.length > 0) return originalTest(name, fn, timeout)
+      if (fn.length > 0) {
+        return originalTest(name, fn, timeout)
+      }
 
       const fullPath = describeStack.path(name)
       const wrappedFn: TestCallback = async () => {
