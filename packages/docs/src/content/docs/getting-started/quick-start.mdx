@@ -14,11 +14,15 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 
 <Steps>
 
-1. **Install the plugin**
+1. **Install the plugin and a store**
 
    ```sh
-   bun add -D @flaky-tests/plugin-bun
+   bun add -D @flaky-tests/plugin-bun @flaky-tests/store-sqlite
    ```
+
+   Store adapters ship as `optionalDependencies` of the plugin, so you
+   install only the one you use. The default preload resolves
+   `FLAKY_TESTS_STORE` (defaults to `sqlite`) at startup.
 
 2. **Add the preload to `bunfig.toml`**
 
