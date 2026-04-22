@@ -127,6 +127,9 @@ export class FlakyTestsReporter {
   async onInit(_ctx: unknown): Promise<void> {
     this.ready = true
     const git = captureGitInfo()
+    log.debug(
+      `onInit: runId=${this.runId}, gitSha=${git.sha ?? 'none'}, gitDirty=${git.dirty}, nodeVersion=${process.version}`,
+    )
     await this.store
       .insertRun(
         parse(insertRunInputSchema, {
@@ -192,6 +195,12 @@ export class FlakyTestsReporter {
       })
     }
 
+    const status = failedTests > 0 || errors.length > 0 ? 'fail' : 'pass'
+    const durationMs = Math.round(performance.now() - this.startTime)
+    log.debug(
+      `onFinished: runId=${this.runId}, status=${status}, total=${totalTests}, passed=${passedTests}, failed=${failedTests}, errorsBetweenTests=${errors.length}, durationMs=${durationMs}`,
+    )
+
     await this.store
       .insertFailures(failureInputs)
       .catch((e: unknown) => log.warn('insertFailures failed:', e))
@@ -201,8 +210,8 @@ export class FlakyTestsReporter {
         this.runId,
         parse(updateRunInputSchema, {
           endedAt: new Date().toISOString(),
-          durationMs: Math.round(performance.now() - this.startTime),
-          status: failedTests > 0 || errors.length > 0 ? 'fail' : 'pass',
+          durationMs,
+          status,
           totalTests,
           passedTests,
           failedTests,

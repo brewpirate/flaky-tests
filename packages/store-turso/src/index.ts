@@ -1,4 +1,5 @@
 import {
+  createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   type FlakyPattern,
@@ -22,6 +23,8 @@ import {
 import type { Client, InArgs } from '@libsql/client'
 import { createClient } from '@libsql/client'
 import { type } from 'arktype'
+
+const log = createLogger('store-turso')
 
 /** Configuration for the Turso (libSQL) store. */
 export const tursoStoreOptionsSchema = type({
@@ -253,10 +256,14 @@ export class TursoStore implements IStore {
     })
 
     // libsql Row type doesn't expose named fields — cast through unknown to PatternRow
-    return parseArray(
+    const patterns = parseArray(
       flakyPatternSchema,
-      result.rows.map((r) => mapRowToPattern(r as unknown as PatternRow)),
+      result.rows.map((row) => mapRowToPattern(row as unknown as PatternRow)),
     )
+    log.debug(
+      `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
+    )
+    return patterns
   }
 
   /** Close the underlying libSQL connection. */

@@ -31,6 +31,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FlakyPattern, IStore } from '@flaky-tests/core'
 import {
+  createLogger,
   getNewPatternsOptionsSchema,
   MAX_CLI_ERROR_MESSAGE_LENGTH,
   parse,
@@ -46,12 +47,17 @@ import {
 import { generateHtml } from './html'
 import { copyToClipboard, generatePrompt } from './prompt'
 
+const log = createLogger('cli')
+
 /** Load the store implementation chosen by `FLAKY_TESTS_STORE`, deferring
  *  the import so users pay the dependency cost only for the backend they use. */
 async function resolveStore(): Promise<IStore> {
   const storeType = process.env.FLAKY_TESTS_STORE ?? 'sqlite'
   const connStr = process.env.FLAKY_TESTS_CONNECTION_STRING
   const authToken = process.env.FLAKY_TESTS_AUTH_TOKEN
+  log.debug(
+    `resolveStore: type=${storeType}, connectionString=${connStr ? 'set' : 'unset'}, authToken=${authToken ? 'set' : 'unset'}`,
+  )
 
   switch (storeType) {
     case 'turso': {

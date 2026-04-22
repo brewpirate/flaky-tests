@@ -6,8 +6,11 @@
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
 import type { FlakyPattern } from '@flaky-tests/core'
+import { createLogger } from '@flaky-tests/core'
 import { type } from 'arktype'
 import { generatePrompt } from './prompt'
+
+const log = createLogger('cli:github')
 
 /** Default network timeout for GitHub API calls. */
 const FETCH_TIMEOUT_MS = 15_000
@@ -70,18 +73,24 @@ export function resolveRepo(): { owner: string; repo: string } | null {
   const envRepo = process.env.GITHUB_REPOSITORY
   if (envRepo) {
     const [owner, repo] = envRepo.split('/')
-    if (owner && repo && isValidSlug(owner) && isValidSlug(repo))
+    if (owner && repo && isValidSlug(owner) && isValidSlug(repo)) {
+      log.debug(
+        `resolveRepo: source=GITHUB_REPOSITORY, owner=${owner}, repo=${repo}`,
+      )
       return { owner, repo }
+    }
   }
 
   // --repo flag
-  const idx = process.argv.indexOf('--repo')
-  if (idx !== -1 && idx + 1 < process.argv.length) {
-    const value = process.argv[idx + 1]
+  const index = process.argv.indexOf('--repo')
+  if (index !== -1 && index + 1 < process.argv.length) {
+    const value = process.argv[index + 1]
     if (!value) return null
     const [owner, repo] = value.split('/')
-    if (owner && repo && isValidSlug(owner) && isValidSlug(repo))
+    if (owner && repo && isValidSlug(owner) && isValidSlug(repo)) {
+      log.debug(`resolveRepo: source=--repo flag, owner=${owner}, repo=${repo}`)
       return { owner, repo }
+    }
   }
 
   // Parse git remote
@@ -97,12 +106,20 @@ export function resolveRepo(): { owner: string; repo: string } | null {
       const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/)
       const owner = match?.[1]
       const repo = match?.[2]
-      if (owner && repo && isValidSlug(owner) && isValidSlug(repo))
+      if (owner && repo && isValidSlug(owner) && isValidSlug(repo)) {
+        log.debug(
+          `resolveRepo: source=git remote, owner=${owner}, repo=${repo}`,
+        )
         return { owner, repo }
+      }
     }
   } catch {
     // git not available
   }
+
+  log.debug(
+    'resolveRepo: all sources failed (GITHUB_REPOSITORY, --repo flag, git remote)',
+  )
 
   return null
 }
@@ -128,11 +145,15 @@ export async function findExistingIssue(
   const q = encodeURIComponent(
     `repo:${config.owner}/${config.repo} is:issue is:open "${title}" in:title`,
   )
+  const start = performance.now()
   const res = await fetchWithTimeout(
     `https://api.github.com/search/issues?q=${q}&per_page=1`,
     {
       headers: githubHeaders(config.token),
     },
+  )
+  log.debug(
+    `findExistingIssue: ${res.status} in ${Math.round(performance.now() - start)}ms (testName=${testName})`,
   )
   if (!res.ok) return null
   const data = (await res.json()) as { items: Array<{ number: number }> }
@@ -153,6 +174,12 @@ export async function createIssue(
     rawBody.length > MAX_ISSUE_BODY_CHARS
       ? `${rawBody.slice(0, MAX_ISSUE_BODY_CHARS)}\n\n…(truncated)`
       : rawBody
+  if (rawBody.length > MAX_ISSUE_BODY_CHARS) {
+    log.debug(
+      `createIssue: body truncated from ${rawBody.length} to ${MAX_ISSUE_BODY_CHARS} chars`,
+    )
+  }
+  const start = performance.now()
   const res = await fetchWithTimeout(
     `https://api.github.com/repos/${config.owner}/${config.repo}/issues`,
     {
@@ -164,6 +191,9 @@ export async function createIssue(
         labels: ['flaky-test'],
       }),
     },
+  )
+  log.debug(
+    `createIssue: ${res.status} in ${Math.round(performance.now() - start)}ms (testName=${pattern.testName})`,
   )
 
   if (!res.ok) {
