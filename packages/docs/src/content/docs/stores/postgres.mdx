@@ -29,7 +29,7 @@ bun add -D @flaky-tests/store-postgres
    ```ts
    import { PostgresStore } from '@flaky-tests/store-postgres'
 
-   const store = new PostgresStore({ url: process.env.POSTGRES_URL! })
+   const store = new PostgresStore({ connectionString: process.env.POSTGRES_URL! })
    await store.migrate()
    ```
 
@@ -47,19 +47,37 @@ bun add -D @flaky-tests/store-postgres
 import { PostgresStore } from '@flaky-tests/store-postgres'
 
 const store = new PostgresStore({
-  url: process.env.POSTGRES_URL!,
+  connectionString: process.env.POSTGRES_URL!,
 })
 await store.migrate()
 ```
 
+The CLI auto-runs `migrate()` before every query, so the explicit call above is only needed when using the store directly. Migrations are idempotent.
+
 ## Constructor options
+
+Provide either a `connectionString` or individual host/port/credential fields — not both.
 
 ```ts
 interface PostgresStoreOptions {
-  /** PostgreSQL connection string */
-  url: string
+  /** Full PostgreSQL connection string (mutually exclusive with host/port/etc) */
+  connectionString?: string
+  host?: string
+  port?: number
+  database?: string
+  username?: string
+  password?: string
+  ssl?: boolean | 'require' | 'prefer' | 'allow'
+  /** Prefix for `{prefix}_runs` / `{prefix}_failures` table names. Default: `flaky_test`. */
+  tablePrefix?: string
+  /** Retry tuning for read methods. Defaults: 3 attempts, 100ms base delay. */
+  retry?: { attempts?: number; baseMs?: number }
 }
 ```
+
+## Error handling, retries, and cancellation
+
+Driver errors are wrapped in `StoreError` with `cause` preserved. Read methods auto-retry transient failures (network transport errors, HTTP 5xx) with exponential backoff and jitter; writes are not retried (no idempotency key). Read methods accept an optional `signal?: AbortSignal` — on abort the adapter calls postgres-js's `query.cancel()` for server-side cancellation and rejects with the signal's `reason` so callers see a uniform `AbortError`.
 
 ## CLI usage
 

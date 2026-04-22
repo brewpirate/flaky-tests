@@ -66,7 +66,7 @@ await store.migrate() // creates tables if they don't exist
 ```
 
 <Aside type="note">
-Unlike `SqliteStore`, `TursoStore` requires an explicit `await store.migrate()` call because the libSQL client is async. This is handled automatically when using `FLAKY_TESTS_STORE=turso` with the CLI.
+Unlike `SqliteStore`, `TursoStore` requires an explicit `await store.migrate()` call because the libSQL client is async. Migrations are versioned/idempotent (tracked in a `schema_version` table) and safe to call on every startup. The CLI auto-runs `migrate()` before every query.
 </Aside>
 
 ## Constructor options
@@ -77,8 +77,14 @@ interface TursoStoreOptions {
   url: string
   /** Auth token (not required for local file:// URLs) */
   authToken?: string
+  /** Retry tuning for read methods. Defaults: 3 attempts, 100ms base delay. */
+  retry?: { attempts?: number; baseMs?: number }
 }
 ```
+
+## Error handling, retries, and cancellation
+
+Driver errors are wrapped in `StoreError` with `cause` preserved. Read methods auto-retry transient failures (network transport errors, HTTP 5xx) with exponential backoff and jitter; writes are not retried because they lack an idempotency key. Read methods accept an optional `signal?: AbortSignal`. libSQL has no native abort support, so the adapter uses caller-side `raceAbort` — the caller observes an `AbortError` immediately while the in-flight request completes in the background and is discarded.
 
 ## CLI usage
 

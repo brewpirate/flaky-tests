@@ -59,7 +59,8 @@ const store = new TursoStore({
   url: process.env.TURSO_URL!,
   authToken: process.env.TURSO_AUTH_TOKEN,
 })
-await store.migrate()
+// The reporter calls migrate() for you on `onInit`, so manually
+// migrating here is optional.
 
 export default defineConfig({
   test: {
@@ -80,5 +81,5 @@ When using the `reporters` array with a custom reporter instance, make sure to a
 
 | Variable | Description | Default |
 |---|---|---|
-| `FLAKY_TESTS_DISABLED` | Set to `1` to skip all capture | — |
-| `FLAKY_TESTS_SQLITE_PATH` | Override the SQLite file path | `node_modules/.cache/flaky-tests/failures.db` |
+| `FLAKY_TESTS_DISABLE` | Set to `1` or `true` to skip all capture | — |
+| `FLAKY_TESTS_DB` | Override the SQLite file path | `node_modules/.cache/flaky-tests/failures.db` |

@@ -24,9 +24,11 @@ import type {
   Config,
   FlakyPattern,
   GetNewPatternsOptions,
+  GetRecentRunsOptions,
   InsertFailureInput,
   InsertRunInput,
   IStore,
+  RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
 import {
@@ -94,7 +96,15 @@ export class DynamoStore implements IStore {
   async getNewPatterns(
     _options: GetNewPatternsOptions = {},
   ): Promise<FlakyPattern[]> {
+    // `_options.signal` is an AbortSignal — honour it in long queries so
+    // callers (e.g. the CLI under a CI timeout) can cancel cleanly.
     return this.wrap('getNewPatterns', async () => [])
+  }
+
+  async getRecentRuns(_options: GetRecentRunsOptions): Promise<RecentRun[]> {
+    // Ordered by startedAt DESC, capped at `_options.limit`. Respect
+    // `_options.project` (string | null | undefined) and `_options.signal`.
+    return this.wrap('getRecentRuns', async () => [])
   }
 
   async close(): Promise<void> {
@@ -129,7 +139,11 @@ import { DynamoStore } from './index'
 runContractTests('dynamodb', () => new DynamoStore({ tableName: 'test' }))
 ```
 
-This asserts the 15 `IStore` scenarios every built-in adapter satisfies.
+This asserts the `IStore` scenarios every built-in adapter satisfies — insert/update semantics, pattern detection, project isolation, recent-runs ordering, and `AbortSignal` cancellation for `getNewPatterns` and `getRecentRuns`.
+
+### Schema migrations
+
+`migrate()` must be idempotent — the CLI and both plugins call it before the first query on every startup. SQLite-dialect adapters (sqlite, turso) use the shared versioned-migration runner in `@flaky-tests/core`: a monotonic `{ version, up, probe }` array recorded in a `schema_version` bookkeeping table, with `probe` callbacks that let pre-existing databases adopt a baseline without re-running DDL. Postgres/Supabase adapters stick with `CREATE TABLE IF NOT EXISTS` and manual dashboard setup. Your adapter is free to pick whichever style fits the backend — the only hard rule is that `migrate()` can be called repeatedly without side effects.
 
 ## Consume the adapter
 
@@ -197,11 +211,12 @@ means shipping a package; nothing upstream changes.
 
 ## Checklist for adapter authors
 
-- [ ] Implements every `IStore` method (`migrate` is required even if it's a no-op).
+- [ ] Implements every `IStore` method — including `getRecentRuns` — (`migrate` is required even if it's a no-op, and must be idempotent).
+- [ ] Honours `options.signal` on `getNewPatterns` and `getRecentRuns` by throwing an `AbortError` when the caller aborts.
 - [ ] Wraps every driver error in `StoreError` with `package`, `method`, `message`, `cause`.
 - [ ] Calls `parse(insertRunInputSchema, input)` etc. at the top of each write method so bad input surfaces as `ValidationError` before hitting the DB.
 - [ ] Validates any user-provided identifier via `validateTablePrefix` if the adapter interpolates table names.
 - [ ] Calls `definePlugin({ name: 'store-<name>', create })` at module top-level (not inside a function).
-- [ ] Runs `runContractTests('<name>', makeStore)` and passes all 15 scenarios.
+- [ ] Runs `runContractTests('<name>', makeStore)` and passes every scenario.
 
 That's the contract. The rest is up to the adapter.

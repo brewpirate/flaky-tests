@@ -18,6 +18,18 @@
 3. **Investigate** — A structured prompt is generated for Claude, Cursor, or Copilot
 4. **Notify** — A GitHub issue is opened with the prompt embedded
 
+## Features
+
+- **Zero-config capture** — single preload line for Bun, single reporter entry for Vitest
+- **Pluggable stores** — SQLite, Turso, Supabase, Postgres; swap with an env var
+- **Project isolation** — shared stores partition runs by `project` so multiple repos can share one database
+- **Versioned schema migrations** — SQLite and Turso stores ship a numbered migration runner; `auto-migrate` runs before queries so upgrades need no manual step
+- **Resilient remote writes** — network-backed stores (Turso, Supabase, Postgres) retry with exponential backoff on transient failures
+- **In-flight write drain** — the Bun preload flushes pending failure writes before the process exits, so CI runs don't lose the last few failures
+- **AbortSignal on reads** — all `getNewPatterns` / read paths accept an `AbortSignal` for bounded CLI runs
+- **Typed error surface** — every adapter wraps driver errors as `StoreError` with a stable code, so callers can branch on failure kind without sniffing driver internals
+- **AI-ready prompts + GitHub issues** — structured investigation prompts, duplicate-detection when opening issues, and an HTML report
+
 <p align="center">
   <img src="docs/flaky-report-preview.png" alt="HTML report preview — severity-ranked pattern cards with kind breakdown, hot files, and recent runs" width="820">
 </p>
@@ -164,9 +176,10 @@ bun install
 | `bun run test:integration` | Run integration tests (requires databases) |
 | `bun run test:all` | Run all tests (unit + integration) |
 | `bun run test:cli` | Run the CLI against local SQLite DB |
-| `bun run test:report` | Generate and open HTML report |
+| `bun run report` | Generate HTML report |
 | `bun run lint` | Lint with Biome |
-| `bun run check` | Lint + format check |
+| `bun run check` | Lint + format check (Biome) |
+| `bun run typecheck` | Run `tsc --noEmit` across every package |
 | `bun run build` | Build all packages |
 
 ### Testing

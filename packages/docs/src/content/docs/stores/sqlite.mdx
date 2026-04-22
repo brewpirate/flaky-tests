@@ -20,10 +20,10 @@ import { SqliteStore } from '@flaky-tests/store-sqlite'
 
 const store = new SqliteStore()
 // or with a custom path:
-const store = new SqliteStore({ path: './data/tests.db' })
+const store = new SqliteStore({ dbPath: './data/tests.db' })
 ```
 
-The `SqliteStore` constructor calls `migrate()` synchronously — tables are created before any other operations.
+The `SqliteStore` constructor opens (or creates) the database file and schedules `migrate()` — tables and any pending schema migrations are applied before subsequent operations. Migrations are versioned and tracked in a `schema_version` table, so `migrate()` is idempotent and safe to call on every startup. The CLI auto-runs `migrate()` before every query.
 
 ## Configuration
 
@@ -32,41 +32,17 @@ The `SqliteStore` constructor calls `migrate()` synchronously — tables are cre
 ```ts
 interface SqliteStoreOptions {
   /** Path to the SQLite file. Default: node_modules/.cache/flaky-tests/failures.db */
-  path?: string
+  dbPath?: string
 }
 ```
 
-### Environment variables
-
-| Variable | Description | Default |
-|---|---|---|
-| `FLAKY_TESTS_SQLITE_PATH` | Override the database path | `node_modules/.cache/flaky-tests/failures.db` |
-
-The constructor option takes precedence over the environment variable.
-
 ## Schema
 
-The store creates two tables:
+The store creates `runs` and `failures` tables and applies versioned migrations from `SQLITE_MIGRATIONS`. The current schema includes fields like `project`, `git_sha`, `git_dirty`, `status`, `duration_ms`, and per-failure `error_message` / `error_stack` / `duration_ms`. See `packages/core/src/migrations/sqlite.ts` for the authoritative schema.
 
-```sql
-CREATE TABLE IF NOT EXISTS runs (
-  id TEXT PRIMARY KEY,
-  started_at TEXT NOT NULL,
-  finished_at TEXT,
-  exit_code INTEGER
-)
+## Error handling and cancellation
 
-CREATE TABLE IF NOT EXISTS failures (
-  id TEXT PRIMARY KEY,
-  run_id TEXT NOT NULL REFERENCES runs(id),
-  test_file TEXT NOT NULL,
-  test_name TEXT NOT NULL,
-  failure_kind TEXT NOT NULL,
-  error_message TEXT,
-  error_stack TEXT,
-  failed_at TEXT NOT NULL
-)
-```
+Driver errors are wrapped in `StoreError` with `cause` preserved. Read methods (`getNewPatterns`, `getRecentRuns`) accept an optional `signal?: AbortSignal`. Because `bun:sqlite` is synchronous, the signal is only checked on entry via `throwIfAborted()` — there is no mid-query cancellation.
 
 ## Limitations
 

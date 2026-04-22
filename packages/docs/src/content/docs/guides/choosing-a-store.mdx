@@ -69,13 +69,21 @@ Change the `FLAKY_TESTS_STORE` environment variable:
 bunx @flaky-tests/cli
 
 # Uses Turso
-FLAKY_TESTS_STORE=turso TURSO_URL=libsql://... TURSO_AUTH_TOKEN=... bunx @flaky-tests/cli
+FLAKY_TESTS_STORE=turso \
+  FLAKY_TESTS_CONNECTION_STRING=libsql://... \
+  FLAKY_TESTS_AUTH_TOKEN=... \
+  bunx @flaky-tests/cli
 
 # Uses Supabase
-FLAKY_TESTS_STORE=supabase SUPABASE_URL=https://... SUPABASE_KEY=... bunx @flaky-tests/cli
+FLAKY_TESTS_STORE=supabase \
+  FLAKY_TESTS_CONNECTION_STRING=https://... \
+  FLAKY_TESTS_AUTH_TOKEN=<service-role-key> \
+  bunx @flaky-tests/cli
 
 # Uses Postgres
-FLAKY_TESTS_STORE=postgres POSTGRES_URL=postgres://... bunx @flaky-tests/cli
+FLAKY_TESTS_STORE=postgres \
+  FLAKY_TESTS_CONNECTION_STRING=postgres://... \
+  bunx @flaky-tests/cli
 ```
 
 The store packages are loaded dynamically so unused packages are never bundled.

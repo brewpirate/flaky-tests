@@ -38,8 +38,8 @@ jobs:
       - run: bun test
         env:
           FLAKY_TESTS_STORE: turso
-          TURSO_URL: ${{ secrets.TURSO_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          FLAKY_TESTS_CONNECTION_STRING: ${{ secrets.TURSO_URL }}
+          FLAKY_TESTS_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
       # On main: check for new patterns and open issues if found
       - if: github.ref == 'refs/heads/main'
@@ -76,8 +76,8 @@ jobs:
       - run: npx vitest run
         env:
           FLAKY_TESTS_STORE: turso
-          TURSO_URL: ${{ secrets.TURSO_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          FLAKY_TESTS_CONNECTION_STRING: ${{ secrets.TURSO_URL }}
+          FLAKY_TESTS_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
       - if: github.ref == 'refs/heads/main'
         uses: brewpirate/flaky-tests@v1
@@ -115,6 +115,12 @@ jobs:
 <Aside type="tip">
 The recommended pattern is: capture on every run (PR + main), detect on main pushes and scheduled runs. This maximizes the data you collect while keeping noise low.
 </Aside>
+
+## Reliability notes
+
+- **Writes are drained at process exit.** The Bun preload tracks every fire-and-forget write and awaits outstanding ones before the test process shuts down, so transient remote-store latency at the end of a run doesn't drop failures.
+- **Remote stores retry transient failures.** Turso, Supabase, and Postgres adapters retry network errors with exponential backoff out of the box — flaky CI networking rarely needs special handling on your side.
+- **Migrations run automatically.** Plugins and the CLI both call `migrate()` before the first query, so a fresh database works on the first run with no setup step.
 
 ## Capture-only mode
 
