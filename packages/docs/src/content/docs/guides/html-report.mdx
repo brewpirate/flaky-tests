@@ -51,6 +51,26 @@ The CLI can emit a **self-contained HTML report** — a single `.html` file with
 `--html` works even when there are no newly-flaky patterns. The report falls back to showing run history, so a "clean" run still produces something useful.
 </Aside>
 
+## Wire it into `package.json`
+
+Drop a dedicated script into `package.json` so report generation is a
+single command everyone on the team can run:
+
+<PackageManagers pkg="@flaky-tests/cli" dev />
+
+```json title="package.json"
+{
+  "scripts": {
+    "flaky:report": "flaky-tests --html",
+    "flaky:report:save": "flaky-tests --html --out flaky-report.html"
+  }
+}
+```
+
+CI jobs can then call `bun run flaky:report:save` (or the npm / pnpm /
+yarn equivalent) and upload the resulting `flaky-report.html` as a
+workflow artifact.
+
 ## What's in the report
 
 ### Header stat strip

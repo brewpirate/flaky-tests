@@ -135,6 +135,27 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 
 </Tabs>
 
+## Wire it into `package.json`
+
+Typing `bunx` / `npx` each time gets old. Install the CLI as a dev
+dependency and add scripts so the whole team runs the same invocation:
+
+<PackageManagers pkg="@flaky-tests/cli" dev />
+
+```json title="package.json"
+{
+  "scripts": {
+    "flaky": "flaky-tests",
+    "flaky:prompt": "flaky-tests --prompt",
+    "flaky:report": "flaky-tests --html"
+  }
+}
+```
+
+Now anyone on the project can run `bun run flaky` (or `npm run flaky` /
+`pnpm flaky` / `yarn flaky`) without reaching for the full package
+name, and CI workflows get a single stable command to call.
+
 ## What's next?
 
 - **Working in a team?** → [Choosing a store](/guides/choosing-a-store/) — SQLite is local only
