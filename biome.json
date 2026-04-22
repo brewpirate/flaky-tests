@@ -56,7 +56,11 @@
       },
       "style": {
         "noNestedTernary": "error",
-        "useNodejsImportProtocol": "off"
+        "useNodejsImportProtocol": "off",
+        "noProcessEnv": "error",
+        "noMagicNumbers": "error",
+        "noParameterAssign": "error",
+        "useArrayLiterals": "error"
       },
       "nursery": {
         "useSortedClasses": "info"
