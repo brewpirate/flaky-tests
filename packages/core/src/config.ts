@@ -27,11 +27,18 @@ const sqliteStoreConfigSchema = type({
   'module?': 'string',
 })
 
+/** Retry config shared by all network-backed stores; ignored by sqlite. */
+const retryConfigSchema = type({
+  'attempts?': 'number > 0',
+  'baseMs?': 'number > 0',
+})
+
 const tursoStoreConfigSchema = type({
   type: "'turso'",
   url: type.string.atLeastLength(1),
   'authToken?': 'string',
   'module?': 'string',
+  'retry?': retryConfigSchema,
 })
 
 const supabaseStoreConfigSchema = type({
@@ -40,6 +47,7 @@ const supabaseStoreConfigSchema = type({
   key: type.string.atLeastLength(1),
   'tablePrefix?': 'string',
   'module?': 'string',
+  'retry?': retryConfigSchema,
 })
 
 const postgresStoreConfigSchema = type({
@@ -53,6 +61,7 @@ const postgresStoreConfigSchema = type({
   'ssl?': "boolean | 'require' | 'prefer' | 'allow'",
   'tablePrefix?': 'string',
   'module?': 'string',
+  'retry?': retryConfigSchema,
 })
 
 /** Discriminated union on `type` — each variant carries only its own fields. */

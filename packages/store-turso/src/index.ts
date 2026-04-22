@@ -22,11 +22,13 @@ import {
   parse,
   parseArray,
   type RecentRun,
+  type RetryOptions,
   type RunStatus,
   raceAbort,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
+  withRetry,
 } from '@flaky-tests/core'
 import type { Client, InArgs } from '@libsql/client'
 import { createClient } from '@libsql/client'
@@ -35,10 +37,22 @@ import { type } from 'arktype'
 const log = createLogger('store-turso')
 const PACKAGE = '@flaky-tests/store-turso'
 
+/**
+ * Retry tuning for read methods. Defaults — 3 attempts, 100ms base — come
+ * from {@link withRetry}; override per-store to disable (attempts=1) or
+ * extend the backoff window. Applies only to read methods; writes are not
+ * retried because {@link IStore.insertFailure} lacks an idempotency key.
+ */
+export const retryOptionsSchema = type({
+  'attempts?': 'number > 0',
+  'baseMs?': 'number > 0',
+})
+
 /** Configuration for the Turso (libSQL) store. */
 export const tursoStoreOptionsSchema = type({
   url: type.string.atLeastLength(1),
   'authToken?': 'string',
+  'retry?': retryOptionsSchema,
 })
 
 /** Inferred options type for {@link TursoStore}: libSQL URL plus optional HTTP auth token. */
@@ -88,6 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests
  */
 export class TursoStore implements IStore {
   private client: Client
+  private retryOptions: RetryOptions
 
   /** Builds the libSQL client from a validated URL and optional auth token. */
   constructor(options: TursoStoreOptions) {
@@ -98,6 +113,7 @@ export class TursoStore implements IStore {
         authToken: validated.authToken,
       }),
     })
+    this.retryOptions = validated.retry ?? {}
   }
 
   /** Wraps a driver call so any thrown libSQL error becomes a {@link StoreError} with `cause` preserved for stack inspection. */
@@ -281,9 +297,11 @@ export class TursoStore implements IStore {
     // observe an AbortError immediately while the request completes in the
     // background and is discarded.
     const result = await this.wrap('getNewPatterns', () =>
-      raceAbort(
-        this.client.execute({
-          sql: `SELECT
+      withRetry(
+        () =>
+          raceAbort(
+            this.client.execute({
+              sql: `SELECT
                  f.test_file,
                  f.test_name,
                  SUM(CASE WHEN f.failed_at > ?  THEN 1 ELSE 0 END) AS recent_fails,
@@ -303,9 +321,11 @@ export class TursoStore implements IStore {
               GROUP BY f.test_file, f.test_name
               HAVING recent_fails >= ? AND prior_fails = 0
               ORDER BY recent_fails DESC`,
-          args: args as InArgs,
-        }),
-        options.signal,
+              args: args as InArgs,
+            }),
+            options.signal,
+          ),
+        { ...this.retryOptions, signal: options.signal },
       ),
     )
 
@@ -327,18 +347,22 @@ export class TursoStore implements IStore {
     const projectClause = project === null ? 'project IS NULL' : 'project = ?'
     const args = project === null ? [limit] : [project, limit]
     const result = await this.wrap('getRecentRuns', () =>
-      raceAbort(
-        this.client.execute({
-          sql: `SELECT run_id, project, started_at, ended_at, duration_ms, status,
+      withRetry(
+        () =>
+          raceAbort(
+            this.client.execute({
+              sql: `SELECT run_id, project, started_at, ended_at, duration_ms, status,
                        total_tests, passed_tests, failed_tests,
                        errors_between_tests, git_sha, git_dirty
                   FROM runs
                  WHERE ${projectClause}
                  ORDER BY started_at DESC
                  LIMIT ?`,
-          args: args as InArgs,
-        }),
-        signal,
+              args: args as InArgs,
+            }),
+            signal,
+          ),
+        { ...this.retryOptions, signal },
       ),
     )
     return result.rows.map((row) => {
@@ -386,6 +410,7 @@ export const tursoStorePlugin = definePlugin({
       ...(config.store.authToken !== undefined && {
         authToken: config.store.authToken,
       }),
+      ...(config.store.retry !== undefined && { retry: config.store.retry }),
     })
   },
 })

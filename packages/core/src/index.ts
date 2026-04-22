@@ -40,6 +40,7 @@ export {
   resetPluginRegistryForTesting,
 } from './plugin'
 export { generatePrompt } from './prompt'
+export { isRetryableError, type RetryOptions, withRetry } from './retry'
 export {
   failureKindSchema,
   flakyPatternSchema,
