@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import type { FailureKind } from '@flaky-tests/core'
 import { SqliteStore } from './index'
 
 // Helpers ----------------------------------------------------------------
@@ -14,7 +15,7 @@ function makeFailure(
   runId: string,
   testName: string,
   failedAt: Date,
-  kind = 'assertion' as const,
+  kind: FailureKind = 'assertion',
 ) {
   return {
     runId,

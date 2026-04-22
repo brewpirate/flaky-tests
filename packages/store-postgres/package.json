@@ -35,5 +35,8 @@
     "@flaky-tests/core": "workspace:*",
     "arktype": "^2.1.0",
     "postgres": "^3.4.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
   }
 }
