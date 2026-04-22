@@ -1,5 +1,16 @@
 import type { FailureKind } from './types'
 
+const MAX_MESSAGE_SCAN_LENGTH = 4096
+const TIMEOUT_PATTERN = /\btimed? ?out\b/i
+
+function safeRead<T>(source: object, key: string): T | undefined {
+  try {
+    return (source as Record<string, unknown>)[key] as T | undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Classifies a thrown test error into a coarse category. The categories are
  * deliberately few — we want to answer "is this test timing out vs. a bad
@@ -7,24 +18,34 @@ import type { FailureKind } from './types'
  *
  * Ordering matters: a timeout thrown as an AssertionError should classify as
  * `timeout` — the timeout signal is more useful for flakiness analysis.
+ *
+ * Defensive against frozen objects, proxies, and pathological message lengths.
  */
 export function categorizeError(error: unknown): FailureKind {
   if (!(error instanceof Error)) {
     return 'unknown'
   }
-  const message = error.message ?? ''
-  if (error.name === 'TimeoutError' || /timed? ?out/i.test(message)) {
+
+  const name = typeof error.name === 'string' ? error.name : ''
+  const rawMessage = typeof error.message === 'string' ? error.message : ''
+  const message =
+    rawMessage.length > MAX_MESSAGE_SCAN_LENGTH
+      ? rawMessage.slice(0, MAX_MESSAGE_SCAN_LENGTH)
+      : rawMessage
+
+  if (name === 'TimeoutError' || TIMEOUT_PATTERN.test(message)) {
     return 'timeout'
   }
+
+  const hasMatcherResult = safeRead(error, 'matcherResult') !== undefined
   if (
-    error.name === 'AssertionError' ||
-    // Bun's `expect` attaches a `matcherResult` to failures
-    'matcherResult' in error ||
-    // Vitest / Jest expect error format
+    name === 'AssertionError' ||
+    hasMatcherResult ||
     message.startsWith('expect(received)')
   ) {
     return 'assertion'
   }
+
   return 'uncaught'
 }
 
@@ -34,9 +55,13 @@ export function categorizeError(error: unknown): FailureKind {
  */
 export function extractMessage(error: unknown): string {
   if (error instanceof Error) {
-    return error.message
+    return typeof error.message === 'string' ? error.message : ''
   }
-  return String(error)
+  try {
+    return String(error)
+  } catch {
+    return ''
+  }
 }
 
 /**

@@ -3,11 +3,15 @@ import type { Client, InArgs } from '@libsql/client'
 import type {
   FlakyPattern,
   GetNewPatternsOptions,
+  HotFile,
   InsertFailureInput,
   InsertRunInput,
   IStore,
+  KindBreakdown,
+  RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
+import { coerceFailureKind, coerceFailureKinds, coerceRunStatus } from '@flaky-tests/core'
 
 export interface TursoStoreOptions {
   /**
@@ -193,10 +197,75 @@ export class TursoStore implements IStore {
       testName: String(r.test_name),
       recentFails: Number(r.recent_fails),
       priorFails: Number(r.prior_fails),
-      failureKinds: String(r.failure_kinds).split(','),
+      failureKinds: coerceFailureKinds(String(r.failure_kinds)),
       lastErrorMessage: r.last_error_message != null ? String(r.last_error_message) : null,
       lastErrorStack: r.last_error_stack != null ? String(r.last_error_stack) : null,
       lastFailed: String(r.last_failed),
+    }))
+  }
+
+  /** Return recent test runs, newest first. */
+  async getRecentRuns(options: { limit?: number } = {}): Promise<RecentRun[]> {
+    const limit = options.limit ?? 20
+    const result = await this.client.execute({
+      sql: `SELECT run_id, started_at, ended_at, duration_ms, status,
+                   total_tests, passed_tests, failed_tests,
+                   errors_between_tests, git_sha, git_dirty
+              FROM runs
+             ORDER BY started_at DESC
+             LIMIT ?`,
+      args: [limit] as InArgs,
+    })
+    return result.rows.map((r) => ({
+      runId: String(r.run_id),
+      startedAt: String(r.started_at),
+      endedAt: r.ended_at != null ? String(r.ended_at) : null,
+      durationMs: r.duration_ms != null ? Number(r.duration_ms) : null,
+      status: coerceRunStatus(r.status),
+      totalTests: r.total_tests != null ? Number(r.total_tests) : null,
+      passedTests: r.passed_tests != null ? Number(r.passed_tests) : null,
+      failedTests: r.failed_tests != null ? Number(r.failed_tests) : null,
+      errorsBetweenTests: r.errors_between_tests != null ? Number(r.errors_between_tests) : null,
+      gitSha: r.git_sha != null ? String(r.git_sha) : null,
+      gitDirty: r.git_dirty != null ? Boolean(Number(r.git_dirty)) : null,
+    }))
+  }
+
+  /** Breakdown of failure kinds within a time window. */
+  async getFailureKindBreakdown(options: { windowDays?: number } = {}): Promise<KindBreakdown[]> {
+    const windowDays = options.windowDays ?? 30
+    const result = await this.client.execute({
+      sql: `SELECT failure_kind, COUNT(*) AS count
+              FROM failures
+             WHERE failed_at > datetime('now', '-' || ? || ' days')
+             GROUP BY failure_kind`,
+      args: [windowDays] as InArgs,
+    })
+    return result.rows.map((r) => ({
+      failureKind: coerceFailureKind(r.failure_kind),
+      count: Number(r.count),
+    }))
+  }
+
+  /** Files with the most failures in a time window. */
+  async getHotFiles(options: { windowDays?: number; limit?: number } = {}): Promise<HotFile[]> {
+    const windowDays = options.windowDays ?? 30
+    const limit = options.limit ?? 15
+    const result = await this.client.execute({
+      sql: `SELECT test_file,
+                   COUNT(*) AS fails,
+                   COUNT(DISTINCT test_name) AS distinct_tests
+              FROM failures
+             WHERE failed_at > datetime('now', '-' || ? || ' days')
+             GROUP BY test_file
+             ORDER BY fails DESC
+             LIMIT ?`,
+      args: [windowDays, limit] as InArgs,
+    })
+    return result.rows.map((r) => ({
+      testFile: String(r.test_file),
+      fails: Number(r.fails),
+      distinctTests: Number(r.distinct_tests),
     }))
   }
 

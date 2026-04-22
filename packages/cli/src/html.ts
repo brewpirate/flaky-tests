@@ -1,4 +1,4 @@
-import type { FlakyPattern } from '@flaky-tests/core'
+import type { FlakyPattern, RecentRun, KindBreakdown, HotFile } from '@flaky-tests/core'
 import { generatePrompt } from './prompt'
 
 function esc(s: string): string {
@@ -45,7 +45,112 @@ function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
  * @param windowDays - Detection window size in days (used in headings and prompts)
  * @returns Complete HTML document string
  */
-export function generateHtml(patterns: FlakyPattern[], windowDays: number): string {
+function formatDuration(ms: number | null): string {
+  if (ms == null) return '—'
+  if (ms < 1000) return `${ms}ms`
+  const s = ms / 1000
+  if (s < 60) return `${s.toFixed(1)}s`
+  const m = Math.floor(s / 60)
+  const rem = Math.round(s % 60)
+  return `${m}m ${rem}s`
+}
+
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
+function shortSha(sha: string | null): string {
+  return sha ? sha.slice(0, 7) : '—'
+}
+
+function kindColor(kind: string): string {
+  switch (kind) {
+    case 'assertion': return 'var(--blue)'
+    case 'timeout': return 'var(--yellow)'
+    case 'uncaught': return 'var(--red)'
+    default: return 'var(--subtext)'
+  }
+}
+
+function failColor(n: number): string {
+  if (n >= 10) return 'var(--red)'
+  if (n >= 5) return 'var(--yellow)'
+  if (n >= 2) return 'var(--text)'
+  return 'var(--green)'
+}
+
+function renderDashboard(dashboard: { recentRuns: RecentRun[]; kindBreakdown: KindBreakdown[]; hotFiles: HotFile[] }): string {
+  const totalKindFails = dashboard.kindBreakdown.reduce((s, k) => s + k.count, 0)
+
+  const kindCards = dashboard.kindBreakdown.map(k => {
+    const pct = totalKindFails ? ((k.count / totalKindFails) * 100).toFixed(1) : '0'
+    return `<div class="kind-card" style="border-left: 3px solid ${kindColor(k.failureKind)}">
+      <span class="kind-label">${esc(k.failureKind)}</span>
+      <span class="kind-count" style="color: ${kindColor(k.failureKind)}">${k.count}</span>
+      <span class="kind-pct">${pct}%</span>
+    </div>`
+  }).join('\n')
+
+  const hotRows = dashboard.hotFiles.map(h =>
+    `<tr>
+      <td style="color: ${failColor(h.fails)}; font-weight: 600">${h.fails}</td>
+      <td>${h.distinctTests}</td>
+      <td><code>${esc(h.testFile)}</code></td>
+    </tr>`
+  ).join('\n')
+
+  const runRows = dashboard.recentRuns.map(r => {
+    const statusColor = r.status === 'pass' ? 'var(--green)' : r.status === 'fail' ? 'var(--red)' : 'var(--subtext)'
+    const statusLabel = r.status ?? 'n/a'
+    return `<tr>
+      <td><span class="status-badge" style="background: ${statusColor}">${esc(statusLabel)}</span></td>
+      <td>${formatRelative(r.startedAt)}</td>
+      <td>${formatDuration(r.durationMs)}</td>
+      <td>${r.totalTests ?? '—'}</td>
+      <td style="color: var(--green)">${r.passedTests ?? '—'}</td>
+      <td style="color: var(--red)">${r.failedTests ?? '—'}</td>
+      <td>${r.errorsBetweenTests ?? '—'}</td>
+      <td><code>${shortSha(r.gitSha)}</code></td>
+    </tr>`
+  }).join('\n')
+
+  return `
+    <section class="dashboard-separator"></section>
+
+    <section class="dashboard-section">
+      <h2 class="section-title">Failure Kind Breakdown</h2>
+      <div class="kind-grid">${kindCards}</div>
+    </section>
+
+    <section class="dashboard-section">
+      <h2 class="section-title">Hot Files</h2>
+      <table class="dash-table">
+        <thead><tr><th>Fails</th><th>Distinct Tests</th><th>File</th></tr></thead>
+        <tbody>${hotRows}</tbody>
+      </table>
+    </section>
+
+    <section class="dashboard-section">
+      <h2 class="section-title">Recent Runs</h2>
+      <table class="dash-table">
+        <thead><tr><th>Status</th><th>When</th><th>Duration</th><th>Total</th><th>Passed</th><th>Failed</th><th>Errors</th><th>SHA</th></tr></thead>
+        <tbody>${runRows}</tbody>
+      </table>
+    </section>`
+}
+
+export function generateHtml(
+  patterns: FlakyPattern[],
+  windowDays: number,
+  dashboard?: { recentRuns: RecentRun[]; kindBreakdown: KindBreakdown[]; hotFiles: HotFile[] }
+): string {
   const plural = patterns.length === 1 ? 'pattern' : 'patterns'
   const cards = patterns.map((p, i) => patternCard(p, i, windowDays)).join('\n')
 
@@ -230,6 +335,90 @@ export function generateHtml(patterns: FlakyPattern[], windowDays: number): stri
       font-size: 0.8rem;
       color: var(--subtext);
     }
+
+    .dashboard-separator {
+      border-top: 1px solid var(--surface2);
+      margin: 2rem 0;
+    }
+
+    .dashboard-section { margin-bottom: 2rem; }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--subtext);
+      margin-bottom: 1rem;
+      letter-spacing: 0.03em;
+    }
+
+    .kind-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .kind-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      border: 1px solid var(--surface2);
+    }
+
+    .kind-label {
+      font-size: 0.8rem;
+      color: var(--subtext);
+      text-transform: capitalize;
+    }
+
+    .kind-count {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+
+    .kind-pct {
+      font-size: 0.75rem;
+      color: var(--subtext);
+    }
+
+    .dash-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .dash-table th {
+      text-align: left;
+      color: var(--subtext);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--surface2);
+    }
+
+    .dash-table td {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--surface);
+    }
+
+    .dash-table code {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--blue);
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--bg);
+    }
   </style>
 </head>
 <body>
@@ -240,6 +429,8 @@ export function generateHtml(patterns: FlakyPattern[], windowDays: number): stri
     </header>
 
     ${cards}
+
+    ${dashboard ? renderDashboard(dashboard) : ''}
 
     <footer class="footer">
       Generated by <a href="https://github.com/brewpirate/flaky-tests" style="color: var(--blue)">flaky-tests</a>

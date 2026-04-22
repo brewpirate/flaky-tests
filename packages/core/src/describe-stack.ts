@@ -1,3 +1,5 @@
+const MAX_DESCRIBE_DEPTH = 256
+
 /**
  * Tracks the current `describe` nesting so tests report their full
  * `"outer > inner > test name"` path.
@@ -9,12 +11,11 @@ export class DescribeStack {
   private frames: string[] = []
 
   /**
-   * Snapshot of the current frames. Used by the `describe` wrapper to capture
-   * the path at describe-call time (synchronous w.r.t. the outer body), then
-   * replay it via `runWithFrames` whenever the runtime executes the nested body.
+   * Snapshot of the current frames. Returns a frozen copy so callers cannot
+   * mutate internal state.
    */
   get snapshot(): readonly string[] {
-    return this.frames
+    return Object.freeze([...this.frames])
   }
 
   /**
@@ -22,6 +23,11 @@ export class DescribeStack {
    * try/finally so a thrown describe body does not leave a dangling frame.
    */
   run<T>(name: string, body: () => T): T {
+    if (this.frames.length >= MAX_DESCRIBE_DEPTH) {
+      throw new RangeError(
+        `DescribeStack exceeded maximum depth of ${MAX_DESCRIBE_DEPTH}`,
+      )
+    }
     this.frames.push(name)
     try {
       return body()
@@ -36,6 +42,11 @@ export class DescribeStack {
    * time, since Bun defers nested describe body execution.
    */
   runWithFrames<T>(frames: readonly string[], body: () => T): T {
+    if (frames.length > MAX_DESCRIBE_DEPTH) {
+      throw new RangeError(
+        `DescribeStack frames length ${frames.length} exceeds maximum depth of ${MAX_DESCRIBE_DEPTH}`,
+      )
+    }
     const saved = this.frames
     this.frames = [...frames]
     try {

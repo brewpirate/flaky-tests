@@ -2,11 +2,15 @@ import postgres from 'postgres'
 import type {
   FlakyPattern,
   GetNewPatternsOptions,
+  HotFile,
   InsertFailureInput,
   InsertRunInput,
   IStore,
+  KindBreakdown,
+  RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
+import { coerceFailureKind, coerceFailureKinds, coerceRunStatus } from '@flaky-tests/core'
 
 export interface PostgresStoreOptions {
   /** Full connection string, e.g. postgres://user:pass@host:5432/db */
@@ -147,10 +151,101 @@ export class PostgresStore implements IStore {
       testName: r.test_name,
       recentFails: Number(r.recent_fails),
       priorFails: Number(r.prior_fails),
-      failureKinds: r.failure_kinds,
+      failureKinds: coerceFailureKinds(r.failure_kinds),
       lastErrorMessage: r.last_error_message,
       lastErrorStack: r.last_error_stack,
       lastFailed: r.last_failed.toISOString(),
+    }))
+  }
+
+  /** Return the most recent test runs, ordered by start time descending. */
+  async getRecentRuns(options: { limit?: number } = {}): Promise<RecentRun[]> {
+    const limit = options.limit ?? 20
+    const runs = this.runsTable
+
+    const rows = await this.sql<Array<{
+      run_id: string
+      started_at: string
+      ended_at: string | null
+      duration_ms: number | null
+      status: string | null
+      total_tests: number | null
+      passed_tests: number | null
+      failed_tests: number | null
+      errors_between_tests: number | null
+      git_sha: string | null
+      git_dirty: boolean | null
+    }>>`
+      SELECT run_id, started_at, ended_at, duration_ms, status,
+             total_tests, passed_tests, failed_tests, errors_between_tests,
+             git_sha, git_dirty
+      FROM ${this.sql(runs)}
+      ORDER BY started_at DESC
+      LIMIT ${limit}
+    `
+
+    return rows.map((r) => ({
+      runId: r.run_id,
+      startedAt: String(r.started_at),
+      endedAt: r.ended_at != null ? String(r.ended_at) : null,
+      durationMs: r.duration_ms != null ? Number(r.duration_ms) : null,
+      status: coerceRunStatus(r.status),
+      totalTests: r.total_tests != null ? Number(r.total_tests) : null,
+      passedTests: r.passed_tests != null ? Number(r.passed_tests) : null,
+      failedTests: r.failed_tests != null ? Number(r.failed_tests) : null,
+      errorsBetweenTests: r.errors_between_tests != null ? Number(r.errors_between_tests) : null,
+      gitSha: r.git_sha,
+      gitDirty: r.git_dirty != null ? Boolean(r.git_dirty) : null,
+    }))
+  }
+
+  /** Return failure counts grouped by failure_kind within a time window. */
+  async getFailureKindBreakdown(options: { windowDays?: number } = {}): Promise<KindBreakdown[]> {
+    const days = options.windowDays ?? 30
+    const failures = this.failuresTable
+
+    const rows = await this.sql<Array<{
+      failure_kind: string
+      count: string
+    }>>`
+      SELECT failure_kind, COUNT(*) AS count
+      FROM ${this.sql(failures)}
+      WHERE failed_at > NOW() - ${`${days} days`}::interval
+      GROUP BY failure_kind
+      ORDER BY count DESC
+    `
+
+    return rows.map((r) => ({
+      failureKind: coerceFailureKind(r.failure_kind),
+      count: Number(r.count),
+    }))
+  }
+
+  /** Return the test files with the most failures within a time window. */
+  async getHotFiles(options: { windowDays?: number; limit?: number } = {}): Promise<HotFile[]> {
+    const days = options.windowDays ?? 30
+    const limit = options.limit ?? 15
+    const failures = this.failuresTable
+
+    const rows = await this.sql<Array<{
+      test_file: string
+      fails: string
+      distinct_tests: string
+    }>>`
+      SELECT test_file,
+             COUNT(*) AS fails,
+             COUNT(DISTINCT test_name) AS distinct_tests
+      FROM ${this.sql(failures)}
+      WHERE failed_at > NOW() - ${`${days} days`}::interval
+      GROUP BY test_file
+      ORDER BY fails DESC
+      LIMIT ${limit}
+    `
+
+    return rows.map((r) => ({
+      testFile: r.test_file,
+      fails: Number(r.fails),
+      distinctTests: Number(r.distinct_tests),
     }))
   }
 

@@ -3,11 +3,15 @@ import { Database } from 'bun:sqlite'
 import type {
   FlakyPattern,
   GetNewPatternsOptions,
+  HotFile,
   InsertFailureInput,
   InsertRunInput,
   IStore,
+  KindBreakdown,
+  RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
+import { coerceFailureKind, coerceFailureKinds, coerceRunStatus } from '@flaky-tests/core'
 
 /** Configuration for the SQLite-backed flaky-tests store. */
 export interface SqliteStoreOptions {
@@ -261,10 +265,63 @@ export class SqliteStore implements IStore {
       testName: r.test_name,
       recentFails: r.recent_fails,
       priorFails: r.prior_fails,
-      failureKinds: r.failure_kinds.split(','),
+      failureKinds: coerceFailureKinds(r.failure_kinds),
       lastErrorMessage: r.last_error_message_raw != null ? r.last_error_message_raw.slice(TS_LEN) : null,
       lastErrorStack: r.last_error_stack_raw != null ? r.last_error_stack_raw.slice(TS_LEN) : null,
       lastFailed: r.last_failed,
+    }))
+  }
+
+  async getRecentRuns(options: { limit?: number } = {}): Promise<RecentRun[]> {
+    const limit = options.limit ?? 20
+    const rows = this.db
+      .query<any, [number]>(
+        `SELECT run_id, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty FROM runs ORDER BY started_at DESC LIMIT ?`,
+      )
+      .all(limit)
+
+    return rows.map((r) => ({
+      runId: r.run_id,
+      startedAt: r.started_at,
+      endedAt: r.ended_at,
+      durationMs: r.duration_ms,
+      status: coerceRunStatus(r.status),
+      totalTests: r.total_tests,
+      passedTests: r.passed_tests,
+      failedTests: r.failed_tests,
+      errorsBetweenTests: r.errors_between_tests,
+      gitSha: r.git_sha,
+      gitDirty: r.git_dirty != null ? r.git_dirty === 1 : null,
+    }))
+  }
+
+  async getFailureKindBreakdown(options: { windowDays?: number } = {}): Promise<KindBreakdown[]> {
+    const windowDays = options.windowDays ?? 30
+    const rows = this.db
+      .query<any, []>(
+        `SELECT failure_kind, COUNT(*) AS count FROM failures WHERE failed_at > datetime('now', '-${windowDays} days') GROUP BY failure_kind ORDER BY count DESC`,
+      )
+      .all()
+
+    return rows.map((r) => ({
+      failureKind: coerceFailureKind(r.failure_kind),
+      count: r.count,
+    }))
+  }
+
+  async getHotFiles(options: { windowDays?: number; limit?: number } = {}): Promise<HotFile[]> {
+    const windowDays = options.windowDays ?? 30
+    const limit = options.limit ?? 15
+    const rows = this.db
+      .query<any, [number]>(
+        `SELECT test_file, COUNT(*) AS fails, COUNT(DISTINCT test_name) AS distinct_tests FROM failures WHERE failed_at > datetime('now', '-${windowDays} days') GROUP BY test_file ORDER BY fails DESC LIMIT ?`,
+      )
+      .all(limit)
+
+    return rows.map((r) => ({
+      testFile: r.test_file,
+      fails: r.fails,
+      distinctTests: r.distinct_tests,
     }))
   }
 

@@ -3,11 +3,15 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
   FlakyPattern,
   GetNewPatternsOptions,
+  HotFile,
   InsertFailureInput,
   InsertRunInput,
   IStore,
+  KindBreakdown,
+  RecentRun,
   UpdateRunInput,
 } from '@flaky-tests/core'
+import { coerceFailureKind, coerceFailureKinds, coerceRunStatus } from '@flaky-tests/core'
 
 export interface SupabaseStoreOptions {
   /** Supabase project URL */
@@ -143,11 +147,85 @@ export class SupabaseStore implements IStore {
         testName: e.testName,
         recentFails: e.recentFails,
         priorFails: e.priorFails,
-        failureKinds: [...e.kinds],
+        failureKinds: coerceFailureKinds([...e.kinds]),
         lastErrorMessage: e.lastMsg,
         lastErrorStack: e.lastStack,
         lastFailed: e.lastFailed,
       }))
+  }
+
+  async getRecentRuns(options: { limit?: number } = {}): Promise<RecentRun[]> {
+    const limit = options.limit ?? 20
+    const { data, error } = await this.client
+      .from(this.runsTable)
+      .select('run_id, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty')
+      .order('started_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw new Error(`[flaky-tests/store-supabase] getRecentRuns: ${error.message}`)
+
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      runId: row.run_id as string,
+      startedAt: row.started_at as string,
+      endedAt: (row.ended_at as string) ?? null,
+      durationMs: (row.duration_ms as number) ?? null,
+      status: coerceRunStatus(row.status),
+      totalTests: (row.total_tests as number) ?? null,
+      passedTests: (row.passed_tests as number) ?? null,
+      failedTests: (row.failed_tests as number) ?? null,
+      errorsBetweenTests: (row.errors_between_tests as number) ?? null,
+      gitSha: (row.git_sha as string) ?? null,
+      gitDirty: row.git_dirty != null ? Boolean(row.git_dirty) : null,
+    }))
+  }
+
+  async getFailureKindBreakdown(options: { windowDays?: number } = {}): Promise<KindBreakdown[]> {
+    const windowDays = options.windowDays ?? 30
+    const windowStart = new Date(Date.now() - windowDays * 86400000).toISOString()
+
+    const { data, error } = await this.client
+      .from(this.failuresTable)
+      .select('failure_kind')
+      .gt('failed_at', windowStart)
+
+    if (error) throw new Error(`[flaky-tests/store-supabase] getFailureKindBreakdown: ${error.message}`)
+
+    const counts = new Map<string, number>()
+    for (const row of (data ?? []) as Array<{ failure_kind: string }>) {
+      counts.set(row.failure_kind, (counts.get(row.failure_kind) ?? 0) + 1)
+    }
+
+    return [...counts.entries()]
+      .map(([failureKind, count]) => ({ failureKind: coerceFailureKind(failureKind), count }))
+      .sort((a, b) => b.count - a.count)
+  }
+
+  async getHotFiles(options: { windowDays?: number; limit?: number } = {}): Promise<HotFile[]> {
+    const windowDays = options.windowDays ?? 30
+    const limit = options.limit ?? 15
+    const windowStart = new Date(Date.now() - windowDays * 86400000).toISOString()
+
+    const { data, error } = await this.client
+      .from(this.failuresTable)
+      .select('test_file, test_name')
+      .gt('failed_at', windowStart)
+
+    if (error) throw new Error(`[flaky-tests/store-supabase] getHotFiles: ${error.message}`)
+
+    const fileMap = new Map<string, { fails: number; tests: Set<string> }>()
+    for (const row of (data ?? []) as Array<{ test_file: string; test_name: string }>) {
+      if (!fileMap.has(row.test_file)) {
+        fileMap.set(row.test_file, { fails: 0, tests: new Set() })
+      }
+      const entry = fileMap.get(row.test_file)!
+      entry.fails++
+      entry.tests.add(row.test_name)
+    }
+
+    return [...fileMap.entries()]
+      .map(([testFile, v]) => ({ testFile, fails: v.fails, distinctTests: v.tests.size }))
+      .sort((a, b) => b.fails - a.fails)
+      .slice(0, limit)
   }
 
   async close(): Promise<void> {

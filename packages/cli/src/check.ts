@@ -31,8 +31,6 @@ import { createIssue, findExistingIssue, resolveRepo } from './github'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SqliteStore } from '@flaky-tests/store-sqlite'
-import type { FlakyPattern } from '@flaky-tests/core'
 import { generateHtml } from './html'
 
 
@@ -90,8 +88,16 @@ async function main(): Promise<void> {
   const store = await resolveStore()
 
   let patterns: FlakyPattern[]
+  let recentRuns: Awaited<ReturnType<IStore['getRecentRuns']>>
+  let kindBreakdown: Awaited<ReturnType<IStore['getFailureKindBreakdown']>>
+  let hotFiles: Awaited<ReturnType<IStore['getHotFiles']>>
   try {
     patterns = await store.getNewPatterns({ windowDays, threshold })
+      ;[recentRuns, kindBreakdown, hotFiles] = await Promise.all([
+        store.getRecentRuns({ limit: 20 }),
+        store.getFailureKindBreakdown({ windowDays }),
+        store.getHotFiles({ windowDays, limit: 15 }),
+      ])
   } finally {
     await store.close()
   }
@@ -142,54 +148,55 @@ async function main(): Promise<void> {
 
   if (doCreateIssue) {
     await openGitHubIssues(patterns, windowDays)
-  if (doHtml) {
-    const html = generateHtml(patterns, windowDays)
-    const outPath = htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
-    writeFileSync(outPath, html, 'utf8')
-    console.log(`✓ Report written to ${outPath}`)
+    if (doHtml) {
+      const html = generateHtml(patterns, windowDays, { recentRuns, kindBreakdown, hotFiles })
+      const outPath = htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
+      writeFileSync(outPath, html, 'utf8')
+      console.log(`✓ Report written to ${outPath}`)
 
-    // Open in default browser
-    const opener =
-      process.platform === 'darwin' ? 'open' :
-      process.platform === 'win32'  ? 'start' :
-                                      'xdg-open'
-    Bun.spawnSync({ cmd: [opener, outPath], stdout: 'ignore', stderr: 'ignore' })
-    console.log('  Opening in browser…\n')
-  }
-
-  process.exit(1)
-}
-
-async function openGitHubIssues(patterns: FlakyPattern[], windowDays: number): Promise<void> {
-  const token = process.env.GITHUB_TOKEN
-  if (!token) {
-    console.log('⚠ --create-issue requires GITHUB_TOKEN to be set\n')
-    return
-  }
-
-  const repoInfo = resolveRepo()
-  if (!repoInfo) {
-    console.log('⚠ --create-issue: could not determine owner/repo. Set GITHUB_REPOSITORY or pass --repo owner/repo\n')
-    return
-  }
-
-  const config = { token, ...repoInfo }
-  console.log(`Opening issues in ${repoInfo.owner}/${repoInfo.repo}...\n`)
-
-  for (const pattern of patterns) {
-    try {
-      const existing = await findExistingIssue(config, pattern.testName)
-      if (existing !== null) {
-        console.log(`  ↩ #${existing} already open for: ${pattern.testName}`)
-        continue
-      }
-      const url = await createIssue(config, pattern, windowDays)
-      console.log(`  ✓ Opened: ${url}`)
-    } catch (error) {
-      console.log(`  ✗ Failed for "${pattern.testName}": ${error instanceof Error ? error.message : String(error)}`)
+      // Open in default browser
+      const opener =
+        process.platform === 'darwin' ? 'open' :
+          process.platform === 'win32' ? 'start' :
+            'xdg-open'
+      Bun.spawnSync({ cmd: [opener, outPath], stdout: 'ignore', stderr: 'ignore' })
+      console.log('  Opening in browser…\n')
     }
-  }
-  console.log()
-}
 
-await main()
+    process.exit(1)
+  }
+
+  async function openGitHubIssues(patterns: FlakyPattern[], windowDays: number): Promise<void> {
+    const token = process.env.GITHUB_TOKEN
+    if (!token) {
+      console.log('⚠ --create-issue requires GITHUB_TOKEN to be set\n')
+      return
+    }
+
+    const repoInfo = resolveRepo()
+    if (!repoInfo) {
+      console.log('⚠ --create-issue: could not determine owner/repo. Set GITHUB_REPOSITORY or pass --repo owner/repo\n')
+      return
+    }
+
+    const config = { token, ...repoInfo }
+    console.log(`Opening issues in ${repoInfo.owner}/${repoInfo.repo}...\n`)
+
+    for (const pattern of patterns) {
+      try {
+        const existing = await findExistingIssue(config, pattern.testName)
+        if (existing !== null) {
+          console.log(`  ↩ #${existing} already open for: ${pattern.testName}`)
+          continue
+        }
+        const url = await createIssue(config, pattern, windowDays)
+        console.log(`  ✓ Opened: ${url}`)
+      } catch (error) {
+        console.log(`  ✗ Failed for "${pattern.testName}": ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    console.log()
+  }
+
+  await main()
+}
