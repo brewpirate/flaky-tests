@@ -1,0 +1,152 @@
+---
+title: Migrating between stores
+description: Move your flaky-tests history from one store adapter to another — SQLite → Turso, Turso → Postgres, etc.
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components'
+import { PackageManagers } from 'starlight-package-managers'
+
+Two paths when you outgrow your current store:
+
+- **Start fresh** — swap env vars and let history rebuild. Works for
+  most teams because the detection model only cares about recent
+  windows.
+- **Copy history** — dump from the old store, load into the new one.
+  Needed if you want to preserve trend analysis or avoid a
+  two-week "warm-up" gap after the switch.
+
+## Option 1: Start fresh (recommended)
+
+<Steps>
+
+1. **Install the new store package**
+
+   <PackageManagers pkg="@flaky-tests/store-turso" dev />
+
+2. **Update `FLAKY_TESTS_STORE` and credentials**
+
+   ```sh
+   FLAKY_TESTS_STORE=turso
+   FLAKY_TESTS_CONNECTION_STRING=libsql://your-db.turso.io
+   FLAKY_TESTS_AUTH_TOKEN=eyJhbGci...
+   ```
+
+3. **Run your tests**
+
+   The preload auto-calls `migrate()` on the first run, creating
+   tables in the new store.
+
+4. **(Optional) Remove the old store package**
+
+   ```sh
+   bun remove @flaky-tests/store-sqlite
+   ```
+
+</Steps>
+
+<Aside type="tip">
+The zero-prior-fails detection gate means you won't see false
+positives during warm-up. Tests that were flaky in the old store but
+"new" to the new one still need to cross the threshold in the current
+window before they're flagged.
+</Aside>
+
+## Option 2: Copy history
+
+Every store implements the same `IStore` interface, so copying data
+is a handful of reads against the old store and writes against the
+new one. There's no CLI subcommand for this yet; a one-off script is
+the supported path.
+
+```ts title="migrate-stores.ts"
+import { SqliteStore } from '@flaky-tests/store-sqlite'
+import { TursoStore } from '@flaky-tests/store-turso'
+
+const source = new SqliteStore({ dbPath: './node_modules/.cache/flaky-tests/failures.db' })
+const dest = new TursoStore({
+  url: process.env.FLAKY_TESTS_CONNECTION_STRING!,
+  authToken: process.env.FLAKY_TESTS_AUTH_TOKEN,
+})
+
+await dest.migrate()
+
+// Pull the full history. `getRecentRuns` with a large limit is enough
+// for most projects — if you've been capturing for years, raise it.
+const runs = await source.getRecentRuns({ limit: 100_000 })
+
+for (const run of runs) {
+  await dest.insertRun({
+    runId: run.runId,
+    startedAt: run.startedAt,
+    ...(run.project !== null && { project: run.project }),
+    ...(run.gitSha !== null && { gitSha: run.gitSha }),
+    ...(run.gitDirty !== null && { gitDirty: run.gitDirty }),
+  })
+  await dest.updateRun(run.runId, {
+    ...(run.endedAt !== null && { endedAt: run.endedAt }),
+    ...(run.durationMs !== null && { durationMs: run.durationMs }),
+    ...(run.status !== null && { status: run.status }),
+    ...(run.totalTests !== null && { totalTests: run.totalTests }),
+    ...(run.passedTests !== null && { passedTests: run.passedTests }),
+    ...(run.failedTests !== null && { failedTests: run.failedTests }),
+    ...(run.errorsBetweenTests !== null && {
+      errorsBetweenTests: run.errorsBetweenTests,
+    }),
+  })
+}
+
+await source.close()
+await dest.close()
+console.log(`Copied ${runs.length} runs`)
+```
+
+<Aside type="caution">
+This sample copies runs but not failures — the `IStore` interface
+does not expose a "read all failures" method, so a full copy requires
+adapter-specific SQL (e.g. `SELECT * FROM failures` on SQLite +
+bulk-insert into the destination). For most teams, runs-only is
+enough because the pattern-detection pass re-reads failures from the
+*new* store going forward.
+</Aside>
+
+## Choosing the destination
+
+See [Choosing a store](/choosing-a-store/) for the full comparison.
+Summary:
+
+| Scenario | Destination |
+|---|---|
+| Still solo / local only | Stay on SQLite |
+| Team wants shared history | Turso (free tier fits most teams) |
+| Already on Supabase | Supabase |
+| Already on Neon / managed Postgres | Postgres |
+
+## Common pitfalls
+
+### Project name mismatch
+
+If `FLAKY_TESTS_PROJECT` differs between the two environments, rows
+written in one won't show up when read in the other. Export and
+import with the same project name, or set `FLAKY_TESTS_PROJECT=""` to
+write rows with a NULL project during the copy.
+
+### Duplicate run IDs
+
+`insertRun` on most adapters errors on duplicate `run_id`. If you run
+the migration script twice, wrap each call in a try/catch or add a
+pre-check that the run doesn't already exist in the destination.
+
+### Remote-store write rate limits
+
+Turso / Supabase / Neon free tiers have write-per-minute caps. For
+large histories, add a small `await new Promise(r => setTimeout(r, 50))`
+between rows, or batch with `insertFailures` where appropriate.
+
+## What to update after the switch
+
+1. **CI env vars** — update `FLAKY_TESTS_STORE` and credentials on
+   every CI workflow.
+2. **`.env.example`** — tell teammates what to set locally.
+3. **Uninstall the old store package** — keeps `node_modules` lean
+   and prevents accidental dual-writes.
+4. **Rotate the old credentials** if they're no longer needed.

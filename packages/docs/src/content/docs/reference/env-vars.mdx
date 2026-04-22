@@ -15,6 +15,7 @@ nothing else is read anywhere in the codebase.
 | `FLAKY_TESTS_LOG_FILE` | Optional path to append every log line to (in addition to the console sink). Useful when the console is crowded or Bun buffers stdout. Write failures are swallowed so a broken sink never crashes the logger. | — |
 | `FLAKY_TESTS_DISABLE` | Set to `1` or `true` to turn the capture plugins into a no-op | — |
 | `FLAKY_TESTS_RUN_ID` | Override the generated run id. Set automatically by `@flaky-tests/plugin-bun/run-tracked` when it spawns `bun test` — most users never set this manually. | — |
+| `FLAKY_TESTS_PROJECT` | Explicit project name used to isolate runs in shared stores. Set to an empty string to opt out and write rows with a NULL project. | nearest `package.json` name, else cwd basename |
 
 ## Store selection
 
@@ -58,6 +59,9 @@ do not affect production runtime.
 | `POSTGRES_TEST_URL` | Postgres URL for the Postgres integration suite. |
 | `SUPABASE_TEST_URL` | Supabase project URL for the Supabase integration suite. |
 | `SUPABASE_TEST_KEY` | Supabase anon/service-role key for the Supabase integration suite. |
+| `FLAKY_TESTS_TURSO_LIVE` | Set to `1` to opt into the `store-turso` live integration test against a real hosted Turso DB. |
+| `TURSO_LIVE_URL` | libSQL URL of the throwaway DB used by the live Turso test. |
+| `TURSO_LIVE_TOKEN` | Auth token for the throwaway DB used by the live Turso test. |
 
 ## GitHub Action inputs
 

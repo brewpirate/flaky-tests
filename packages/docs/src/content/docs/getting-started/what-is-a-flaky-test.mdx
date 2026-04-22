@@ -1,0 +1,108 @@
+---
+title: What is a flaky test?
+description: A short primer on flaky tests — what causes them, how to spot them, and why this project exists.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components'
+
+A **flaky test** is a test that fails non-deterministically — the same code under the same inputs produces **pass sometimes, fail other times**, with no change in between. The test isn't wrong about a real bug, and it isn't right about a real feature. It's just noise.
+
+## Why they happen
+
+Flakes almost always come from one of four root causes:
+
+### 1. Race conditions
+
+Two bits of code run concurrently and the test assumes an ordering that only holds on a fast machine, or only when the scheduler decides to run them a particular way.
+
+```ts
+// Flaky: the fetch may or may not resolve before the assertion
+request.fire()
+expect(server.lastCall).toBeDefined()
+
+// Fixed: wait for the side effect
+await request.fire()
+expect(server.lastCall).toBeDefined()
+```
+
+### 2. Timing assumptions
+
+Fixed sleeps, arbitrary timeouts, or asserting on elapsed durations are load-dependent. A passing run on your laptop can fail on a noisy CI runner.
+
+```ts
+// Flaky: 100ms is "usually enough" until it isn't
+await sleep(100)
+expect(widget.state).toBe('ready')
+
+// Fixed: wait for the actual condition
+await waitFor(() => expect(widget.state).toBe('ready'))
+```
+
+### 3. Shared state between tests
+
+One test leaves a database row, a mocked timer, or a singleton's internal counter in a state the next test doesn't expect. Order-dependent failures are the signature.
+
+Diagnostic: run the suite in reverse order or with `--shuffle`. If the failure set changes, you have test-pollution flakes.
+
+### 4. External dependencies
+
+Network calls, filesystem timing, clock skew, DNS hiccups, third-party sandboxes that sometimes 500. These are load- and environment-dependent and often show up as **timeouts** rather than assertion failures.
+
+<Aside type="note">
+Not every intermittent failure is a flake. A legitimate race condition in *production code* will also produce intermittent test failures — but the right fix is to fix the race, not quarantine the test.
+</Aside>
+
+## Why flakes matter
+
+Flaky tests are expensive in ways that compound:
+
+- **They erode trust** — once a team learns that CI is "usually yellow," real failures get re-run instead of investigated.
+- **They cost time directly** — every rerun is billable minutes, queue time, and someone's attention.
+- **They mask real regressions** — a genuine bug that reproduces 30% of the time is indistinguishable from a flake to a human scanning the status page.
+- **They punish honesty** — engineers who *fix* flaky tests don't get credit; engineers who add `test.retry(3)` look productive.
+
+The rational response to a noisy test suite is to retry until green. The rational response to *that* is to stop running the tests at all. Flakiness is a gateway to test suite abandonment.
+
+## How to spot one
+
+A test is probably flaky if:
+
+- It **fails on CI but passes locally** (or vice versa)
+- It **fails only on certain runners** (parallel slot, timezone, CPU count)
+- Its **failure message is a timeout** rather than an assertion
+- **Re-running without changes** makes it pass
+- Its **error location varies** between runs
+
+## How flaky-tests detects them
+
+This project doesn't try to *prevent* flakiness — that's a code-fix problem, not a tooling problem. It spots the pattern automatically so you can prioritize what to fix.
+
+The detection loop is:
+
+<Steps>
+
+1. **Capture every failure** — the Bun preload or Vitest reporter writes each test failure to a store, along with the run context (SHA, duration, failure kind).
+
+2. **Compare windows** — the CLI splits recent history into two equal-length windows. For each test, it counts failures in the "current" window vs the "prior" window.
+
+3. **Flag new patterns** — if a test has `≥threshold` failures in the current window but **zero** in the prior window, it's flagged as *newly flaky*. This surfaces regressions without alerting on tests that have been broken for months.
+
+4. **Generate an investigation prompt** — structured with the stack, error category, git context, and enough surrounding info to drop straight into Claude, Cursor, or Copilot.
+
+</Steps>
+
+<Aside type="tip">
+The zero-prior-fails gate is deliberate. A test that's been failing 50% of the time for six months isn't *news* — it's part of the background noise you're trying to fix, not a live alert. flaky-tests is tuned for "this just started being flaky" signals.
+</Aside>
+
+## What it doesn't do
+
+- **It does not retry tests.** Auto-retry hides flakiness; this project surfaces it.
+- **It does not modify your test output.** Your existing runner still reports pass/fail exactly as before.
+- **It does not decide what's flaky for you.** It flags patterns based on statistics; the human decides whether each one is a race, a timing bug, test pollution, or a real regression.
+
+## Next steps
+
+- **Start capturing** → [Quick Start](/getting-started/quick-start/)
+- **Understand the detection math** → [Scheduled detection](/guides/scheduled-detection/)
+- **See what the report looks like** → [Using the HTML report](/guides/html-report/)

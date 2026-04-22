@@ -89,8 +89,8 @@ Or run locally:
 
 ```sh
 FLAKY_TESTS_STORE=turso \
-  TURSO_URL=libsql://... \
-  TURSO_AUTH_TOKEN=... \
+  FLAKY_TESTS_CONNECTION_STRING=libsql://... \
+  FLAKY_TESTS_AUTH_TOKEN=... \
   bunx @flaky-tests/cli --create-issue \
   --repo your-org/your-repo \
   --window 7 \

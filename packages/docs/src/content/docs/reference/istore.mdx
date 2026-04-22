@@ -14,7 +14,9 @@ import type {
   UpdateRunInput,
   InsertFailureInput,
   GetNewPatternsOptions,
+  GetRecentRunsOptions,
   FlakyPattern,
+  RecentRun,
 } from '@flaky-tests/core'
 ```
 
@@ -26,15 +28,72 @@ interface IStore {
   insertFailure(input: InsertFailureInput): Promise<void>
   insertFailures(inputs: readonly InsertFailureInput[]): Promise<void>
   getNewPatterns(options?: GetNewPatternsOptions): Promise<FlakyPattern[]>
+  getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]>
   close(): Promise<void>
 }
 ```
 
 Every method is async so adapters backed by an HTTP client (Turso, Supabase, Postgres) share the same signature as the synchronous SQLite adapter.
 
+### `migrate()`
+
+Creates tables and runs any pending schema migrations. Migrations are **versioned and idempotent** — the sqlite and turso adapters track applied versions in a `_flaky_tests_migrations` table and skip anything already applied, so calling `migrate()` on every startup is safe and cheap. New schema versions are picked up automatically when the adapter package is upgraded.
+
 ### Error contract
 
 Implementations **must** wrap any driver-level error thrown by a public method in a `StoreError` with `{ package, method, message, cause }` set. The `cause` field preserves the original stack for inspection. Validation errors raised by `arktype` (surfaced as `ValidationError`) propagate unwrapped so bad input stays distinguishable from a downstream driver failure.
+
+```ts
+import { StoreError } from '@flaky-tests/core'
+
+try {
+  await store.insertRun(input)
+} catch (error) {
+  if (error instanceof StoreError) {
+    console.error(error.package) // e.g. '@flaky-tests/store-supabase'
+    console.error(error.method)  // e.g. 'insertRun'
+    console.error(error.cause)   // original driver error
+  }
+  throw error
+}
+```
+
+`StoreError.message` is formatted as `[<package>] <method>: <message>` so logs are self-describing without extra plumbing.
+
+### Retry behavior
+
+Network-backed adapters (turso, supabase, postgres) automatically retry transient read failures using exponential backoff with jitter via `withRetry()` from `@flaky-tests/core`. Only these failures are retried:
+
+- Network transport errors: `ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, `ENETUNREACH`, `EAI_AGAIN`
+- Timeout messages (`timed out`, `socket hang up`, `fetch failed`)
+- HTTP 5xx responses
+
+HTTP 4xx responses, validation errors, and anything else propagate immediately so logic bugs are never masked by a retry loop. The default schedule is 3 attempts with a 100 ms base delay doubling each attempt; aborting the query's `AbortSignal` cancels any pending backoff sleep.
+
+### Cancellation with `AbortSignal`
+
+Both read methods — `getNewPatterns(options?)` and `getRecentRuns(options)` — accept an optional `signal?: AbortSignal`. When the signal aborts, the pending promise rejects with a native `AbortError` (the signal's `reason`), even for drivers that cannot cancel the underlying request. In that case the in-flight query still resolves in the background but its result is discarded.
+
+```ts
+const controller = new AbortController()
+setTimeout(() => controller.abort(), 5_000)
+
+try {
+  const patterns = await store.getNewPatterns({
+    windowDays: 7,
+    threshold: 2,
+    signal: controller.signal,
+  })
+} catch (error) {
+  if ((error as Error).name === 'AbortError') {
+    // query was cancelled — handle as expected
+  } else {
+    throw error
+  }
+}
+```
+
+`signal` is a TypeScript-only extension on the options type; `arktype` drops it during validation and adapters read it straight off the caller's options object.
 
 ### Registering with the plugin registry
 
@@ -61,6 +120,7 @@ See the [custom stores guide](/guides/custom-stores/) for a complete walkthrough
 interface InsertRunInput {
   runId: string                    // stable id for the run (UUID)
   startedAt: string                // ISO 8601 timestamp
+  project?: string | null          // optional project slug for multi-project stores
   gitSha?: string | null
   gitDirty?: boolean | null
   runtimeVersion?: string | null
@@ -121,6 +181,25 @@ interface GetNewPatternsOptions {
    * Default: 2
    */
   threshold?: number
+  /**
+   * Filter to a single project. Pass `null` / leave undefined to match
+   * rows whose `project` column is NULL.
+   */
+  project?: string | null
+  /** Abort the query when this signal aborts; rejects with `AbortError`. */
+  signal?: AbortSignal
+}
+```
+
+### `GetRecentRunsOptions`
+
+```ts
+interface GetRecentRunsOptions {
+  limit: number
+  /** Filter to a single project (same semantics as `GetNewPatternsOptions.project`). */
+  project?: string | null
+  /** Abort the query when this signal aborts; rejects with `AbortError`. */
+  signal?: AbortSignal
 }
 ```
 
@@ -139,9 +218,28 @@ interface FlakyPattern {
 }
 ```
 
+### `RecentRun`
+
+```ts
+interface RecentRun {
+  runId: string
+  project: string | null
+  startedAt: string
+  endedAt: string | null
+  durationMs: number | null
+  status: 'pass' | 'fail' | null
+  totalTests: number | null
+  passedTests: number | null
+  failedTests: number | null
+  errorsBetweenTests: number | null
+  gitSha: string | null
+  gitDirty: boolean | null
+}
+```
+
 ## Contract suite
 
-`@flaky-tests/core/test-helpers` exports a shared `runContractTests(label, makeStore)` that exercises 15 scenarios covering the full `IStore` surface — round-trip, validation, window-edge, threshold, multi-pattern sorting, distinct kinds, last-error capture, infra-blowup filter, and `close()` idempotency. Every built-in adapter passes it; custom adapters should invoke it too.
+`@flaky-tests/core/test-helpers` exports a shared `runContractTests(label, makeStore)` that exercises scenarios covering the full `IStore` surface — round-trip, validation, window-edge, threshold, multi-pattern sorting, distinct kinds, last-error capture, infra-blowup filter, `AbortSignal` cancellation, `StoreError` wrapping, and `close()` idempotency. Every built-in adapter passes it; custom adapters should invoke it too.
 
 ```ts
 import { runContractTests } from '@flaky-tests/core/test-helpers'

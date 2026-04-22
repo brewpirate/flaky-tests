@@ -40,9 +40,11 @@ The preload script uses `mock.module('bun:test', ...)` to wrap the `test`, `it`,
 
 The proxy preserves all sub-APIs: `.skip`, `.only`, `.each`, `.todo`, `.if`, and `.skipIf` all work exactly as before.
 
+Writes are fire-and-forget during the run, but the preload drains any outstanding writes at process exit so remote-store failures don't get lost between the last test and shutdown.
+
 ## Choosing a different store
 
-By default the preload uses SQLite. To use a remote store, create your own preload entry point:
+By default the preload resolves whichever store matches `FLAKY_TESTS_STORE` (sqlite, turso, supabase, or postgres) and calls `migrate()` for you before the first write. You only need a custom preload if you want to construct the store yourself:
 
 ```ts title="preload.ts"
 import { createPreload } from '@flaky-tests/plugin-bun'
@@ -68,15 +70,15 @@ preload = ["./preload.ts"]
 
 | Variable | Description | Default |
 |---|---|---|
-| `FLAKY_TESTS_DISABLED` | Set to `1` to skip all capture | — |
-| `FLAKY_TESTS_SQLITE_PATH` | Override the SQLite file path | `node_modules/.cache/flaky-tests/failures.db` |
+| `FLAKY_TESTS_DISABLE` | Set to `1` or `true` to skip all capture | — |
+| `FLAKY_TESTS_DB` | Override the SQLite file path | `node_modules/.cache/flaky-tests/failures.db` |
 
 ## Disabling capture
 
 To skip capture for a single run:
 
 ```sh
-FLAKY_TESTS_DISABLED=1 bun test
+FLAKY_TESTS_DISABLE=1 bun test
 ```
 
 <Aside type="tip">

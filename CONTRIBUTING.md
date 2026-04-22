@@ -8,8 +8,9 @@ Thanks for your interest in contributing! This guide covers everything you need 
 git clone https://github.com/brewpirate/flaky-tests.git
 cd flaky-tests
 bun install
-bun test    # 89+ tests should pass
-bun run build  # builds all packages to dist/
+bun test           # unit tests (integration tests skipped)
+bun run typecheck  # tsc --noEmit across every package
+bun run build      # builds all packages to dist/
 ```
 
 See [docs/dev/setup.md](docs/dev/setup.md) for detailed setup instructions.
@@ -18,7 +19,7 @@ See [docs/dev/setup.md](docs/dev/setup.md) for detailed setup instructions.
 
 1. Create a branch: `git checkout -b my-change`
 2. Make your changes
-3. Run checks: `bun run check && bun test`
+3. Run checks: `bun run check && bun run typecheck && bun test`
 4. Add a changeset: `bunx changeset` (see [docs/dev/releasing.md](docs/dev/releasing.md))
 5. Commit and open a PR
 
@@ -50,11 +51,13 @@ See `.claude/rules/` for the full style guide.
 ## Adding a new store adapter
 
 1. Create `packages/store-yourdb/`
-2. Implement the `IStore` interface from `@flaky-tests/core`
-3. Include a `migrate()` method that creates tables idempotently
-4. Add `tablePrefix` support with `validateTablePrefix()` from core
-5. Add tests, README, `package.json`, `jsr.json`, `tsconfig.build.json`
-6. Add the package to the publish steps in `.github/workflows/release.yml`
+2. Implement the `IStore` interface from `@flaky-tests/core` (reads must honor the optional `AbortSignal`)
+3. Include a `migrate()` method driven by a numbered migration list, idempotent on re-run
+4. Wrap driver errors as `StoreError` with a stable code — never leak raw driver exceptions
+5. For network-backed adapters, retry transient failures with exponential backoff
+6. Add `tablePrefix` support with `validateTablePrefix()` from core
+7. Add tests, README, `package.json`, `jsr.json`, `tsconfig.build.json`
+8. Add the package to the publish steps in `.github/workflows/release.yml`
 
 ## Adding a new test runner plugin
 

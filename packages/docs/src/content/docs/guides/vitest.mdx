@@ -4,6 +4,7 @@ description: Add the Vitest reporter to capture test failures in Vitest projects
 ---
 
 import { Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components'
+import { PackageManagers } from 'starlight-package-managers'
 
 The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using the standard reporter API and writes failures to your chosen store.
 
@@ -13,34 +14,29 @@ The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using t
 
 1. **Install the plugin and a store**
 
-   ```sh
-   # npm / pnpm / yarn
-   npm install -D @flaky-tests/plugin-vitest @flaky-tests/store-sqlite
-   ```
+   <PackageManagers pkg="@flaky-tests/plugin-vitest @flaky-tests/store-sqlite" dev />
 
-   ```sh
-   # bun
-   bun add -D @flaky-tests/plugin-vitest @flaky-tests/store-sqlite
-   ```
 
 2. **Add the reporter to `vitest.config.ts`**
 
    ```ts title="vitest.config.ts"
    import { defineConfig } from 'vitest/config'
    import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+   import { SqliteStore } from '@flaky-tests/store-sqlite'
 
    export default defineConfig({
      test: {
-       reporters: ['default', new FlakyTestsReporter()],
+       reporters: ['default', new FlakyTestsReporter(new SqliteStore())],
      },
    })
    ```
 
+   The reporter requires an `IStore` instance — swap `SqliteStore` for
+   any other adapter (Turso, Supabase, Postgres) with the same shape.
+
 3. **Run your tests**
 
-   ```sh
-   npx vitest run
-   ```
+   <PackageManagers type="exec" pkg="vitest" args="run" />
 
    Failures are written to `node_modules/.cache/flaky-tests/failures.db`.
 
@@ -48,7 +44,8 @@ The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using t
 
 ## Using a custom store
 
-Pass any store that implements `IStore` to the reporter constructor:
+Pass any store that implements `IStore` as the reporter's positional
+argument:
 
 ```ts title="vitest.config.ts"
 import { defineConfig } from 'vitest/config'
@@ -56,14 +53,15 @@ import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
 import { TursoStore } from '@flaky-tests/store-turso'
 
 const store = new TursoStore({
-  url: process.env.TURSO_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN,
+  url: process.env.FLAKY_TESTS_CONNECTION_STRING!,
+  authToken: process.env.FLAKY_TESTS_AUTH_TOKEN,
 })
-await store.migrate()
+// The reporter calls migrate() for you on `onInit`, so manually
+// migrating here is optional.
 
 export default defineConfig({
   test: {
-    reporters: ['default', new FlakyTestsReporter({ store })],
+    reporters: ['default', new FlakyTestsReporter(store)],
   },
 })
 ```
@@ -80,5 +78,5 @@ When using the `reporters` array with a custom reporter instance, make sure to a
 
 | Variable | Description | Default |
 |---|---|---|
-| `FLAKY_TESTS_DISABLED` | Set to `1` to skip all capture | — |
-| `FLAKY_TESTS_SQLITE_PATH` | Override the SQLite file path | `node_modules/.cache/flaky-tests/failures.db` |
+| `FLAKY_TESTS_DISABLE` | Set to `1` or `true` to skip all capture | — |
+| `FLAKY_TESTS_DB` | Override the SQLite file path | `node_modules/.cache/flaky-tests/failures.db` |

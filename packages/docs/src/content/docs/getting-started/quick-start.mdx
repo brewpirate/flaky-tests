@@ -1,19 +1,28 @@
 ---
 title: Quick Start
-description: Get flaky-tests running in under two minutes with Bun and SQLite.
+description: Get flaky-tests running in under two minutes with Bun or Vitest.
 ---
 
 import { Steps, Tabs, TabItem } from '@astrojs/starlight/components'
+import { PackageManagers } from 'starlight-package-managers'
 
-This guide uses **Bun** and the default **SQLite** store — the fastest path to capturing test failures locally.
+Pick your test runner. Both paths use the default **SQLite** store and capture failures locally in under two minutes.
+
+<Tabs syncKey="runner">
+
+<TabItem label="Bun">
 
 <Steps>
 
-1. **Install the plugin**
+1. **Install the plugin and a store**
 
    ```sh
-   bun add -D @flaky-tests/plugin-bun
+   bun add -D @flaky-tests/plugin-bun @flaky-tests/store-sqlite
    ```
+
+   Store adapters ship as `optionalDependencies` of the plugin, so you
+   install only the one you use. The default preload resolves
+   `FLAKY_TESTS_STORE` (defaults to `sqlite`) at startup.
 
 2. **Add the preload to `bunfig.toml`**
 
@@ -62,8 +71,94 @@ This guide uses **Bun** and the default **SQLite** store — the fastest path to
 
 </Steps>
 
+</TabItem>
+
+<TabItem label="Vitest">
+
+<Steps>
+
+1. **Install the reporter and a store**
+
+   <PackageManagers pkg="@flaky-tests/plugin-vitest @flaky-tests/store-sqlite" dev />
+
+
+2. **Add the reporter to `vitest.config.ts`**
+
+   ```ts title="vitest.config.ts"
+   import { defineConfig } from 'vitest/config'
+   import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
+   import { SqliteStore } from '@flaky-tests/store-sqlite'
+
+   export default defineConfig({
+     test: {
+       reporters: ['default', new FlakyTestsReporter(new SqliteStore())],
+     },
+   })
+   ```
+
+   Works with Vitest v1, v2, and v3 — the reporter only uses the stable `onInit` / `onFinished` hooks.
+
+3. **Run your tests**
+
+   <PackageManagers type="exec" pkg="vitest" args="run" />
+
+   Failures are written to `node_modules/.cache/flaky-tests/failures.db`. Nothing else changes — tests still pass and fail as normal.
+
+4. **Check for flaky patterns**
+
+   After a few runs (or in CI after a few days):
+
+   <PackageManagers type="exec" pkg="@flaky-tests/cli" />
+
+
+   If new patterns are detected you'll see something like:
+
+   ```
+   ✗ 1 new flaky test pattern detected
+
+     1. auth > login > should redirect on success
+        tests/auth.test.ts · timeout · 8 fails in 7d
+        Expected redirect within 2000ms
+
+     Run with --prompt to print investigation prompts
+   ```
+
+5. **Generate an investigation prompt**
+
+   <PackageManagers type="exec" pkg="@flaky-tests/cli" args="--prompt" />
+
+   Copy the output into Claude, Cursor, or Copilot to investigate.
+
+</Steps>
+
+</TabItem>
+
+</Tabs>
+
+## Wire it into `package.json`
+
+Typing `bunx` / `npx` each time gets old. Install the CLI as a dev
+dependency and add scripts so the whole team runs the same invocation:
+
+<PackageManagers pkg="@flaky-tests/cli" dev />
+
+```json title="package.json"
+{
+  "scripts": {
+    "flaky": "flaky-tests",
+    "flaky:prompt": "flaky-tests --prompt",
+    "flaky:report": "flaky-tests --html"
+  }
+}
+```
+
+Now anyone on the project can run `bun run flaky` (or `npm run flaky` /
+`pnpm flaky` / `yarn flaky`) without reaching for the full package
+name, and CI workflows get a single stable command to call.
+
 ## What's next?
 
-- **Using Vitest?** → [Setting up with Vitest](/guides/vitest/)
 - **Working in a team?** → [Choosing a store](/guides/choosing-a-store/) — SQLite is local only
 - **Want automatic detection in CI?** → [Scheduled detection](/guides/scheduled-detection/)
+- **Need deeper Vitest config?** → [Setting up with Vitest](/guides/vitest/)
+- **Bun-specific options?** → [Setting up with Bun](/guides/bun/)

@@ -1,0 +1,141 @@
+---
+title: Data model & privacy
+description: Everything flaky-tests writes to your store, why it's written, and how to keep sensitive data out of it.
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+Every adapter persists the same two-table model. This page is the
+authoritative list of what gets written, validated at both the
+plugin and store boundaries by arktype schemas in
+`@flaky-tests/core`.
+
+## `runs` — one row per test session
+
+Written by `insertRun()` at session start and finalized by
+`updateRun()` when the session ends.
+
+| Column | Type | Written by | Description |
+|---|---|---|---|
+| `run_id` | string (UUID) | plugin | Primary key; stable for the lifetime of the reporter/preload instance |
+| `project` | string \| NULL | plugin | `FLAKY_TESTS_PROJECT` env → nearest `package.json` name → cwd basename. `""` opts out to NULL |
+| `started_at` | ISO-8601 timestamp | plugin | When the test session began |
+| `ended_at` | ISO-8601 timestamp \| NULL | plugin | When all tests finished (NULL if the process died mid-run) |
+| `duration_ms` | non-negative int \| NULL | plugin | Total wall-clock of the session |
+| `status` | `'pass' \| 'fail'` \| NULL | plugin | Terminal session status |
+| `total_tests` | non-negative int \| NULL | plugin | Tests executed |
+| `passed_tests` | non-negative int \| NULL | plugin | Tests passed |
+| `failed_tests` | non-negative int \| NULL | plugin | Tests failed |
+| `errors_between_tests` | non-negative int \| NULL | plugin | Uncaught errors outside any test |
+| `git_sha` | string \| NULL | plugin | Captured via `git rev-parse HEAD`; NULL when not in a repo |
+| `git_dirty` | boolean \| NULL | plugin | Captured via `git status --porcelain`; NULL when not in a repo |
+| `runtime_version` | string \| NULL | plugin | `process.version` (Vitest) or `Bun.version` |
+| `test_args` | string \| NULL | plugin | `process.argv.slice(2).join(' ')` — flags passed to the runner |
+
+## `failures` — one row per failing test
+
+Written by `insertFailure()` / `insertFailures()` as tests finish
+(or, in Vitest, at the end of the session).
+
+| Column | Type | Written by | Description |
+|---|---|---|---|
+| `id` | int | store | Autoincrement primary key |
+| `run_id` | string | plugin | Foreign key into `runs` |
+| `test_file` | string | plugin | Absolute or repo-relative path captured from the runner |
+| `test_name` | string | plugin | Full path: `outer suite > inner suite > test name` |
+| `failure_kind` | `'assertion' \| 'timeout' \| 'uncaught' \| 'unknown'` | plugin | Categorized by `categorizeError()` in core |
+| `error_message` | string \| NULL | plugin | `Error#message` from the thrown value |
+| `error_stack` | string \| NULL | plugin | `Error#stack` from the thrown value |
+| `duration_ms` | non-negative number \| NULL | plugin | Per-test duration, rounded to integer ms |
+| `failed_at` | ISO-8601 timestamp | plugin | When the failure was recorded |
+
+<Aside type="note">
+Nothing else is written — no test output, no stdout / stderr, no
+environment snapshots, no request / response bodies. If it's not in
+the tables above, it's not in your store.
+</Aside>
+
+## Where the schema lives
+
+- **Source of truth:** arktype schemas in `packages/core/src/schemas.ts`
+  (`insertRunInputSchema`, `updateRunInputSchema`,
+  `insertFailureInputSchema`). Runtime validation happens at both
+  plugin and store boundaries — malformed rows are rejected before
+  they hit the driver.
+- **Per-adapter DDL:** `packages/core/src/migrations/sqlite.ts` for
+  SQLite/Turso; the Postgres and Supabase stores create the same
+  columns via their own `migrate()` implementation. All four adapters
+  match the table above byte-for-byte.
+
+## What's *not* in the model
+
+- **Passing test names or counts** — only aggregate counts
+  (`passed_tests`, `total_tests`) are stored. Individual pass rows
+  would dominate the dataset for ~no analytical value.
+- **Console / stdout / stderr from the runner.**
+- **Environment variables** — neither `process.env` snapshots nor
+  redacted subsets.
+- **User identity** — no author, no CI runner tag, no email. `git_sha`
+  is the only identity marker, and nothing resolves it to a person.
+
+## Privacy considerations
+
+### What tends to be sensitive
+
+1. **`test_name`** — descriptive names like
+   `"login: rejects token for user alice@internal.example.com"` leak
+   user identifiers through the assertion message.
+2. **`error_message` / `error_stack`** — a test that asserts on raw
+   DB rows, API tokens, or PII will put that payload in the error
+   message.
+3. **`test_file`** — file paths can reveal internal module names,
+   especially if they include project codenames.
+
+### Mitigations
+
+1. **Avoid identifiers in test titles.** `"login: rejects expired
+   token"` is just as descriptive as the alice@internal example above,
+   without the PII.
+2. **Wrap your test asserters.** If `expect(user).toEqual(realUser)`
+   is common in your suite, the resulting error message contains
+   `realUser`. Assert on a narrower projection (`user.id`, not `user`)
+   to keep PII out of the failure payload.
+3. **Pick the right store for the data.** SQLite at
+   `node_modules/.cache/` is local to whoever ran the test. Remote
+   stores (Turso / Supabase / Postgres) persist that data on infra
+   outside your laptop — choose one you're comfortable trusting with
+   test failures at the sensitivity level your tests produce.
+4. **Rotate credentials on egress.** Turso / Supabase tokens in
+   `.env.local` are read/write creds for the failure database. Treat
+   them like any other production secret.
+
+### Data access
+
+- **Who can read:** anyone with the store's read credentials.
+  `@flaky-tests/cli` reads via those same credentials; no backdoor,
+  no telemetry sink, no phone-home.
+- **Network traffic:** the CLI and plugins talk only to the store
+  you've configured. There is no outbound request to
+  brewpirate.github.io or any other third party.
+- **Retention:** unbounded by default. The pattern-detection pass is
+  window-based (7 days recent vs 7 days prior by default), so rows
+  older than ~2× `FLAKY_TESTS_WINDOW` have no operational use; you
+  can prune them with a cron against your store without affecting
+  detection.
+
+## Pruning old data
+
+Nothing in flaky-tests deletes rows automatically. A simple prune
+script, tuned to your window:
+
+```sql title="prune.sql (SQLite / Turso)"
+DELETE FROM failures
+  WHERE failed_at < datetime('now', '-30 days');
+
+DELETE FROM runs
+  WHERE ended_at IS NOT NULL
+    AND ended_at < datetime('now', '-30 days');
+```
+
+Keep the cutoff at least `2 * FLAKY_TESTS_WINDOW` days so the
+prior-window comparison still has data.

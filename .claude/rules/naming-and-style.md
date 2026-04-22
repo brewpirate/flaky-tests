@@ -1,3 +1,10 @@
+---
+trigger_phrase:
+  haiku: "typescript naming style conventions"
+  opus: "typescript verbose naming readability conventions"
+  sonnet: "verbose naming style rules"
+---
+
 # Naming and Style
 
 ## Naming Conventions
@@ -11,7 +18,7 @@
 | Constants | SCREAMING_SNAKE | `MAX_RETRY_COUNT` |
 | Interfaces | PascalCase (no I prefix) | `Issue`, not `IIssue` |
 | Types | PascalCase | `IterationResult` |
-| arktype schemas | lowerCamelCase + Schema | `flakyPatternSchema` |
+| Zod schemas | PascalCase + Schema | `IssueSchema` |
 
 ## Verbose Names — No Abbreviations
 
@@ -149,7 +156,7 @@ if (array.length > 0) { ... }
 
 ## No Magic Numbers
 
-Use config values from an arktype-validated schema. Never scatter numeric literals.
+Use config values from Zod-validated `ConfigSchema`. Never scatter numeric literals.
 
 ```typescript
 // WRONG
@@ -163,9 +170,13 @@ if (retryCount > config.maxRetries) { ... }
 
 ## No Direct `process.env` Access
 
-All configuration flows through `.barfrc` → `ConfigSchema.parse()`. Never read `process.env.X` in application code. If a new setting is needed, add it to `ConfigSchema` with a default.
+All configuration flows through `.barfrc` → `ConfigSchema.parse()` → `applyEnvFallbacks()`. Never read `process.env.X` in application code. If a new setting is needed, add it to `ConfigSchema` with a default; if it also needs an env-var override, add an entry to `ENV_FALLBACKS` in `packages/core/src/core/config.ts`.
 
-**Exceptions**: logger initialization (`LOG_LEVEL`, `LOG_PRETTY`, `BARF_LOG_FILE`) and Sentry DSN must read env vars directly since they run before config is parsed.
+The env fallback layer handles secrets and deployment-specific operational values including `SENTRY_DSN`, `LANGFUSE_*`, `OTEL_*`, `SIGNOZ_*`, and the logging vars `BARF_LOG_FILE` / `LOG_LEVEL` / `LOG_PRETTY`. `.barfrc` wins when both are set — env only applies when the config field is still at its schema default.
+
+**Genuine exceptions** (read env directly — too early for `applyEnvFallbacks`):
+- pre-config startup script paths
+- build-time scripts (`packages/server/src/server/build.ts`, etc.)
 
 ## DRY: Extract at 3+ Repetitions
 

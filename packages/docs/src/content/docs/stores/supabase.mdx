@@ -74,8 +74,20 @@ interface SupabaseStoreOptions {
   url: string
   /** Your anon or service role key */
   key: string
+  /** Prefix for `{prefix}_runs` / `{prefix}_failures` table names. Default: `flaky_test`. */
+  tablePrefix?: string
+  /** Retry tuning for read methods. Defaults: 3 attempts, 100ms base delay. */
+  retry?: { attempts?: number; baseMs?: number }
 }
 ```
+
+## Error handling, retries, and cancellation
+
+Driver errors are wrapped in `StoreError` with `cause` preserved. Read methods auto-retry transient failures (network transport errors, HTTP 5xx) with exponential backoff and jitter; writes are not retried (no idempotency key). Read methods accept an optional `signal?: AbortSignal`, forwarded to postgrest-js via native `.abortSignal()` for mid-flight cancellation.
+
+<Aside type="note">
+Supabase's JS client does not support DDL. Tables must be created manually via the SQL editor (see setup above). `store.migrate()` performs a connectivity check only and throws `StoreError` if the configured tables are missing. Table names honor `tablePrefix`: if you set `tablePrefix: 'my_app'`, create `my_app_runs` and `my_app_failures` instead of the defaults shown in setup.
+</Aside>
 
 ## CLI usage
 
