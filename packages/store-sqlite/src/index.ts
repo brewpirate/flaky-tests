@@ -6,6 +6,7 @@ import {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   definePlugin,
+  type FailureKind,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -24,7 +25,6 @@ import {
   type RecentRun,
   type RunFailureRecord,
   type RunStatus,
-  type FailureKind,
   type UpdateRunInput,
   updateRunInputSchema,
 } from '@flaky-tests/core'
