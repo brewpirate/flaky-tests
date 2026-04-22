@@ -67,6 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_failures_failed_at ON failures(failed_at);
 CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests);
 `
 
+/** Create the parent directory for the DB file if missing so SQLite can open it. */
 function ensureDirectory(dbPath: string): void {
   const lastSlash = dbPath.lastIndexOf('/')
   if (lastSlash <= 0) return

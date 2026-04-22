@@ -101,7 +101,7 @@ export function createPreload(store: IStore): void {
   let errorsBetweenTests = 0
   const describeStack = new DescribeStack()
 
-  // Errors escaping test wrappers — unhandled rejections, module-load throws.
+  /** Records failures that escape the test wrappers — unhandled rejections and module-load throws — under a synthetic test name so they're still attributable to this run. Attached via `process.on('uncaughtException'|'unhandledRejection')`. */
   const onRunLevelError = (error: unknown): void => {
     errorsBetweenTests++
     safeVoid('insertFailure (between-tests)', () =>
@@ -122,6 +122,7 @@ export function createPreload(store: IStore): void {
   process.on('uncaughtException', onRunLevelError)
   process.on('unhandledRejection', onRunLevelError)
 
+  /** Shared failure writer for the per-test wrapper. Normalizes the error through the core schemas before handing off to the store. */
   const recordFailure = (opts: {
     testFile: string
     testName: string
@@ -144,9 +145,14 @@ export function createPreload(store: IStore): void {
     )
   }
 
-  // Proxy-based wrapping so sub-APIs like .each, .skip, .only, .todo etc.
-  // keep working — they live on the prototype chain, not as own properties.
+  /**
+   * Proxy-wraps Bun's `test`/`it` so every call times itself and forwards
+   * thrown errors to the store. Proxy (not a plain wrapper) is required so
+   * sub-APIs like `.each`, `.skip`, `.only`, `.todo` keep working — they
+   * live on the prototype chain, not as own properties.
+   */
   const wrapTest = (originalTest: TestFn): TestFn => {
+    /** Per-invocation wrapper that measures duration and records thrown errors before rethrowing so Bun still reports the failure. */
     const callWrapped: TestFn = (name, fn, timeout) => {
       // Preserve `done`-callback style — wrapping would change arity and
       // trigger Bun's async-done timeout.
@@ -187,7 +193,9 @@ export function createPreload(store: IStore): void {
     }) as TestFn
   }
 
+  /** Proxy-wraps `describe` so we can track the nested path for fully-qualified test names. Uses the same proxy pattern as {@link wrapTest} to preserve chained sub-APIs. */
   const wrapDescribe = (originalDescribe: DescribeFn): DescribeFn => {
+    /** Snapshots the describe path eagerly since Bun executes nested describe bodies after the outer frame has left the live stack. */
     const callWrapped: DescribeFn = (name, body) => {
       // Capture path synchronously — Bun defers nested describe body execution
       // past the point where the outer frame is still on the live stack.
@@ -218,6 +226,7 @@ export function createPreload(store: IStore): void {
     console.warn('[flaky-tests] monkey-patch bun:test failed:', error)
   }
 
+  // Wired via `afterAll` — finalizes the run row with aggregate stats and closes the store.
   afterAll(async () => {
     const endedAt = new Date().toISOString()
     const durationMs = Math.round(performance.now() - startPerf)

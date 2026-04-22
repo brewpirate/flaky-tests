@@ -20,6 +20,7 @@ import { SqliteStore } from '@flaky-tests/store-sqlite'
 const DB_PATH =
   process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
 
+/** Spawns `bun test` as a child so the authoritative exit code survives module-load errors the preload cannot observe in-process. */
 async function main(): Promise<number> {
   const runId = crypto.randomUUID()
   const forwardedArgs = process.argv.slice(2)
@@ -39,6 +40,7 @@ async function main(): Promise<number> {
   return exitCode
 }
 
+/** Flips a recorded-as-pass run to fail when the subprocess exited non-zero, catching failures that never surfaced as test-level errors. */
 async function reconcileRun(runId: string): Promise<void> {
   try {
     if (!(await Bun.file(DB_PATH).exists())) {
