@@ -61,6 +61,20 @@ export interface GetRecentRunsOptions {
 }
 
 /**
+ * A single recorded failure as surfaced to the HTML report's expandable
+ * per-run drill-down. Carries `runId` so callers can group results across a
+ * multi-run query. Used by {@link IStore.getFailuresForRuns}.
+ */
+export interface RunFailureRecord {
+  runId: string
+  testName: string
+  testFile: string
+  failureKind: FailureKind
+  errorMessage: string | null
+  failedAt: string
+}
+
+/**
  * Storage backend interface. All methods are async so implementations can
  * use any backend — SQLite, Supabase, Postgres, or custom.
  *
@@ -104,6 +118,14 @@ export interface IStore {
    * see run history even when there are no newly-flaky patterns.
    */
   getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]>
+  /**
+   * Return every failure whose `run_id` matches one of `runIds`, ordered by
+   * `failed_at` ascending so callers can render failures in the order they
+   * occurred within a run. Resolves to `[]` without touching the backend
+   * when `runIds` is empty. Used by the HTML report to populate the
+   * expandable per-run drill-down.
+   */
+  getFailuresForRuns(runIds: readonly string[]): Promise<RunFailureRecord[]>
   /** Release pooled connections and file handles. */
   close(): Promise<void>
 }

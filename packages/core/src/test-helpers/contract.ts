@@ -375,6 +375,53 @@ export function runContractTests(
       for (const run of nullRuns) expect(run.project).toBeNull()
     })
 
+    test('getFailuresForRuns returns failures grouped by run, ordered by failedAt ASC', async () => {
+      const suffix = crypto.randomUUID().slice(0, 8)
+      const runA = `fail-lookup-a-${suffix}`
+      const runB = `fail-lookup-b-${suffix}`
+      const runC = `fail-lookup-c-${suffix}`
+
+      for (const id of [runA, runB, runC]) {
+        await store.insertRun(makeRun(id, daysAgo(1)))
+        await store.updateRun(id, {
+          endedAt: daysAgo(1).toISOString(),
+          status: 'fail',
+          totalTests: 2,
+          passedTests: 1,
+          failedTests: 1,
+        })
+      }
+
+      // runA gets two failures in reverse time order so we can assert sort.
+      await store.insertFailure(makeFailure(runA, 'A > later', daysAgo(1)))
+      await store.insertFailure(makeFailure(runA, 'A > earlier', daysAgo(3)))
+      await store.insertFailure(makeFailure(runB, 'B > only', daysAgo(2)))
+      // runC has no failures; asking for it should not raise.
+
+      const failures = await store.getFailuresForRuns([runA, runB, runC])
+      const forA = failures
+        .filter((f) => f.runId === runA)
+        .map((f) => f.testName)
+      const forB = failures
+        .filter((f) => f.runId === runB)
+        .map((f) => f.testName)
+      const forC = failures.filter((f) => f.runId === runC)
+
+      expect(forA).toEqual(['A > earlier', 'A > later'])
+      expect(forB).toEqual(['B > only'])
+      expect(forC).toEqual([])
+
+      const sampleA = failures.find((f) => f.testName === 'A > later')
+      expect(sampleA?.failureKind).toBe('assertion')
+      expect(sampleA?.testFile).toBe('tests/example.test.ts')
+      expect(sampleA?.errorMessage).toBe('A > later failed')
+    })
+
+    test('getFailuresForRuns short-circuits on empty input', async () => {
+      const failures = await store.getFailuresForRuns([])
+      expect(failures).toEqual([])
+    })
+
     test('close() is idempotent — a second call does not throw', async () => {
       await store.close()
       await expect(store.close()).resolves.toBeUndefined()
