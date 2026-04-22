@@ -8,6 +8,11 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./test-helpers": {
+      "bun": "./src/test-helpers/index.ts",
+      "import": "./dist/test-helpers/index.js",
+      "types": "./dist/test-helpers/index.d.ts"
     }
   },
   "main": "./dist/index.js",
@@ -17,7 +22,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --format esm --target node",
+    "build": "bun build ./src/index.ts ./src/test-helpers/index.ts --outdir dist --format esm --target node --external bun:test",
     "build:types": "tsc --project tsconfig.build.json",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",

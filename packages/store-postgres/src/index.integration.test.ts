@@ -10,7 +10,12 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { type FailureKind, getTestCredentials } from '@flaky-tests/core'
+import { getTestCredentials } from '@flaky-tests/core'
+import {
+  daysAgo,
+  makeFailure,
+  runContractTests,
+} from '@flaky-tests/core/test-helpers'
 import { PostgresStore } from './index'
 
 const credentials = getTestCredentials()
@@ -20,29 +25,17 @@ const CONNECTION_STRING = credentials.postgresUrl ?? ''
 // Use a unique prefix per run to avoid collisions
 const PREFIX = `ft_test_${Date.now()}`
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function daysAgo(n: number): Date {
-  return new Date(Date.now() - n * 86400000)
-}
-
-function makeFailure(
-  runId: string,
-  testName: string,
-  failedAt: Date,
-  kind: FailureKind = 'assertion',
-) {
-  return {
-    runId,
-    testFile: 'tests/example.test.ts',
-    testName,
-    failureKind: kind,
-    errorMessage: `${testName} failed`,
-    errorStack: null,
-    failedAt: failedAt.toISOString(),
-  }
+// Shared IStore contract — each test builds a fresh store against the same
+// prefixed schema; isolation is provided by per-test runIds inside the suite.
+if (!SKIP) {
+  runContractTests(
+    'postgres',
+    () =>
+      new PostgresStore({
+        connectionString: CONNECTION_STRING,
+        tablePrefix: PREFIX,
+      }),
+  )
 }
 
 // ---------------------------------------------------------------------------
