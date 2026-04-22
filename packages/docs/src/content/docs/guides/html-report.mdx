@@ -4,9 +4,14 @@ description: Generate and interpret the self-contained HTML report produced by t
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components'
+import { Image } from 'astro:assets'
 import { PackageManagers } from 'starlight-package-managers'
+import reportPreview from '../../../assets/flaky-report-preview.png'
 
 The CLI can emit a **self-contained HTML report** — a single `.html` file with inline CSS and a minimal inline script for interactivity. No build step, no bundler, no external assets; you can email it, attach it to a ticket, or archive it as a CI artifact and it still works opened via `file://`.
+
+<Image src={reportPreview} alt="Preview of the flaky-tests HTML report showing the stat strip, sticky table of contents, pattern cards, and recent runs table." />
+
 
 ## Generate a report
 
