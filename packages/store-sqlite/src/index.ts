@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import {
+  createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   type FlakyPattern,
@@ -21,6 +22,8 @@ import {
   updateRunInputSchema,
 } from '@flaky-tests/core'
 import { type } from 'arktype'
+
+const log = createLogger('store-sqlite')
 
 /** Configuration for the SQLite-backed flaky-tests store. */
 export const sqliteStoreOptionsSchema = type({
@@ -239,9 +242,8 @@ export class SqliteStore implements IStore {
         WHERE run_id = ?`,
       [runId],
     )
-    // biome-ignore lint/suspicious/noConsole: legitimate runtime warning for operator visibility
-    console.warn(
-      `[flaky-tests] Run ${runId} exited with failure but preload recorded status=pass. Overriding to fail.`,
+    log.warn(
+      `Run ${runId} exited with failure but preload recorded status=pass. Overriding to fail.`,
     )
   }
 

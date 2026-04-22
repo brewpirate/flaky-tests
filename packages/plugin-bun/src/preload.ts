@@ -19,13 +19,12 @@
  *   preload = ["./my-preload.ts"]
  */
 
-// biome-ignore-all lint/suspicious/noConsole: preload is dev tooling
-
 import * as bunTest from 'bun:test'
 import { afterAll, mock } from 'bun:test'
 import type { IStore } from '@flaky-tests/core'
 import {
   categorizeError,
+  createLogger,
   DescribeStack,
   extractMessage,
   extractStack,
@@ -35,6 +34,8 @@ import {
   updateRunInputSchema,
 } from '@flaky-tests/core'
 import { captureGitInfo } from './git'
+
+const log = createLogger('plugin-bun')
 
 type TestCallback = (...args: unknown[]) => unknown | Promise<unknown>
 type TestFn = (name: string, fn: TestCallback, timeout?: number) => unknown
@@ -51,9 +52,7 @@ let installed = false
 
 /** Fire-and-forget an async side-effect that must never throw into the caller. */
 function safeVoid(label: string, effect: () => Promise<void>): void {
-  effect().catch((error: unknown) =>
-    console.warn(`[flaky-tests] ${label}:`, error),
-  )
+  effect().catch((error: unknown) => log.warn(`${label}:`, error))
 }
 
 /**
@@ -85,7 +84,7 @@ function resolveTestFile(error: unknown): string {
  */
 export function createPreload(store: IStore): void {
   if (installed) {
-    console.warn('[flaky-tests] createPreload called twice — ignoring')
+    log.warn('createPreload called twice — ignoring')
     return
   }
   installed = true
@@ -241,7 +240,7 @@ export function createPreload(store: IStore): void {
       describe: wrapDescribe(bunTest.describe as unknown as DescribeFn),
     }))
   } catch (error) {
-    console.warn('[flaky-tests] monkey-patch bun:test failed:', error)
+    log.warn('monkey-patch bun:test failed:', error)
   }
 
   // Wired via `afterAll` — finalizes the run row with aggregate stats and closes the store.
@@ -267,10 +266,8 @@ export function createPreload(store: IStore): void {
           errorsBetweenTests,
         }),
       )
-      .catch((e: unknown) => console.warn('[flaky-tests] updateRun failed:', e))
+      .catch((e: unknown) => log.warn('updateRun failed:', e))
 
-    await store
-      .close()
-      .catch((e: unknown) => console.warn('[flaky-tests] close failed:', e))
+    await store.close().catch((e: unknown) => log.warn('close failed:', e))
   })
 }
