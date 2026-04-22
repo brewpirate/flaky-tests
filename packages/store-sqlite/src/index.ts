@@ -107,7 +107,9 @@ export class SqliteStore implements IStore {
     this.db = new Database(dbPath, { create: true })
     this.db.exec('PRAGMA journal_mode = WAL')
     this.db.exec(SCHEMA)
-    this.migrate()
+    // `migrate` is sync under bun:sqlite (only exec calls) but declared async
+    // by the IStore contract; constructors can't await so we fire-and-forget.
+    void this.migrate()
   }
 
   /**

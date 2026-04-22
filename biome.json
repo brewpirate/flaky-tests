@@ -48,11 +48,18 @@
     "rules": {
       "complexity": {
         "noUselessTernary": "error",
-        "noUselessTypeConstraint": "error"
+        "noUselessTypeConstraint": "error",
+        "noForEach": "error"
+      },
+      "correctness": {
+        "noUnusedImports": "error"
       },
       "recommended": true,
       "suspicious": {
-        "noConsole": "error"
+        "noConsole": "error",
+        "noExplicitAny": "error",
+        "noTsIgnore": "error",
+        "noEmptyBlockStatements": "error"
       },
       "style": {
         "noNestedTernary": "error",
@@ -60,10 +67,14 @@
         "noProcessEnv": "error",
         "noMagicNumbers": "error",
         "noParameterAssign": "error",
-        "useArrayLiterals": "error"
+        "useArrayLiterals": "error",
+        "noNonNullAssertion": "error",
+        "useImportType": "error",
+        "useExportType": "error"
       },
       "nursery": {
-        "useSortedClasses": "info"
+        "useSortedClasses": "info",
+        "noFloatingPromises": "error"
       }
     }
   },
@@ -74,6 +85,9 @@
         "rules": {
           "style": {
             "noMagicNumbers": "off"
+          },
+          "suspicious": {
+            "noEmptyBlockStatements": "off"
           }
         }
       }
