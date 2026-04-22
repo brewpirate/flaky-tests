@@ -1,0 +1,48 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`renderPatterns matches snapshot for a representative pattern 1`] = `
+"
+  <article class="card sev-high" id="pattern-1">
+    <header class="card-header">
+      <div class="card-header-main">
+        <div class="card-title-row">
+          <span class="sev-pill">high</span>
+          <span class="card-num">#1</span>
+          <h2 class="test-name">auth &gt; login redirects after success</h2>
+        </div>
+        <div class="card-file"><code>…/auth/tests/login.test.ts</code></div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-main">
+          <span class="stat-value">6</span>
+          <span class="stat-label">fails / 7d</span>
+        </div>
+        <div class="stat-sub">
+          <span>0 prior</span>
+          <span class="dot">·</span>
+          <span>timeout</span>
+        </div>
+      </div>
+    </header>
+    <div class="card-error"><span class="error-prefix">last error</span><code>Expected redirect within 2000ms</code></div>
+    <details class="prompt-section">
+      <summary class="prompt-summary">
+        <span class="prompt-summary-label">Investigation prompt</span>
+        <span class="prompt-summary-right">
+          <span class="prompt-summary-hint">click to expand</span>
+          <button type="button" class="copy-btn" data-prompt-id="p-1" data-original="Copy">Copy</button>
+        </span>
+      </summary>
+      <pre class="prompt-body" id="p-1">Test \`auth &gt; login redirects after success\` has become flaky.
+
+File:        packages/auth/tests/login.test.ts
+Failures:    6 in the last 7 days (0 the 7 days before)
+Kind:        timeout
+Last error:  Expected redirect within 2000ms
+
+Investigate whether this is:
+  • A test issue  — poor setup, timing dependency, bad assertion, environment assumption
+  • A code issue  — regression, race condition, changed behaviour</pre>
+    </details>
+  </article>"
+`;
