@@ -21,17 +21,30 @@ import {
   parse,
   parseArray,
   type RecentRun,
+  type RetryOptions,
   type RunStatus,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
   validateTablePrefix,
+  withRetry,
 } from '@flaky-tests/core'
 import { type } from 'arktype'
 import postgres from 'postgres'
 
 const log = createLogger('store-postgres')
 const PACKAGE = '@flaky-tests/store-postgres'
+
+/**
+ * Retry tuning for read methods. Defaults to 3 attempts / 100ms base from
+ * {@link withRetry}. Writes are not retried because {@link IStore.insertFailure}
+ * has no idempotency key — a retried write that succeeded server-side would
+ * double-insert.
+ */
+export const retryOptionsSchema = type({
+  'attempts?': 'number > 0',
+  'baseMs?': 'number > 0',
+})
 
 /** Configuration for the PostgreSQL store. */
 export const postgresStoreOptionsSchema = type({
@@ -43,6 +56,7 @@ export const postgresStoreOptionsSchema = type({
   'password?': 'string',
   'ssl?': "boolean | 'require' | 'prefer' | 'allow'",
   'tablePrefix?': 'string',
+  'retry?': retryOptionsSchema,
 })
 
 /** Inferred options type for constructing a {@link PostgresStore}. */
@@ -91,6 +105,7 @@ export class PostgresStore implements IStore {
   private sql: ReturnType<typeof postgres>
   private runsTable: string
   private failuresTable: string
+  private retryOptions: RetryOptions
 
   /** Accepts either a full `connectionString` or individual host/port/credentials fields. */
   constructor(options: PostgresStoreOptions = {}) {
@@ -99,6 +114,7 @@ export class PostgresStore implements IStore {
     validateTablePrefix(prefix)
     this.runsTable = `${prefix}_runs`
     this.failuresTable = `${prefix}_failures`
+    this.retryOptions = validated.retry ?? {}
 
     if (validated.connectionString) {
       this.sql = postgres(validated.connectionString)
@@ -295,41 +311,46 @@ export class PostgresStore implements IStore {
         ? this.sql`r.project IS NULL`
         : this.sql`r.project = ${project}`
 
-    const rows = await this.wrap('getNewPatterns', () => {
-      const query = this.sql<
-        Array<{
-          test_file: string
-          test_name: string
-          recent_fails: string
-          prior_fails: string
-          failure_kinds: string[]
-          last_error_message_raw: string | null
-          last_error_stack_raw: string | null
-          last_failed: Date
-        }>
-      >`
-        SELECT
-          f.test_file,
-          f.test_name,
-          COUNT(*) FILTER (WHERE f.failed_at > ${windowStart})                                    AS recent_fails,
-          COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart})   AS prior_fails,
-          ARRAY_AGG(DISTINCT f.failure_kind)                                                       AS failure_kinds,
-          MAX(f.failed_at::text || chr(1) || f.error_message) FILTER (WHERE f.failed_at > ${windowStart} AND f.error_message IS NOT NULL) AS last_error_message_raw,
-          MAX(f.failed_at::text || chr(1) || f.error_stack)  FILTER (WHERE f.failed_at > ${windowStart} AND f.error_stack IS NOT NULL)  AS last_error_stack_raw,
-          MAX(f.failed_at)                                                                         AS last_failed
-        FROM ${this.sql(failures)} f
-        JOIN ${this.sql(runs)} r ON r.run_id = f.run_id
-        WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
-          AND r.ended_at IS NOT NULL
-          AND f.failed_at > ${priorStart}
-          AND ${projectFilter}
-        GROUP BY f.test_file, f.test_name
-        HAVING COUNT(*) FILTER (WHERE f.failed_at > ${windowStart}) >= ${threshold}
-           AND COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart}) = 0
-        ORDER BY recent_fails DESC
-      `
-      return cancelOnAbort(query, options.signal)
-    })
+    const rows = await this.wrap('getNewPatterns', () =>
+      withRetry(
+        () => {
+          const query = this.sql<
+            Array<{
+              test_file: string
+              test_name: string
+              recent_fails: string
+              prior_fails: string
+              failure_kinds: string[]
+              last_error_message_raw: string | null
+              last_error_stack_raw: string | null
+              last_failed: Date
+            }>
+          >`
+            SELECT
+              f.test_file,
+              f.test_name,
+              COUNT(*) FILTER (WHERE f.failed_at > ${windowStart})                                    AS recent_fails,
+              COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart})   AS prior_fails,
+              ARRAY_AGG(DISTINCT f.failure_kind)                                                       AS failure_kinds,
+              MAX(f.failed_at::text || chr(1) || f.error_message) FILTER (WHERE f.failed_at > ${windowStart} AND f.error_message IS NOT NULL) AS last_error_message_raw,
+              MAX(f.failed_at::text || chr(1) || f.error_stack)  FILTER (WHERE f.failed_at > ${windowStart} AND f.error_stack IS NOT NULL)  AS last_error_stack_raw,
+              MAX(f.failed_at)                                                                         AS last_failed
+            FROM ${this.sql(failures)} f
+            JOIN ${this.sql(runs)} r ON r.run_id = f.run_id
+            WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
+              AND r.ended_at IS NOT NULL
+              AND f.failed_at > ${priorStart}
+              AND ${projectFilter}
+            GROUP BY f.test_file, f.test_name
+            HAVING COUNT(*) FILTER (WHERE f.failed_at > ${windowStart}) >= ${threshold}
+               AND COUNT(*) FILTER (WHERE f.failed_at <= ${windowStart} AND f.failed_at > ${priorStart}) = 0
+            ORDER BY recent_fails DESC
+          `
+          return cancelOnAbort(query, options.signal)
+        },
+        { ...this.retryOptions, signal: options.signal },
+      ),
+    )
 
     const patterns = parseArray(flakyPatternSchema, rows.map(mapRowToPattern))
     log.debug(
@@ -347,33 +368,38 @@ export class PostgresStore implements IStore {
       project === null
         ? this.sql`project IS NULL`
         : this.sql`project = ${project}`
-    const rows = await this.wrap('getRecentRuns', () => {
-      const query = this.sql<
-        Array<{
-          run_id: string
-          project: string | null
-          started_at: Date
-          ended_at: Date | null
-          duration_ms: number | null
-          status: string | null
-          total_tests: number | null
-          passed_tests: number | null
-          failed_tests: number | null
-          errors_between_tests: number | null
-          git_sha: string | null
-          git_dirty: boolean | null
-        }>
-      >`
-        SELECT run_id, project, started_at, ended_at, duration_ms, status,
-               total_tests, passed_tests, failed_tests,
-               errors_between_tests, git_sha, git_dirty
-          FROM ${this.sql(runs)}
-         WHERE ${projectFilter}
-         ORDER BY started_at DESC
-         LIMIT ${limit}
-      `
-      return cancelOnAbort(query, signal)
-    })
+    const rows = await this.wrap('getRecentRuns', () =>
+      withRetry(
+        () => {
+          const query = this.sql<
+            Array<{
+              run_id: string
+              project: string | null
+              started_at: Date
+              ended_at: Date | null
+              duration_ms: number | null
+              status: string | null
+              total_tests: number | null
+              passed_tests: number | null
+              failed_tests: number | null
+              errors_between_tests: number | null
+              git_sha: string | null
+              git_dirty: boolean | null
+            }>
+          >`
+            SELECT run_id, project, started_at, ended_at, duration_ms, status,
+                   total_tests, passed_tests, failed_tests,
+                   errors_between_tests, git_sha, git_dirty
+              FROM ${this.sql(runs)}
+             WHERE ${projectFilter}
+             ORDER BY started_at DESC
+             LIMIT ${limit}
+          `
+          return cancelOnAbort(query, signal)
+        },
+        { ...this.retryOptions, signal },
+      ),
+    )
     const toIso = (value: Date | string | null): string | null => {
       if (value === null) return null
       if (value instanceof Date) return value.toISOString()

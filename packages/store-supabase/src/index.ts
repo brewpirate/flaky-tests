@@ -19,11 +19,13 @@ import {
   parse,
   parseArray,
   type RecentRun,
+  type RetryOptions,
   type RunStatus,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
   validateTablePrefix,
+  withRetry,
 } from '@flaky-tests/core'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@supabase/supabase-js'
@@ -31,11 +33,23 @@ import { type } from 'arktype'
 
 const log = createLogger('store-supabase')
 
+/**
+ * Retry tuning for read methods. Defaults to 3 attempts / 100ms base from
+ * {@link withRetry}. Writes are not retried because `insertFailure` lacks an
+ * idempotency key — a retried write that succeeded server-side would
+ * double-insert.
+ */
+export const retryOptionsSchema = type({
+  'attempts?': 'number > 0',
+  'baseMs?': 'number > 0',
+})
+
 /** Configuration for the Supabase store. */
 export const supabaseStoreOptionsSchema = type({
   url: type.string.atLeastLength(1),
   key: type.string.atLeastLength(1),
   'tablePrefix?': 'string',
+  'retry?': retryOptionsSchema,
 })
 
 /** Validated options accepted by {@link SupabaseStore}. Inferred from the ArkType schema so runtime and compile-time stay aligned. */
@@ -52,6 +66,7 @@ export class SupabaseStore implements IStore {
   private client: SupabaseClient
   private runsTable: string
   private failuresTable: string
+  private retryOptions: RetryOptions
 
   /** Validate options, construct a supabase-js client, and resolve the runs/failures table names from `tablePrefix` (default `flaky_test`). */
   constructor(options: SupabaseStoreOptions) {
@@ -63,6 +78,7 @@ export class SupabaseStore implements IStore {
     this.runsTable = `${prefix}_runs`
     this.failuresTable = `${prefix}_failures`
     this.client = createClient(validated.url, validated.key)
+    this.retryOptions = validated.retry ?? {}
   }
 
   /**
@@ -207,33 +223,45 @@ export class SupabaseStore implements IStore {
 
     const project = validated.project ?? null
 
-    // Fetch failures from both windows in one query, filter to relevant runs
-    let query = this.client
-      .from(this.failuresTable)
-      .select(`run_id, test_file, test_name, failure_kind, error_message, error_stack, failed_at,
-               ${this.runsTable}!inner(failed_tests, ended_at, project)`)
-      .gt('failed_at', priorStart)
-      .lt(`${this.runsTable}.failed_tests`, MAX_FAILED_TESTS_PER_RUN)
-      .not(`${this.runsTable}.ended_at`, 'is', null)
-    query =
-      project === null
-        ? query.is(`${this.runsTable}.project`, null)
-        : query.eq(`${this.runsTable}.project`, project)
-    const finalized =
-      options.signal !== undefined ? query.abortSignal(options.signal) : query
-    const { data, error } = await finalized
-
-    // postgrest-js surfaces an aborted fetch as a regular error; the signal
-    // itself is the authoritative source — if it aborted mid-flight, throw
-    // its reason so callers see a native AbortError across adapters.
-    options.signal?.throwIfAborted()
-    if (error)
+    // Each retry attempt rebuilds the postgrest query — the builder mutates
+    // internal state, so reuse across attempts would send malformed requests.
+    const runQuery = async (): Promise<unknown[]> => {
+      let query = this.client
+        .from(this.failuresTable)
+        .select(`run_id, test_file, test_name, failure_kind, error_message, error_stack, failed_at,
+                 ${this.runsTable}!inner(failed_tests, ended_at, project)`)
+        .gt('failed_at', priorStart)
+        .lt(`${this.runsTable}.failed_tests`, MAX_FAILED_TESTS_PER_RUN)
+        .not(`${this.runsTable}.ended_at`, 'is', null)
+      query =
+        project === null
+          ? query.is(`${this.runsTable}.project`, null)
+          : query.eq(`${this.runsTable}.project`, project)
+      const finalized =
+        options.signal !== undefined ? query.abortSignal(options.signal) : query
+      const { data, error } = await finalized
+      // postgrest-js surfaces an aborted fetch as a regular error; the signal
+      // itself is the authoritative source — if it aborted mid-flight, throw
+      // its reason so callers see a native AbortError across adapters.
+      options.signal?.throwIfAborted()
+      if (error) throw error
+      return (data ?? []) as unknown[]
+    }
+    let data: unknown[]
+    try {
+      data = await withRetry(runQuery, {
+        ...this.retryOptions,
+        signal: options.signal,
+      })
+    } catch (error) {
+      options.signal?.throwIfAborted()
       throw new StoreError({
         package: PACKAGE,
         method: 'getNewPatterns',
-        message: error.message,
+        message: error instanceof Error ? error.message : String(error),
         cause: error,
       })
+    }
 
     type Row = {
       test_file: string
@@ -244,7 +272,7 @@ export class SupabaseStore implements IStore {
       failed_at: string
     }
     // Supabase client returns typed JSON but the generic is too wide — Row matches the select columns above
-    const rows = (data ?? []) as unknown as Row[]
+    const rows = data as unknown as Row[]
 
     // Group and compute counts per test
     const map = new Map<
@@ -318,27 +346,36 @@ export class SupabaseStore implements IStore {
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
     options.signal?.throwIfAborted()
     const { limit, project = null, signal } = options
-    let query = this.client
-      .from(this.runsTable)
-      .select(
-        'run_id, project, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty',
-      )
-      .order('started_at', { ascending: false })
-      .limit(limit)
-    query =
-      project === null
-        ? query.is('project', null)
-        : query.eq('project', project)
-    const finalized = signal !== undefined ? query.abortSignal(signal) : query
-    const { data, error } = await finalized
-    signal?.throwIfAborted()
-    if (error)
+    const runQuery = async (): Promise<unknown[]> => {
+      let query = this.client
+        .from(this.runsTable)
+        .select(
+          'run_id, project, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty',
+        )
+        .order('started_at', { ascending: false })
+        .limit(limit)
+      query =
+        project === null
+          ? query.is('project', null)
+          : query.eq('project', project)
+      const finalized = signal !== undefined ? query.abortSignal(signal) : query
+      const { data, error } = await finalized
+      signal?.throwIfAborted()
+      if (error) throw error
+      return (data ?? []) as unknown[]
+    }
+    let data: unknown[]
+    try {
+      data = await withRetry(runQuery, { ...this.retryOptions, signal })
+    } catch (error) {
+      signal?.throwIfAborted()
       throw new StoreError({
         package: PACKAGE,
         method: 'getRecentRuns',
-        message: error.message,
+        message: error instanceof Error ? error.message : String(error),
         cause: error,
       })
+    }
     type Row = {
       run_id: string
       project: string | null
@@ -353,7 +390,7 @@ export class SupabaseStore implements IStore {
       git_sha: string | null
       git_dirty: boolean | null
     }
-    return ((data ?? []) as unknown as Row[]).map((row) => ({
+    return (data as unknown as Row[]).map((row) => ({
       runId: row.run_id,
       project: row.project,
       startedAt: row.started_at,
@@ -391,6 +428,7 @@ export const supabaseStorePlugin = definePlugin({
       ...(config.store.tablePrefix !== undefined && {
         tablePrefix: config.store.tablePrefix,
       }),
+      ...(config.store.retry !== undefined && { retry: config.store.retry }),
     })
   },
 })
