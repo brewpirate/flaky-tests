@@ -75,7 +75,9 @@ function cancelOnAbort<T>(
   query: PromiseLike<T> & { cancel?: () => void },
   signal: AbortSignal | undefined,
 ): Promise<T> {
-  if (signal === undefined) return Promise.resolve(query)
+  if (signal === undefined) {
+    return Promise.resolve(query)
+  }
   signal.throwIfAborted()
   return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => {
@@ -266,7 +268,9 @@ export class PostgresStore implements IStore {
 
   /** Insert multiple failures in a single Postgres transaction. */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
-    if (inputs.length === 0) return
+    if (inputs.length === 0) {
+      return
+    }
     const failures = this.failuresTable
     await this.wrap('insertFailures', async () => {
       await this.sql.begin(async (transaction) => {
@@ -401,8 +405,12 @@ export class PostgresStore implements IStore {
       ),
     )
     const toIso = (value: Date | string | null): string | null => {
-      if (value === null) return null
-      if (value instanceof Date) return value.toISOString()
+      if (value === null) {
+        return null
+      }
+      if (value instanceof Date) {
+        return value.toISOString()
+      }
       return String(value)
     }
     return rows.map((row) => ({

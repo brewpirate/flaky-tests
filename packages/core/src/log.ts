@@ -58,7 +58,9 @@ export interface Logger {
  *  goes through a defensive JSON attempt with `String()` as the last
  *  resort so circular references never crash the logger. */
 function stringifyArg(value: unknown): string {
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') {
+    return value
+  }
   if (value instanceof Error) {
     return value.stack ?? `${value.name}: ${value.message}`
   }
@@ -111,14 +113,20 @@ export function createLogger(namespace: string): Logger {
   const prefix = `[flaky-tests:${namespace}]`
 
   function consoleSinkFor(level: LogLevel): (...args: unknown[]) => void {
-    if (level === 'error') return console.error
-    if (level === 'warn') return console.warn
+    if (level === 'error') {
+      return console.error
+    }
+    if (level === 'warn') {
+      return console.warn
+    }
     return console.log
   }
 
   function emit(level: LogLevel, args: unknown[]): void {
     const config = resolveLogConfig()
-    if (LEVEL_ORDER[level] > LEVEL_ORDER[config.level]) return
+    if (LEVEL_ORDER[level] > LEVEL_ORDER[config.level]) {
+      return
+    }
     consoleSinkFor(level)(prefix, ...args)
     if (config.file !== undefined && config.file !== '') {
       appendToFile(config.file, level, prefix, args)

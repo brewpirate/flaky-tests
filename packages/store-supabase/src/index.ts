@@ -114,13 +114,14 @@ export class SupabaseStore implements IStore {
       runtime_version: input.runtimeVersion ?? null,
       test_args: input.testArgs ?? null,
     })
-    if (error)
+    if (error) {
       throw new StoreError({
         package: PACKAGE,
         method: 'insertRun',
         message: error.message,
         cause: error,
       })
+    }
   }
 
   /**
@@ -142,13 +143,14 @@ export class SupabaseStore implements IStore {
         errors_between_tests: input.errorsBetweenTests ?? null,
       })
       .eq('run_id', runId)
-    if (error)
+    if (error) {
       throw new StoreError({
         package: PACKAGE,
         method: 'updateRun',
         message: error.message,
         cause: error,
       })
+    }
   }
 
   /** Record a single test failure. `durationMs` is rounded to the nearest integer. */
@@ -165,13 +167,14 @@ export class SupabaseStore implements IStore {
         input.durationMs != null ? Math.round(input.durationMs) : null,
       failed_at: input.failedAt,
     })
-    if (error)
+    if (error) {
       throw new StoreError({
         package: PACKAGE,
         method: 'insertFailure',
         message: error.message,
         cause: error,
       })
+    }
   }
 
   /**
@@ -179,7 +182,9 @@ export class SupabaseStore implements IStore {
    * JS client, so this uses a single bulk insert call for atomicity at the REST level.
    */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
-    if (inputs.length === 0) return
+    if (inputs.length === 0) {
+      return
+    }
     const rows = inputs.map((input) => {
       parse(insertFailureInputSchema, input)
       return {
@@ -195,13 +200,14 @@ export class SupabaseStore implements IStore {
       }
     })
     const { error } = await this.client.from(this.failuresTable).insert(rows)
-    if (error)
+    if (error) {
       throw new StoreError({
         package: PACKAGE,
         method: 'insertFailures',
         message: error.message,
         cause: error,
       })
+    }
   }
 
   /**
@@ -244,7 +250,9 @@ export class SupabaseStore implements IStore {
       // itself is the authoritative source — if it aborted mid-flight, throw
       // its reason so callers see a native AbortError across adapters.
       options.signal?.throwIfAborted()
-      if (error) throw error
+      if (error) {
+        throw error
+      }
       return (data ?? []) as unknown[]
     }
     let data: unknown[]
@@ -361,7 +369,9 @@ export class SupabaseStore implements IStore {
       const finalized = signal !== undefined ? query.abortSignal(signal) : query
       const { data, error } = await finalized
       signal?.throwIfAborted()
-      if (error) throw error
+      if (error) {
+        throw error
+      }
       return (data ?? []) as unknown[]
     }
     let data: unknown[]

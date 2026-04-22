@@ -69,7 +69,9 @@ const RETRYABLE_CODE_PATTERNS: readonly RegExp[] = [
 
 /** Dig out a numeric HTTP status from the common error shapes we see across drivers. */
 function extractStatus(error: unknown): number | null {
-  if (typeof error !== 'object' || error === null) return null
+  if (typeof error !== 'object' || error === null) {
+    return null
+  }
   const bag = error as Record<string, unknown>
   const candidates = [bag.status, bag.statusCode, bag.code]
   for (const candidate of candidates) {
@@ -100,13 +102,15 @@ export function isRetryableError(error: unknown): boolean {
     if (
       status >= HTTP_STATUS_SERVER_ERROR_MIN &&
       status < HTTP_STATUS_SERVER_ERROR_MAX_EXCLUSIVE
-    )
+    ) {
       return true
+    }
     if (
       status >= HTTP_STATUS_CLIENT_ERROR_MIN &&
       status < HTTP_STATUS_CLIENT_ERROR_MAX_EXCLUSIVE
-    )
+    ) {
       return false
+    }
   }
   const message = error instanceof Error ? error.message : String(error)
   return RETRYABLE_CODE_PATTERNS.some((pattern) => pattern.test(message))
@@ -146,8 +150,12 @@ export async function withRetry<T>(
       return await op()
     } catch (error) {
       lastError = error
-      if (!classify(error)) throw error
-      if (attempt === attempts) throw error
+      if (!classify(error)) {
+        throw error
+      }
+      if (attempt === attempts) {
+        throw error
+      }
       const delay = computeBackoff(baseMs, attempt)
       log.debug(
         `retry ${attempt}/${attempts - 1} after ${delay}ms: ${error instanceof Error ? error.message : String(error)}`,

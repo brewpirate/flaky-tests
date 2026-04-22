@@ -49,7 +49,10 @@
       "complexity": {
         "noUselessTernary": "error",
         "noUselessTypeConstraint": "error",
-        "noForEach": "error"
+        "noForEach": "error",
+        "noUselessCatch": "error",
+        "noUselessStringConcat": "error",
+        "useDateNow": "error"
       },
       "correctness": {
         "noUnusedImports": "error"
@@ -59,7 +62,11 @@
         "noConsole": "error",
         "noExplicitAny": "error",
         "noTsIgnore": "error",
-        "noEmptyBlockStatements": "error"
+        "noEmptyBlockStatements": "error",
+        "useAwait": "error",
+        "noImplicitAnyLet": "error",
+        "noEvolvingTypes": "error",
+        "noConfusingVoidType": "error"
       },
       "style": {
         "noNestedTernary": "error",
@@ -70,11 +77,24 @@
         "useArrayLiterals": "error",
         "noNonNullAssertion": "error",
         "useImportType": "error",
-        "useExportType": "error"
+        "useExportType": "error",
+        "useThrowOnlyError": "error",
+        "useBlockStatements": "error",
+        "useTemplate": "error",
+        "useConsistentArrayType": {
+          "level": "error",
+          "options": {
+            "syntax": "shorthand"
+          }
+        },
+        "noDoneCallback": "error",
+        "noYodaExpression": "error"
       },
       "nursery": {
         "useSortedClasses": "info",
-        "noFloatingPromises": "error"
+        "noFloatingPromises": "error",
+        "useExhaustiveSwitchCases": "error",
+        "useNullishCoalescing": "error"
       }
     }
   },
@@ -92,17 +112,32 @@
           },
           "suspicious": {
             "noEmptyBlockStatements": "off",
-            "noConsole": "off"
+            "noConsole": "off",
+            "useAwait": "off"
           }
         }
       }
     },
     {
-      "includes": ["packages/core/src/config.ts"],
+      "includes": [
+        "packages/core/src/config.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
             "noProcessEnv": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "packages/store-sqlite/src/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "useAwait": "off"
           }
         }
       }

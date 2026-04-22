@@ -83,11 +83,15 @@ export async function createStoreFromConfig(
       try {
         await importer(spec)
       } catch (error) {
-        if (isModuleNotFound(error)) continue
+        if (isModuleNotFound(error)) {
+          continue
+        }
         throw error
       }
       descriptor = findDescriptor(storeType)
-      if (descriptor !== undefined) break
+      if (descriptor !== undefined) {
+        break
+      }
     }
   }
 

@@ -56,7 +56,7 @@ const log = createLogger('cli')
  *  is captured in THIS file so dynamic specifiers resolve against the
  *  CLI's own `node_modules` — not core's. That's what makes linked /
  *  workspace setups find adapters that core's location can't see. */
-async function resolveStore(config: Config): Promise<IStore> {
+function resolveStore(config: Config): Promise<IStore> {
   log.debug(`resolveStore: type=${config.store.type}`)
   return createStoreFromConfig(config, (spec) => import(spec))
 }
@@ -256,8 +256,11 @@ function writeAndOpenHtmlReport(opts: WriteAndOpenHtmlReportOpts): void {
 
   // Open in default browser
   let opener = 'xdg-open'
-  if (process.platform === 'darwin') opener = 'open'
-  else if (process.platform === 'win32') opener = 'start'
+  if (process.platform === 'darwin') {
+    opener = 'open'
+  } else if (process.platform === 'win32') {
+    opener = 'start'
+  }
   Bun.spawnSync({
     cmd: [opener, resolvedPath],
     stdout: 'ignore',

@@ -14,7 +14,9 @@ const runCommand: RunCommand = (command, args) => {
       stdout: 'pipe',
       stderr: 'ignore',
     })
-    if (result.exitCode !== 0) return null
+    if (result.exitCode !== 0) {
+      return null
+    }
     return new TextDecoder().decode(result.stdout)
   } catch {
     return null

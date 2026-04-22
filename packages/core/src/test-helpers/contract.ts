@@ -371,8 +371,12 @@ export function runContractTests(
       expect(nullIds).not.toContain(alphaRunId)
 
       // Every returned row's `project` field matches the filter.
-      for (const run of alphaRuns) expect(run.project).toBe('alpha')
-      for (const run of nullRuns) expect(run.project).toBeNull()
+      for (const run of alphaRuns) {
+        expect(run.project).toBe('alpha')
+      }
+      for (const run of nullRuns) {
+        expect(run.project).toBeNull()
+      }
     })
 
     test('close() is idempotent — a second call does not throw', async () => {

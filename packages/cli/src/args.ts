@@ -47,7 +47,9 @@ export function parseCliConfig(opts: ParseCliConfigOpts): CliConfig {
 
   const option = (name: string): string | undefined => {
     const index = argv.indexOf(`--${name}`)
-    if (index !== -1 && index + 1 < argv.length) return argv[index + 1]
+    if (index !== -1 && index + 1 < argv.length) {
+      return argv[index + 1]
+    }
     return undefined
   }
 

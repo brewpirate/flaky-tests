@@ -129,7 +129,9 @@ export function detectBaselineVersion(
 ): number {
   let baseline = 0
   for (const migration of migrations) {
-    if (!migration.probe(inspect)) break
+    if (!migration.probe(inspect)) {
+      break
+    }
     baseline = migration.version
   }
   return baseline

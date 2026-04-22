@@ -3,7 +3,9 @@ import { DescribeStack, MAX_DESCRIBE_DEPTH } from './describe-stack'
 
 /** Drive the stack to the requested depth by recursively calling `run()`. */
 function nestTo(stack: DescribeStack, depth: number): void {
-  if (depth === 0) return
+  if (depth === 0) {
+    return
+  }
   stack.run(`d${depth}`, () => nestTo(stack, depth - 1))
 }
 

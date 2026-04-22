@@ -164,7 +164,9 @@ describe('createLogger — file sink', () => {
   }
 
   afterEach(() => {
-    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 
   test('appends each active log call to the configured file', () => {

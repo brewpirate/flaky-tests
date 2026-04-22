@@ -36,7 +36,9 @@ describe('createStoreFromConfig — registry-first dispatch', () => {
   const instances: IStore[] = []
 
   afterEach(async () => {
-    for (const store of instances) await store.close()
+    for (const store of instances) {
+      await store.close()
+    }
     instances.length = 0
   })
 

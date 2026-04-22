@@ -36,7 +36,9 @@ export function generatePrompt(pattern: FlakyPattern, windowDays = 7): string {
     const allStackLines = pattern.lastErrorStack.split('\n')
     const stackLines = allStackLines.slice(0, MAX_PROMPT_STACK_LINES)
     lines.push(stackLines.join('\n'))
-    if (allStackLines.length > MAX_PROMPT_STACK_LINES) lines.push('  ...')
+    if (allStackLines.length > MAX_PROMPT_STACK_LINES) {
+      lines.push('  ...')
+    }
     lines.push('```')
   }
 
