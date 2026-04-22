@@ -8,7 +8,12 @@ export class ValidationError extends Error {
   }
 }
 
-/** Parse data against a schema — returns the validated value or throws ValidationError. */
+/**
+ * Parse data against a schema — returns the validated value.
+ *
+ * @throws {@link ValidationError} when `data` fails ArkType validation; the
+ *   thrown error's `summary` field contains ArkType's issue summary.
+ */
 export function parse<T>(schema: Type<T>, data: unknown): T {
   const result = schema(data)
   if (result instanceof type.errors) {
@@ -18,7 +23,13 @@ export function parse<T>(schema: Type<T>, data: unknown): T {
   return result as T
 }
 
-/** Parse an array of items against a schema. Used for getNewPatterns output. */
+/**
+ * Parse an array of items against a schema. Used for `getNewPatterns` output.
+ *
+ * @throws {@link ValidationError} on the first item that fails validation.
+ *   The summary is prefixed with the failing index (`[3]: ...`) so callers
+ *   can locate it.
+ */
 export function parseArray<T>(schema: Type<T>, data: unknown[]): T[] {
   return data.map((item, index) => {
     const result = schema(item)
