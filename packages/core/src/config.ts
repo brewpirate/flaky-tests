@@ -60,7 +60,11 @@ export const storeConfigSchema = sqliteStoreConfigSchema
   .or(postgresStoreConfigSchema)
 
 export const configSchema = type({
-  log: { level: logLevel },
+  log: {
+    level: logLevel,
+    /** Optional file path — every log line is appended here IN ADDITION to the console sink. Resolved relative to the process cwd. */
+    'file?': 'string',
+  },
   store: storeConfigSchema,
   detection: {
     windowDays: 'number > 0',
@@ -219,7 +223,13 @@ export function resolveConfig(source?: NodeJS.ProcessEnv | Config): Config {
   }
 
   const raw = {
-    log: { level: resolveLogLevelValue(env.FLAKY_TESTS_LOG) },
+    log: {
+      level: resolveLogLevelValue(env.FLAKY_TESTS_LOG),
+      ...(env.FLAKY_TESTS_LOG_FILE !== undefined &&
+        env.FLAKY_TESTS_LOG_FILE !== '' && {
+          file: env.FLAKY_TESTS_LOG_FILE,
+        }),
+    },
     store: resolveStoreConfig(env),
     detection: {
       windowDays: parsePositiveNumber(

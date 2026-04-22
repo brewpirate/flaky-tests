@@ -12,6 +12,7 @@ nothing else is read anywhere in the codebase.
 | Variable | Description | Default |
 |---|---|---|
 | `FLAKY_TESTS_LOG` | Log level: `silent`, `error`, `warn`, `debug` | `warn` |
+| `FLAKY_TESTS_LOG_FILE` | Optional path to append every log line to (in addition to the console sink). Useful when the console is crowded or Bun buffers stdout. Write failures are swallowed so a broken sink never crashes the logger. | — |
 | `FLAKY_TESTS_DISABLE` | Set to `1` or `true` to turn the capture plugins into a no-op | — |
 | `FLAKY_TESTS_RUN_ID` | Override the generated run id. Set automatically by `@flaky-tests/plugin-bun/run-tracked` when it spawns `bun test` — most users never set this manually. | — |
 

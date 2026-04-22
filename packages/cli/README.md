@@ -34,6 +34,7 @@ All values flow through `resolveConfig()` in `@flaky-tests/core`.
 | `FLAKY_TESTS_WINDOW` | Detection window length in days | `7` |
 | `FLAKY_TESTS_THRESHOLD` | Min recent failures to flag as flaky | `2` |
 | `FLAKY_TESTS_LOG` | Log level: `silent`, `error`, `warn`, `debug` | `warn` |
+| `FLAKY_TESTS_LOG_FILE` | Append every log line to this file (in addition to the console) | — |
 | `GITHUB_TOKEN` | Required for `--create-issue` | — |
 | `GITHUB_REPOSITORY` | `owner/repo` for issue creation (set automatically in GitHub Actions) | — |
 
