@@ -1,46 +1,46 @@
 // biome-ignore-all lint/suspicious/noConsole: this is the logger test — it must stub console
 
 import { afterEach, describe, expect, mock, test } from 'bun:test'
-import { createLogger, resolveLogLevel } from './log'
+import { type Config, resetConfigForTesting, resolveConfig } from './config'
+import { createLogger, type LogLevel, resolveLogLevel } from './log'
 
-const originalEnv = process.env.FLAKY_TESTS_LOG
+function baseConfig(level: LogLevel): Config {
+  return {
+    log: { level },
+    store: { type: 'sqlite' },
+    detection: { windowDays: 7, threshold: 2 },
+    github: {},
+    plugin: { disabled: false },
+    report: {},
+  }
+}
+
+function useLevel(level: LogLevel): void {
+  resolveConfig(baseConfig(level))
+}
 
 afterEach(() => {
-  if (originalEnv === undefined) {
-    delete process.env.FLAKY_TESTS_LOG
-  } else {
-    process.env.FLAKY_TESTS_LOG = originalEnv
-  }
+  resetConfigForTesting()
   mock.restore()
 })
 
 describe('resolveLogLevel', () => {
-  test('defaults to warn when env is unset', () => {
-    delete process.env.FLAKY_TESTS_LOG
+  test('defaults to warn when config parsing fails', () => {
+    resetConfigForTesting()
     expect(resolveLogLevel()).toBe('warn')
   })
 
-  test('reads each valid level from env', () => {
+  test('reads each valid level from injected config', () => {
     for (const level of ['silent', 'error', 'warn', 'debug'] as const) {
-      process.env.FLAKY_TESTS_LOG = level
+      useLevel(level)
       expect(resolveLogLevel()).toBe(level)
     }
-  })
-
-  test('is case-insensitive', () => {
-    process.env.FLAKY_TESTS_LOG = 'DEBUG'
-    expect(resolveLogLevel()).toBe('debug')
-  })
-
-  test('falls back to warn on garbage value', () => {
-    process.env.FLAKY_TESTS_LOG = 'loud'
-    expect(resolveLogLevel()).toBe('warn')
   })
 })
 
 describe('createLogger', () => {
   test('prefixes output with [flaky-tests:<namespace>]', () => {
-    process.env.FLAKY_TESTS_LOG = 'debug'
+    useLevel('debug')
     const warnSpy = mock(() => {})
     const originalWarn = console.warn
     console.warn = warnSpy
@@ -56,7 +56,7 @@ describe('createLogger', () => {
   })
 
   test('silent level suppresses every method', () => {
-    process.env.FLAKY_TESTS_LOG = 'silent'
+    useLevel('silent')
     const spies = {
       error: mock(() => {}),
       warn: mock(() => {}),
@@ -86,7 +86,7 @@ describe('createLogger', () => {
   })
 
   test('warn level emits warn+error, suppresses debug', () => {
-    process.env.FLAKY_TESTS_LOG = 'warn'
+    useLevel('warn')
     const spies = {
       error: mock(() => {}),
       warn: mock(() => {}),
@@ -121,9 +121,9 @@ describe('createLogger', () => {
     console.warn = warnSpy
     try {
       const logger = createLogger('ns')
-      process.env.FLAKY_TESTS_LOG = 'silent'
+      useLevel('silent')
       logger.warn('one')
-      process.env.FLAKY_TESTS_LOG = 'warn'
+      useLevel('warn')
       logger.warn('two')
       expect(warnSpy).toHaveBeenCalledTimes(1)
       expect(warnSpy).toHaveBeenCalledWith('[flaky-tests:ns]', 'two')

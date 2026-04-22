@@ -1,7 +1,9 @@
 import {
+  type Config,
   createLogger,
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
+  definePlugin,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -261,3 +263,18 @@ export class PostgresStore implements IStore {
     await this.sql.end()
   }
 }
+
+/** Lazy plugin descriptor — `create(config)` builds a PostgresStore from the resolved config. */
+export const postgresStorePlugin = definePlugin({
+  name: 'store-postgres',
+  configSchema: postgresStoreOptionsSchema,
+  create(config: Config): PostgresStore {
+    if (config.store.type !== 'postgres') {
+      throw new Error(
+        `store-postgres plugin invoked with config.store.type="${config.store.type}"`,
+      )
+    }
+    const { type: _type, ...storeOptions } = config.store
+    return new PostgresStore(storeOptions)
+  },
+})

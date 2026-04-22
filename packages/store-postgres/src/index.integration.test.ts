@@ -10,11 +10,12 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import type { FailureKind } from '@flaky-tests/core'
+import { type FailureKind, getTestCredentials } from '@flaky-tests/core'
 import { PostgresStore } from './index'
 
-const SKIP = !process.env.INTEGRATION || !process.env.POSTGRES_TEST_URL
-const CONNECTION_STRING = process.env.POSTGRES_TEST_URL ?? ''
+const credentials = getTestCredentials()
+const SKIP = !credentials.integration || !credentials.postgresUrl
+const CONNECTION_STRING = credentials.postgresUrl ?? ''
 
 // Use a unique prefix per run to avoid collisions
 const PREFIX = `ft_test_${Date.now()}`

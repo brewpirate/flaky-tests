@@ -38,6 +38,8 @@
     "@flaky-tests/store-postgres": "workspace:*"
   },
   "devDependencies": {
+    "@flaky-tests/plugin-bun": "workspace:*",
+    "@flaky-tests/plugin-vitest": "workspace:*",
     "bun-types": "latest"
   },
   "engines": {

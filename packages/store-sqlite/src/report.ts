@@ -18,11 +18,15 @@ import {
   type FlakyPattern,
   generatePrompt,
   MAX_FAILED_TESTS_PER_RUN,
+  resolveConfig,
   stripTimestampPrefix,
 } from '@flaky-tests/core'
 
+const reportConfig = resolveConfig()
 const DB_PATH =
-  process.env.FLAKY_TESTS_DB ?? 'node_modules/.cache/flaky-tests/failures.db'
+  reportConfig.store.type === 'sqlite' && reportConfig.store.path !== undefined
+    ? reportConfig.store.path
+    : 'node_modules/.cache/flaky-tests/failures.db'
 const DEFAULT_OUT_PATH = 'test-report.html'
 const outFlagIndex = process.argv.indexOf('--out')
 const OUT_PATH =
@@ -631,7 +635,7 @@ function render(data: ReturnType<typeof loadData>): string {
 function openInBrowser(filePath: string): void {
   const abs = Bun.fileURLToPath(new URL(filePath, `file://${process.cwd()}/`))
   const url = `file://${abs}`
-  const envBrowser = process.env.BROWSER
+  const envBrowser = reportConfig.report.browser
   let cmd: string[]
   if (envBrowser) cmd = [envBrowser, url]
   else if (process.platform === 'darwin') cmd = ['open', url]

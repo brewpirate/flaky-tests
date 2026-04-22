@@ -6,13 +6,15 @@
  * for their catch-block warn/error calls. CLI user output (pattern summaries,
  * `✓`/`✗` lines) is not logging and continues to use `console.*` directly.
  *
- * Level is resolved from `FLAKY_TESTS_LOG` on every log call so tests can
- * toggle it without re-importing the module. Per the project's convention,
- * logger code is the one place `process.env` may be read directly — it runs
- * before any config parsing.
+ * Level is resolved from `resolveConfig()` on every log call so tests can
+ * toggle it (via `resetConfigForTesting`) without re-importing the module.
+ * If config resolution throws — e.g. the user set an invalid value — the
+ * logger silently falls back to the default level so logging never crashes.
  */
 
 // biome-ignore-all lint/suspicious/noConsole: this is the logger — it owns console.*
+
+import { resolveConfig } from './config'
 
 /** Log severity. Levels are inclusive: `warn` emits warn+error, `debug` emits everything. */
 export type LogLevel = 'silent' | 'error' | 'warn' | 'debug'
@@ -26,18 +28,13 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
 
 const DEFAULT_LEVEL: LogLevel = 'warn'
 
-/** Resolve the active level from env, falling back to the default. */
+/** Resolve the active level from the unified config, falling back if config parsing fails so broken env never silences the logger. */
 export function resolveLogLevel(): LogLevel {
-  const value = process.env.FLAKY_TESTS_LOG?.toLowerCase()
-  if (
-    value === 'silent' ||
-    value === 'error' ||
-    value === 'warn' ||
-    value === 'debug'
-  ) {
-    return value
+  try {
+    return resolveConfig().log.level
+  } catch {
+    return DEFAULT_LEVEL
   }
-  return DEFAULT_LEVEL
 }
 
 export interface Logger {

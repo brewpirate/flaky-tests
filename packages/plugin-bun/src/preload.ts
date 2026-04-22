@@ -31,6 +31,7 @@ import {
   insertFailureInputSchema,
   insertRunInputSchema,
   parse,
+  resolveConfig,
   updateRunInputSchema,
 } from '@flaky-tests/core'
 import { captureGitInfo } from './git'
@@ -97,8 +98,8 @@ export function createPreload(store: IStore): void {
   installed = true
 
   // Use a run id provided by run-tracked (so it can reconcile the row post-exit)
-  // or generate a fresh one. Reject garbage from env.
-  const providedRunId = process.env.FLAKY_TESTS_RUN_ID
+  // or generate a fresh one. Reject garbage from the config override.
+  const providedRunId = resolveConfig().plugin.runIdOverride
   const runIdFromEnv =
     providedRunId !== undefined && RUN_ID_PATTERN.test(providedRunId)
   const runId = runIdFromEnv ? providedRunId : crypto.randomUUID()

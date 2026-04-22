@@ -29,15 +29,16 @@
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { FlakyPattern, IStore } from '@flaky-tests/core'
+import type { Config, FlakyPattern, IStore } from '@flaky-tests/core'
 import {
   createLogger,
   getNewPatternsOptionsSchema,
   MAX_CLI_ERROR_MESSAGE_LENGTH,
   parse,
+  resolveConfig,
 } from '@flaky-tests/core'
 import { type CliConfig, parseCliConfig } from './args'
-import { CliError } from './errors'
+import { CliError, ConfigError } from './errors'
 import {
   createIssue,
   findExistingIssue,
@@ -49,46 +50,37 @@ import { copyToClipboard, generatePrompt } from './prompt'
 
 const log = createLogger('cli')
 
-/** Load the store implementation chosen by `FLAKY_TESTS_STORE`, deferring
- *  the import so users pay the dependency cost only for the backend they use. */
-async function resolveStore(): Promise<IStore> {
-  const storeType = process.env.FLAKY_TESTS_STORE ?? 'sqlite'
-  const connStr = process.env.FLAKY_TESTS_CONNECTION_STRING
-  const authToken = process.env.FLAKY_TESTS_AUTH_TOKEN
-  log.debug(
-    `resolveStore: type=${storeType}, connectionString=${connStr ? 'set' : 'unset'}, authToken=${authToken ? 'set' : 'unset'}`,
-  )
+/** Construct the store implementation for the resolved config's store variant.
+ *  Import is deferred so users pay the dependency cost only for the backend
+ *  they actually use. */
+async function resolveStore(config: Config): Promise<IStore> {
+  const { store } = config
+  log.debug(`resolveStore: type=${store.type}`)
 
-  switch (storeType) {
+  switch (store.type) {
     case 'turso': {
-      if (!connStr)
-        throw new Error(
-          'FLAKY_TESTS_CONNECTION_STRING is required for store=turso',
-        )
       const { TursoStore } = await import('@flaky-tests/store-turso')
       return new TursoStore({
-        url: connStr,
-        ...(authToken !== undefined && { authToken }),
+        url: store.url,
+        ...(store.authToken !== undefined && { authToken: store.authToken }),
       })
     }
     case 'supabase': {
-      if (!connStr || !authToken)
-        throw new Error(
-          'FLAKY_TESTS_CONNECTION_STRING and FLAKY_TESTS_AUTH_TOKEN are required for store=supabase',
-        )
       const { SupabaseStore } = await import('@flaky-tests/store-supabase')
-      return new SupabaseStore({ url: connStr, key: authToken })
+      return new SupabaseStore({ url: store.url, key: store.key })
     }
     case 'postgres': {
       const { PostgresStore } = await import('@flaky-tests/store-postgres')
       return new PostgresStore(
-        connStr !== undefined ? { connectionString: connStr } : {},
+        store.connectionString !== undefined
+          ? { connectionString: store.connectionString }
+          : {},
       )
     }
-    default: {
+    case 'sqlite': {
       const { SqliteStore } = await import('@flaky-tests/store-sqlite')
       return new SqliteStore({
-        dbPath: process.env.FLAKY_TESTS_DB ?? undefined,
+        ...(store.path !== undefined && { dbPath: store.path }),
       })
     }
   }
@@ -137,10 +129,13 @@ Examples:
 /** CLI entry point: runs detection, prints a human summary, and optionally
  *  prints prompts, copies to clipboard, opens GitHub issues, or writes an
  *  HTML report. Exits 1 when patterns are found so CI can gate on it. */
-async function main(config: CliConfig): Promise<void> {
+async function main(
+  cliConfig: CliConfig,
+  runtimeConfig: Config,
+): Promise<void> {
   const { windowDays, threshold, showPrompts, doCopy, doCreateIssue, doHtml } =
-    config
-  const store = await resolveStore()
+    cliConfig
+  const store = await resolveStore(runtimeConfig)
 
   let patterns: FlakyPattern[]
   try {
@@ -207,13 +202,13 @@ async function main(config: CliConfig): Promise<void> {
   }
 
   if (doCreateIssue) {
-    await openGitHubIssues(patterns, windowDays)
+    await openGitHubIssues(patterns, windowDays, runtimeConfig)
   }
 
   if (doHtml) {
     const html = generateHtml(patterns, windowDays)
     const outPath =
-      config.htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
+      cliConfig.htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
     writeFileSync(outPath, html, 'utf8')
     console.log(`✓ Report written to ${outPath}`)
 
@@ -238,14 +233,15 @@ async function main(config: CliConfig): Promise<void> {
 async function openGitHubIssues(
   patterns: FlakyPattern[],
   windowDays: number,
+  runtimeConfig: Config,
 ): Promise<void> {
-  const token = process.env.GITHUB_TOKEN
+  const token = runtimeConfig.github.token
   if (!token) {
     console.log('⚠ --create-issue requires GITHUB_TOKEN to be set\n')
     return
   }
 
-  const repoInfo = resolveRepo()
+  const repoInfo = resolveRepo(runtimeConfig)
   if (!repoInfo) {
     console.log(
       '⚠ --create-issue: could not determine owner/repo. Set GITHUB_REPOSITORY or pass --repo owner/repo\n',
@@ -277,19 +273,30 @@ async function openGitHubIssues(
 // --- Entry point ---------------------------------------------------------
 
 try {
-  const config = parseCliConfig({ argv: process.argv, env: process.env })
+  const runtimeConfig = resolveConfig()
+  const cliConfig = parseCliConfig({
+    argv: process.argv,
+    defaults: {
+      windowDays: runtimeConfig.detection.windowDays,
+      threshold: runtimeConfig.detection.threshold,
+    },
+  })
 
-  if (config.help) {
+  if (cliConfig.help) {
     console.log(HELP_TEXT)
     process.exit(0)
   }
-  if (config.version) {
+  if (cliConfig.version) {
     console.log(VERSION)
     process.exit(0)
   }
 
-  await main(config)
+  await main(cliConfig, runtimeConfig)
 } catch (error) {
+  if (error instanceof ConfigError) {
+    console.error(`error: ${error.message}`)
+    process.exit(2)
+  }
   if (error instanceof CliError) {
     console.error(`error: ${error.message}`)
     process.exit(error.exitCode)

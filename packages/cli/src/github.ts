@@ -5,7 +5,7 @@
 
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
-import type { FlakyPattern } from '@flaky-tests/core'
+import type { Config, FlakyPattern } from '@flaky-tests/core'
 import { createLogger } from '@flaky-tests/core'
 import { type } from 'arktype'
 import { generatePrompt } from './prompt'
@@ -64,13 +64,14 @@ export type GitHubConfig = typeof gitHubConfigSchema.infer
 
 /**
  * Resolve owner/repo from:
- *   1. GITHUB_REPOSITORY env var (set automatically in Actions)
+ *   1. `config.github.repository` (sourced from GITHUB_REPOSITORY — set automatically in Actions)
  *   2. --repo <owner/repo> CLI flag
  *   3. git remote origin URL (fallback for local runs)
  */
-export function resolveRepo(): { owner: string; repo: string } | null {
-  // GitHub Actions sets this automatically
-  const envRepo = process.env.GITHUB_REPOSITORY
+export function resolveRepo(
+  config?: Config,
+): { owner: string; repo: string } | null {
+  const envRepo = config?.github.repository
   if (envRepo) {
     const [owner, repo] = envRepo.split('/')
     if (owner && repo && isValidSlug(owner) && isValidSlug(repo)) {

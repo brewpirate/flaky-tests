@@ -19,11 +19,17 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import type { InsertFailureInput, IStore, RunCommand } from '@flaky-tests/core'
+import type {
+  Config,
+  InsertFailureInput,
+  IStore,
+  RunCommand,
+} from '@flaky-tests/core'
 import {
   captureGitInfo as captureGitInfoCore,
   categorizeError,
   createLogger,
+  definePlugin,
   extractMessage,
   extractStack,
   insertFailureInputSchema,
@@ -223,3 +229,11 @@ export class FlakyTestsReporter {
     await this.store.close().catch((e: unknown) => log.warn('close failed:', e))
   }
 }
+
+/** Lazy plugin descriptor — `create(config)` exposes the FlakyTestsReporter constructor so hosts can wire it into Vitest with any IStore. */
+export const vitestPlugin = definePlugin({
+  name: 'plugin-vitest',
+  create(_config: Config) {
+    return { FlakyTestsReporter }
+  },
+})
