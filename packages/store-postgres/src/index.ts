@@ -42,6 +42,9 @@ export const postgresStoreOptionsSchema = type({
 /** Inferred options type for constructing a {@link PostgresStore}. */
 export type PostgresStoreOptions = typeof postgresStoreOptionsSchema.infer
 
+/** Standard Postgres listening port; used when the caller omits `port`. */
+const DEFAULT_POSTGRES_PORT = 5432
+
 /**
  * `IStore` implementation targeting Postgres (including Neon serverless) via the
  * pg-compatible `postgres` driver. Persists runs and failures into two prefix-configurable
@@ -65,7 +68,7 @@ export class PostgresStore implements IStore {
     } else {
       this.sql = postgres({
         host: validated.host ?? 'localhost',
-        port: validated.port ?? 5432,
+        port: validated.port ?? DEFAULT_POSTGRES_PORT,
         ...(validated.database !== undefined && {
           database: validated.database,
         }),
