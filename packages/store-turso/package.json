@@ -1,7 +1,7 @@
 {
   "name": "@flaky-tests/store-turso",
   "version": "0.1.0",
-  "description": "Turso (libSQL) store adapter for flaky-tests \u2014 remote SQLite, free tier",
+  "description": "Turso (libSQL) store adapter for flaky-tests — remote SQLite, free tier",
   "type": "module",
   "exports": {
     ".": {
@@ -13,8 +13,14 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist/",
-    "src/",
+    "dist/**/*",
+    "src/**/*",
+    "!**/*.test.ts",
+    "!**/*.test.js",
+    "!**/*.test.d.ts",
+    "!**/*.test.d.ts.map",
+    "!**/*.integration.test.ts",
+    "!**/__snapshots__/**",
     "package.json",
     "LICENSE"
   ],
