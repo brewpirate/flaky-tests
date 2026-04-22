@@ -20,6 +20,8 @@ import {
   type PatternRow,
   parse,
   parseArray,
+  type RecentRun,
+  type RunStatus,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
@@ -296,6 +298,40 @@ export class TursoStore implements IStore {
       `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
     )
     return patterns
+  }
+
+  /** Return the N most recent runs ordered by `startedAt` DESC. */
+  async getRecentRuns(limit: number): Promise<RecentRun[]> {
+    const result = await this.wrap('getRecentRuns', () =>
+      this.client.execute({
+        sql: `SELECT run_id, started_at, ended_at, duration_ms, status,
+                     total_tests, passed_tests, failed_tests,
+                     errors_between_tests, git_sha, git_dirty
+                FROM runs
+               ORDER BY started_at DESC
+               LIMIT ?`,
+        args: [limit] as InArgs,
+      }),
+    )
+    return result.rows.map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      return {
+        runId: String(r.run_id),
+        startedAt: String(r.started_at),
+        endedAt: r.ended_at == null ? null : String(r.ended_at),
+        durationMs: r.duration_ms == null ? null : Number(r.duration_ms),
+        status: (r.status as RunStatus | null) ?? null,
+        totalTests: r.total_tests == null ? null : Number(r.total_tests),
+        passedTests: r.passed_tests == null ? null : Number(r.passed_tests),
+        failedTests: r.failed_tests == null ? null : Number(r.failed_tests),
+        errorsBetweenTests:
+          r.errors_between_tests == null
+            ? null
+            : Number(r.errors_between_tests),
+        gitSha: r.git_sha == null ? null : String(r.git_sha),
+        gitDirty: r.git_dirty == null ? null : Number(r.git_dirty) !== 0,
+      }
+    })
   }
 
   /** Close the underlying libSQL connection. */

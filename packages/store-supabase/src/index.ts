@@ -17,6 +17,8 @@ import {
   MS_PER_DAY,
   parse,
   parseArray,
+  type RecentRun,
+  type RunStatus,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
@@ -294,6 +296,50 @@ export class SupabaseStore implements IStore {
       `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
     )
     return patterns
+  }
+
+  /** Return the N most recent runs ordered by `startedAt` DESC. */
+  async getRecentRuns(limit: number): Promise<RecentRun[]> {
+    const { data, error } = await this.client
+      .from(this.runsTable)
+      .select(
+        'run_id, started_at, ended_at, duration_ms, status, total_tests, passed_tests, failed_tests, errors_between_tests, git_sha, git_dirty',
+      )
+      .order('started_at', { ascending: false })
+      .limit(limit)
+    if (error)
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'getRecentRuns',
+        message: error.message,
+        cause: error,
+      })
+    type Row = {
+      run_id: string
+      started_at: string
+      ended_at: string | null
+      duration_ms: number | null
+      status: string | null
+      total_tests: number | null
+      passed_tests: number | null
+      failed_tests: number | null
+      errors_between_tests: number | null
+      git_sha: string | null
+      git_dirty: boolean | null
+    }
+    return ((data ?? []) as unknown as Row[]).map((row) => ({
+      runId: row.run_id,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      durationMs: row.duration_ms,
+      status: (row.status as RunStatus | null) ?? null,
+      totalTests: row.total_tests,
+      passedTests: row.passed_tests,
+      failedTests: row.failed_tests,
+      errorsBetweenTests: row.errors_between_tests,
+      gitSha: row.git_sha,
+      gitDirty: row.git_dirty,
+    }))
   }
 
   /** No-op: the supabase-js client manages its HTTP connections internally and needs no teardown. Present to satisfy {@link IStore}. */

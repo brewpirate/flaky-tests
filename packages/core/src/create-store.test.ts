@@ -25,6 +25,9 @@ function makeFakeStore(): IStore {
     async getNewPatterns() {
       return []
     },
+    async getRecentRuns() {
+      return []
+    },
     async close() {},
   }
 }

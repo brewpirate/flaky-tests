@@ -126,10 +126,17 @@ async function main(
   }
 
   let patterns: FlakyPattern[]
+  let recentRuns: Awaited<ReturnType<typeof store.getRecentRuns>> = []
   try {
     patterns = await store.getNewPatterns(
       parse(getNewPatternsOptionsSchema, { windowDays, threshold }),
     )
+    // Fetch run history up front so `--html` can show it even when
+    // there are zero newly-flaky patterns. Cheap and always relevant
+    // to the report.
+    if (doHtml) {
+      recentRuns = await store.getRecentRuns(RECENT_RUNS_LIMIT)
+    }
   } finally {
     await store.close()
   }
@@ -138,6 +145,14 @@ async function main(
     console.log(
       `✓ No new flaky test patterns detected (window: ${windowDays}d, threshold: ${threshold})`,
     )
+    if (doHtml) {
+      writeAndOpenHtmlReport({
+        patterns,
+        windowDays,
+        recentRuns,
+        outPath: cliConfig.htmlOut,
+      })
+    }
     process.exit(0)
   }
 
@@ -194,25 +209,54 @@ async function main(
   }
 
   if (doHtml) {
-    const html = generateHtml(patterns, windowDays)
-    const outPath =
-      cliConfig.htmlOut ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
-    writeFileSync(outPath, html, 'utf8')
-    console.log(`✓ Report written to ${outPath}`)
-
-    // Open in default browser
-    let opener = 'xdg-open'
-    if (process.platform === 'darwin') opener = 'open'
-    else if (process.platform === 'win32') opener = 'start'
-    Bun.spawnSync({
-      cmd: [opener, outPath],
-      stdout: 'ignore',
-      stderr: 'ignore',
+    writeAndOpenHtmlReport({
+      patterns,
+      windowDays,
+      recentRuns,
+      outPath: cliConfig.htmlOut,
     })
-    console.log('  Opening in browser…\n')
   }
 
   process.exit(1)
+}
+
+/** Default limit for recent-runs queries surfaced in the HTML report. */
+const RECENT_RUNS_LIMIT = 20
+
+interface WriteAndOpenHtmlReportOpts {
+  patterns: FlakyPattern[]
+  windowDays: number
+  recentRuns: Awaited<ReturnType<IStore['getRecentRuns']>>
+  outPath: string | undefined
+}
+
+/** Render the HTML report with whatever patterns and recent runs we have,
+ *  write it to disk, and open it in the default browser. Always safe to
+ *  call — empty `patterns` produces a report that still shows the run
+ *  history, which is what users want after a clean run. */
+function writeAndOpenHtmlReport(opts: WriteAndOpenHtmlReportOpts): void {
+  const { patterns, windowDays, recentRuns, outPath } = opts
+  const html = generateHtml(patterns, windowDays, {
+    recentRuns,
+    kindBreakdown: [],
+    hotFiles: [],
+    failuresByRun: new Map(),
+  })
+  const resolvedPath =
+    outPath ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
+  writeFileSync(resolvedPath, html, 'utf8')
+  console.log(`✓ Report written to ${resolvedPath}`)
+
+  // Open in default browser
+  let opener = 'xdg-open'
+  if (process.platform === 'darwin') opener = 'open'
+  else if (process.platform === 'win32') opener = 'start'
+  Bun.spawnSync({
+    cmd: [opener, resolvedPath],
+    stdout: 'ignore',
+    stderr: 'ignore',
+  })
+  console.log('  Opening in browser…\n')
 }
 
 /** Open a GitHub issue per pattern, skipping any whose title already

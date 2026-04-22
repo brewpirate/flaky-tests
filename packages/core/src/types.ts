@@ -34,6 +34,25 @@ export type GetNewPatternsOptions = typeof getNewPatternsOptionsSchema.infer
 export type GitInfo = typeof gitInfoSchema.infer
 
 /**
+ * A recorded run as surfaced to the HTML report's "Recent runs" table.
+ * Strict subset of the `runs` row — everything the UI shows; nothing it
+ * doesn't need. Used by {@link IStore.getRecentRuns}.
+ */
+export interface RecentRun {
+  runId: string
+  startedAt: string
+  endedAt: string | null
+  durationMs: number | null
+  status: RunStatus | null
+  totalTests: number | null
+  passedTests: number | null
+  failedTests: number | null
+  errorsBetweenTests: number | null
+  gitSha: string | null
+  gitDirty: boolean | null
+}
+
+/**
  * Storage backend interface. All methods are async so implementations can
  * use any backend — SQLite, Supabase, Postgres, or custom.
  *
@@ -69,6 +88,12 @@ export interface IStore {
    * the current window but none in the prior window of the same length.
    */
   getNewPatterns(options?: GetNewPatternsOptions): Promise<FlakyPattern[]>
+  /**
+   * Return the most recent `limit` runs ordered by `startedAt` descending.
+   * Used by the HTML report so users see run history even when there are
+   * no newly-flaky patterns to investigate.
+   */
+  getRecentRuns(limit: number): Promise<RecentRun[]>
   /** Release pooled connections and file handles. */
   close(): Promise<void>
 }

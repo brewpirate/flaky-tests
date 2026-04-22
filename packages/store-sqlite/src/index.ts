@@ -20,6 +20,8 @@ import {
   mapRowToPattern,
   parse,
   parseArray,
+  type RecentRun,
+  type RunStatus,
   type UpdateRunInput,
   updateRunInputSchema,
 } from '@flaky-tests/core'
@@ -326,6 +328,46 @@ export class SqliteStore implements IStore {
       `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
     )
     return patterns
+  }
+
+  /** Return the N most recent runs ordered by `startedAt` DESC. */
+  async getRecentRuns(limit: number): Promise<RecentRun[]> {
+    type Row = {
+      run_id: string
+      started_at: string
+      ended_at: string | null
+      duration_ms: number | null
+      status: string | null
+      total_tests: number | null
+      passed_tests: number | null
+      failed_tests: number | null
+      errors_between_tests: number | null
+      git_sha: string | null
+      git_dirty: number | null
+    }
+    const rows = this.db
+      .query<Row, [number]>(
+        `SELECT run_id, started_at, ended_at, duration_ms, status,
+                total_tests, passed_tests, failed_tests,
+                errors_between_tests, git_sha, git_dirty
+           FROM runs
+          ORDER BY started_at DESC
+          LIMIT ?`,
+      )
+      .all(limit)
+    return rows.map((row) => ({
+      runId: row.run_id,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      durationMs: row.duration_ms,
+      status: (row.status as RunStatus | null) ?? null,
+      totalTests: row.total_tests,
+      passedTests: row.passed_tests,
+      failedTests: row.failed_tests,
+      errorsBetweenTests: row.errors_between_tests,
+      gitSha: row.git_sha,
+      gitDirty: row.git_dirty === null ? null : row.git_dirty !== 0,
+    }))
   }
 
   /** Close the underlying SQLite connection. */

@@ -288,6 +288,46 @@ export function runContractTests(
       expect(pattern).toBeUndefined()
     })
 
+    test('getRecentRuns returns inserted runs ordered by startedAt DESC', async () => {
+      // Three runs at different times. Unique per-invocation runIds keep
+      // shared-table adapters (postgres/supabase) isolated from other tests.
+      const suffix = crypto.randomUUID().slice(0, 8)
+      const oldest = `recent-old-${suffix}`
+      const middle = `recent-mid-${suffix}`
+      const newest = `recent-new-${suffix}`
+
+      await store.insertRun(makeRun(oldest, daysAgo(3)))
+      await store.updateRun(oldest, {
+        endedAt: daysAgo(3).toISOString(),
+        status: 'pass',
+        totalTests: 5,
+        passedTests: 5,
+        failedTests: 0,
+      })
+      await store.insertRun(makeRun(middle, daysAgo(2)))
+      await store.updateRun(middle, {
+        endedAt: daysAgo(2).toISOString(),
+        status: 'fail',
+        totalTests: 5,
+        passedTests: 4,
+        failedTests: 1,
+      })
+      await store.insertRun(makeRun(newest, daysAgo(1)))
+      await store.updateRun(newest, {
+        endedAt: daysAgo(1).toISOString(),
+        status: 'pass',
+        totalTests: 5,
+        passedTests: 5,
+        failedTests: 0,
+      })
+
+      const runs = await store.getRecentRuns(100)
+      const ours = runs
+        .filter((run) => [oldest, middle, newest].includes(run.runId))
+        .map((run) => run.runId)
+      expect(ours).toEqual([newest, middle, oldest])
+    })
+
     test('close() is idempotent — a second call does not throw', async () => {
       await store.close()
       await expect(store.close()).resolves.toBeUndefined()

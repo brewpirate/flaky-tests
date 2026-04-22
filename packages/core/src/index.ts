@@ -58,6 +58,7 @@ export type {
   InsertFailureInput,
   InsertRunInput,
   IStore,
+  RecentRun,
   RunStatus,
   UpdateRunInput,
 } from './types'

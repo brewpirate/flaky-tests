@@ -19,6 +19,8 @@ import {
   mapRowToPattern,
   parse,
   parseArray,
+  type RecentRun,
+  type RunStatus,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
@@ -290,6 +292,55 @@ export class PostgresStore implements IStore {
       `getNewPatterns: windowDays=${windowDays}, threshold=${threshold}, returned=${patterns.length} patterns`,
     )
     return patterns
+  }
+
+  /** Return the N most recent runs ordered by `startedAt` DESC. */
+  async getRecentRuns(limit: number): Promise<RecentRun[]> {
+    const runs = this.runsTable
+    const rows = await this.wrap(
+      'getRecentRuns',
+      () =>
+        this.sql<
+          Array<{
+            run_id: string
+            started_at: Date
+            ended_at: Date | null
+            duration_ms: number | null
+            status: string | null
+            total_tests: number | null
+            passed_tests: number | null
+            failed_tests: number | null
+            errors_between_tests: number | null
+            git_sha: string | null
+            git_dirty: boolean | null
+          }>
+        >`
+        SELECT run_id, started_at, ended_at, duration_ms, status,
+               total_tests, passed_tests, failed_tests,
+               errors_between_tests, git_sha, git_dirty
+          FROM ${this.sql(runs)}
+         ORDER BY started_at DESC
+         LIMIT ${limit}
+      `,
+    )
+    const toIso = (value: Date | string | null): string | null => {
+      if (value === null) return null
+      if (value instanceof Date) return value.toISOString()
+      return String(value)
+    }
+    return rows.map((row) => ({
+      runId: row.run_id,
+      startedAt: toIso(row.started_at) ?? '',
+      endedAt: toIso(row.ended_at),
+      durationMs: row.duration_ms,
+      status: (row.status as RunStatus | null) ?? null,
+      totalTests: row.total_tests,
+      passedTests: row.passed_tests,
+      failedTests: row.failed_tests,
+      errorsBetweenTests: row.errors_between_tests,
+      gitSha: row.git_sha,
+      gitDirty: row.git_dirty,
+    }))
   }
 
   /** Gracefully close the underlying PostgreSQL connection pool. */
