@@ -7,36 +7,24 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { type FailureKind, getTestCredentials } from '@flaky-tests/core'
+import { getTestCredentials } from '@flaky-tests/core'
+import {
+  daysAgo,
+  makeFailure,
+  runContractTests,
+} from '@flaky-tests/core/test-helpers'
 import { TursoStore } from './index'
 
 const credentials = getTestCredentials()
 const SKIP = !credentials.integration
 const TURSO_URL = credentials.tursoUrl ?? 'file::memory:'
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function daysAgo(n: number): Date {
-  return new Date(Date.now() - n * 86400000)
-}
-
-function makeFailure(
-  runId: string,
-  testName: string,
-  failedAt: Date,
-  kind: FailureKind = 'assertion',
-) {
-  return {
-    runId,
-    testFile: 'tests/example.test.ts',
-    testName,
-    failureKind: kind,
-    errorMessage: `${testName} failed`,
-    errorStack: null,
-    failedAt: failedAt.toISOString(),
-  }
+// Shared IStore contract — skipped unless INTEGRATION=1 is set.
+if (!SKIP) {
+  runContractTests('turso', async () => {
+    const store = new TursoStore({ url: TURSO_URL })
+    return store
+  })
 }
 
 // ---------------------------------------------------------------------------

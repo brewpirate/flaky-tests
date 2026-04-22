@@ -80,7 +80,11 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.test.ts", "**/*.integration.test.ts"],
+      "includes": [
+        "**/*.test.ts",
+        "**/*.integration.test.ts",
+        "packages/core/src/test-helpers/**"
+      ],
       "linter": {
         "rules": {
           "style": {

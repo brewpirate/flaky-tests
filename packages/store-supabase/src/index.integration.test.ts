@@ -26,6 +26,11 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { getTestCredentials } from '@flaky-tests/core'
+import {
+  daysAgo,
+  makeFailure,
+  runContractTests,
+} from '@flaky-tests/core/test-helpers'
 import { SupabaseStore } from './index'
 
 const credentials = getTestCredentials()
@@ -37,29 +42,19 @@ const SUPABASE_URL = credentials.supabaseUrl ?? ''
 const SUPABASE_KEY = credentials.supabaseKey ?? ''
 const TABLE_PREFIX = 'ft_integ'
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function daysAgo(n: number): Date {
-  return new Date(Date.now() - n * 86400000)
-}
-
-function makeFailure(
-  runId: string,
-  testName: string,
-  failedAt: Date,
-  kind = 'assertion' as const,
-) {
-  return {
-    runId,
-    testFile: 'tests/example.test.ts',
-    testName,
-    failureKind: kind,
-    errorMessage: `${testName} failed`,
-    errorStack: null,
-    failedAt: failedAt.toISOString(),
-  }
+// Shared IStore contract — each test builds a fresh SupabaseStore against
+// pre-created ft_integ_* tables; isolation is provided by per-test runIds
+// generated inside the contract suite.
+if (!SKIP) {
+  runContractTests(
+    'supabase',
+    () =>
+      new SupabaseStore({
+        url: SUPABASE_URL,
+        key: SUPABASE_KEY,
+        tablePrefix: TABLE_PREFIX,
+      }),
+  )
 }
 
 // Unique run IDs per test run to avoid collisions
