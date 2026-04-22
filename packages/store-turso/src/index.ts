@@ -23,6 +23,7 @@ import {
   parseArray,
   type RecentRun,
   type RunStatus,
+  raceAbort,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
@@ -252,6 +253,7 @@ export class TursoStore implements IStore {
   async getNewPatterns(
     options: GetNewPatternsOptions = {},
   ): Promise<FlakyPattern[]> {
+    options.signal?.throwIfAborted()
     const validated = parse(getNewPatternsOptionsSchema, options)
     const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
     const threshold = validated.threshold ?? DEFAULT_THRESHOLD
@@ -274,10 +276,14 @@ export class TursoStore implements IStore {
         ? [...preFilterArgs, threshold]
         : [...preFilterArgs, project, threshold]
 
-    // Identical query to store-sqlite — Turso speaks SQLite
+    // Identical query to store-sqlite — Turso speaks SQLite.
+    // libsql has no native AbortSignal support; raceAbort lets the caller
+    // observe an AbortError immediately while the request completes in the
+    // background and is discarded.
     const result = await this.wrap('getNewPatterns', () =>
-      this.client.execute({
-        sql: `SELECT
+      raceAbort(
+        this.client.execute({
+          sql: `SELECT
                  f.test_file,
                  f.test_name,
                  SUM(CASE WHEN f.failed_at > ?  THEN 1 ELSE 0 END) AS recent_fails,
@@ -297,8 +303,10 @@ export class TursoStore implements IStore {
               GROUP BY f.test_file, f.test_name
               HAVING recent_fails >= ? AND prior_fails = 0
               ORDER BY recent_fails DESC`,
-        args: args as InArgs,
-      }),
+          args: args as InArgs,
+        }),
+        options.signal,
+      ),
     )
 
     // libsql Row type doesn't expose named fields — cast through unknown to PatternRow
@@ -314,20 +322,24 @@ export class TursoStore implements IStore {
 
   /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
-    const { limit, project = null } = options
+    options.signal?.throwIfAborted()
+    const { limit, project = null, signal } = options
     const projectClause = project === null ? 'project IS NULL' : 'project = ?'
     const args = project === null ? [limit] : [project, limit]
     const result = await this.wrap('getRecentRuns', () =>
-      this.client.execute({
-        sql: `SELECT run_id, project, started_at, ended_at, duration_ms, status,
-                     total_tests, passed_tests, failed_tests,
-                     errors_between_tests, git_sha, git_dirty
-                FROM runs
-               WHERE ${projectClause}
-               ORDER BY started_at DESC
-               LIMIT ?`,
-        args: args as InArgs,
-      }),
+      raceAbort(
+        this.client.execute({
+          sql: `SELECT run_id, project, started_at, ended_at, duration_ms, status,
+                       total_tests, passed_tests, failed_tests,
+                       errors_between_tests, git_sha, git_dirty
+                  FROM runs
+                 WHERE ${projectClause}
+                 ORDER BY started_at DESC
+                 LIMIT ?`,
+          args: args as InArgs,
+        }),
+        signal,
+      ),
     )
     return result.rows.map((row) => {
       const r = row as unknown as Record<string, unknown>

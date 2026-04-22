@@ -273,6 +273,8 @@ export class SqliteStore implements IStore {
   async getNewPatterns(
     options: GetNewPatternsOptions = {},
   ): Promise<FlakyPattern[]> {
+    // bun:sqlite is synchronous — no mid-query cancellation possible.
+    options.signal?.throwIfAborted()
     const validated = parse(getNewPatternsOptionsSchema, options)
     const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
     const threshold = validated.threshold ?? DEFAULT_THRESHOLD
@@ -344,6 +346,7 @@ export class SqliteStore implements IStore {
 
   /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
+    options.signal?.throwIfAborted()
     const { limit, project = null } = options
     type Row = {
       run_id: string
