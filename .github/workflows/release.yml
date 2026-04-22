@@ -15,7 +15,15 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
     steps:
+      - name: Verify release prerequisites
+        run: |
+          if [ "$HAS_NPM_TOKEN" != "true" ]; then
+            echo "::warning::NPM_TOKEN secret is not set — publish steps will be skipped. Add it under Settings → Secrets and variables → Actions to enable publishing."
+          fi
+
       - uses: actions/checkout@v6
 
       - uses: oven-sh/setup-bun@v2
@@ -30,6 +38,7 @@ jobs:
 
       - name: Create release PR or publish
         id: changesets
+        if: env.HAS_NPM_TOKEN == 'true'
         uses: changesets/action@v1
         with:
           version: bun run version-packages
@@ -41,7 +50,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Sync JSR versions and publish
-        if: steps.changesets.outputs.published == 'true'
+        if: env.HAS_NPM_TOKEN == 'true' && steps.changesets.outputs.published == 'true'
         run: |
           for dir in packages/*/; do
             [ ! -f "$dir/jsr.json" ] && continue
