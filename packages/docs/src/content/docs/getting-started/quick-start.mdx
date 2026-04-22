@@ -4,6 +4,7 @@ description: Get flaky-tests running in under two minutes with Bun or Vitest.
 ---
 
 import { Steps, Tabs, TabItem } from '@astrojs/starlight/components'
+import { PackageManagers } from 'starlight-package-managers'
 
 Pick your test runner. Both paths use the default **SQLite** store and capture failures locally in under two minutes.
 
@@ -74,9 +75,8 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 
 1. **Install the reporter and a store**
 
-   ```sh
-   npm install -D @flaky-tests/plugin-vitest @flaky-tests/store-sqlite
-   ```
+   <PackageManagers pkg="@flaky-tests/plugin-vitest @flaky-tests/store-sqlite" dev />
+
 
 2. **Add the reporter to `vitest.config.ts`**
 
@@ -95,9 +95,7 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 
 3. **Run your tests**
 
-   ```sh
-   npx vitest run
-   ```
+   <PackageManagers type="exec" pkg="vitest" args="run" />
 
    Failures are written to `node_modules/.cache/flaky-tests/failures.db`. Nothing else changes — tests still pass and fail as normal.
 
@@ -105,9 +103,8 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 
    After a few runs (or in CI after a few days):
 
-   ```sh
-   npx @flaky-tests/cli
-   ```
+   <PackageManagers type="exec" pkg="@flaky-tests/cli" />
+
 
    If new patterns are detected you'll see something like:
 
@@ -123,9 +120,7 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 
 5. **Generate an investigation prompt**
 
-   ```sh
-   npx @flaky-tests/cli --prompt
-   ```
+   <PackageManagers type="exec" pkg="@flaky-tests/cli" args="--prompt" />
 
    Copy the output into Claude, Cursor, or Copilot to investigate.
 

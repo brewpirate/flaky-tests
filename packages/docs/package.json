@@ -13,5 +13,8 @@
     "@catppuccin/starlight": "^2.0.1",
     "astro": "^6.1.6",
     "sharp": "^0.33.0"
+  },
+  "devDependencies": {
+    "starlight-package-managers": "^0.12.0"
   }
 }

@@ -4,6 +4,7 @@ description: Add the Vitest reporter to capture test failures in Vitest projects
 ---
 
 import { Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components'
+import { PackageManagers } from 'starlight-package-managers'
 
 The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using the standard reporter API and writes failures to your chosen store.
 
@@ -13,15 +14,8 @@ The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using t
 
 1. **Install the plugin and a store**
 
-   ```sh
-   # npm / pnpm / yarn
-   npm install -D @flaky-tests/plugin-vitest @flaky-tests/store-sqlite
-   ```
+   <PackageManagers pkg="@flaky-tests/plugin-vitest @flaky-tests/store-sqlite" dev />
 
-   ```sh
-   # bun
-   bun add -D @flaky-tests/plugin-vitest @flaky-tests/store-sqlite
-   ```
 
 2. **Add the reporter to `vitest.config.ts`**
 
@@ -38,9 +32,7 @@ The Vitest plugin is a **reporter** — it hooks into Vitest's lifecycle using t
 
 3. **Run your tests**
 
-   ```sh
-   npx vitest run
-   ```
+   <PackageManagers type="exec" pkg="vitest" args="run" />
 
    Failures are written to `node_modules/.cache/flaky-tests/failures.db`.
 
