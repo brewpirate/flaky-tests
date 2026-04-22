@@ -58,7 +58,10 @@ import { createPreload } from '@flaky-tests/plugin-bun'
 
 const config = resolveConfig()
 if (!config.plugin.disabled) {
-  const store = await createStoreFromConfig(config)
+  // The `import(spec)` closure must live in YOUR file so Node resolves
+  // against your own node_modules — core can't see packages linked into
+  // your project's location.
+  const store = await createStoreFromConfig(config, (spec) => import(spec))
   createPreload(store)
 }
 ```

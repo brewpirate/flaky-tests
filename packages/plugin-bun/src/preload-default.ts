@@ -24,7 +24,10 @@ import { createPreload } from './preload'
 const config = resolveConfig()
 if (!config.plugin.disabled) {
   try {
-    const store = await createStoreFromConfig(config)
+    // The `import(spec)` closure lives in this file so specifiers resolve
+    // against plugin-bun's own `node_modules` — core can't see the
+    // consumer's linked store packages from its own location.
+    const store = await createStoreFromConfig(config, (spec) => import(spec))
     createPreload(store)
   } catch (error) {
     // Fail fast with actionable text. Bun treats a preload throw as a

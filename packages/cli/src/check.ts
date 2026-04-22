@@ -52,11 +52,13 @@ import { copyToClipboard, generatePrompt } from './prompt'
 
 const log = createLogger('cli')
 
-/** Thin pass-through to the shared dispatcher. Kept here so the existing
- *  CLI call site stays readable; all logic lives in @flaky-tests/core. */
+/** Thin pass-through to the shared dispatcher. The `import(spec)` closure
+ *  is captured in THIS file so dynamic specifiers resolve against the
+ *  CLI's own `node_modules` — not core's. That's what makes linked /
+ *  workspace setups find adapters that core's location can't see. */
 async function resolveStore(config: Config): Promise<IStore> {
   log.debug(`resolveStore: type=${config.store.type}`)
-  return createStoreFromConfig(config)
+  return createStoreFromConfig(config, (spec) => import(spec))
 }
 
 const VERSION = '0.1.0'

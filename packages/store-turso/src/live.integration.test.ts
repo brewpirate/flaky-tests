@@ -65,7 +65,10 @@ describe.skipIf(SKIP)('TursoStore — live E2E via dispatcher', () => {
   })
 
   test('resolveConfig + createStoreFromConfig + migrate on a live DB', async () => {
-    const store = await createStoreFromConfig(buildConfig())
+    const store = await createStoreFromConfig(
+      buildConfig(),
+      (spec) => import(spec),
+    )
     try {
       // Migrate is idempotent; we run it twice to mirror how the CLI
       // behaves across repeat invocations against the same DB.
@@ -80,7 +83,7 @@ describe.skipIf(SKIP)('TursoStore — live E2E via dispatcher', () => {
     const config = buildConfig()
 
     // ──── Writer side: what plugin-bun's preload would record ────
-    const writer = await createStoreFromConfig(config)
+    const writer = await createStoreFromConfig(config, (spec) => import(spec))
     await writer.migrate()
 
     const testName = `${RUN_PREFIX}-flaky-login-redirect`
@@ -104,7 +107,7 @@ describe.skipIf(SKIP)('TursoStore — live E2E via dispatcher', () => {
     }
 
     // ──── Reader side: what the CLI does after `resolveStore` ────
-    const reader = await createStoreFromConfig(config)
+    const reader = await createStoreFromConfig(config, (spec) => import(spec))
     try {
       await reader.migrate()
       const patterns = await reader.getNewPatterns({

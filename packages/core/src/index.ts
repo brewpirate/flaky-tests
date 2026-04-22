@@ -9,7 +9,10 @@ export {
   storeConfigSchema,
   type TestCredentials,
 } from './config'
-export { createStoreFromConfig } from './create-store'
+export {
+  createStoreFromConfig,
+  type StoreModuleImporter,
+} from './create-store'
 export {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,

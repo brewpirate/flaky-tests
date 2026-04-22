@@ -50,14 +50,28 @@ export const myStorePlugin = definePlugin({
 const store = await createStoreFromConfig(resolveConfig())
 ```
 
-#### `createStoreFromConfig(config)` resolution order
+#### `createStoreFromConfig(config, importer)` resolution order
 
 1. **Already registered?** Look up `store-<type>` in `listRegisteredPlugins()`. If the module was imported elsewhere, the descriptor is there.
-2. **Candidate imports.** Try each of, in order:
+2. **Candidate imports.** Call the supplied `importer(spec)` for each of, in order:
    1. `config.store.module` — explicit override (also settable via `FLAKY_TESTS_STORE_MODULE`).
    2. `@flaky-tests/store-<type>` — convention for first-party adapters.
-   After each successful `import()`, re-check the registry.
+   After each successful import, re-check the registry.
 3. **Fail loudly.** Throw `MissingStorePackageError` with an actionable `bun add` hint.
+
+#### Why `importer` is an injected parameter
+
+`await import(spec)` resolves relative to the **calling module's** filesystem location. If core did the `import()` itself, Node would walk up from `packages/core/…` — missing store packages linked into a consumer's own `node_modules` (workspace symlinks don't hoist the way published-package installs do).
+
+The consumer (CLI / plugin-bun / your own preload) passes a closure that captures its own module context:
+
+```ts
+await createStoreFromConfig(config, (spec) => import(spec))
+```
+
+The closure's `import(spec)` resolves from the consumer's location, where optional store deps actually live. This is the standard ecosystem pattern (Jest transformers, webpack loaders, Vite plugins all take a resolve callback for the same reason).
+
+A default `(spec) => import(spec)` is provided so tests and fully-bundled builds still work without ceremony, but real hosts should always pass their own.
 
 This registry-first dispatch is why every store package is an `optionalDependencies` entry on the CLI and plugin-bun — users install only the backend they actually use.
 
@@ -73,7 +87,7 @@ import {
 } from '@flaky-tests/core'
 
 const config = resolveConfig()
-const store = await createStoreFromConfig(config)
+const store = await createStoreFromConfig(config, (spec) => import(spec))
 await store.migrate()
 const patterns = await store.getNewPatterns()
 await store.close()

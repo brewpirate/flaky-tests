@@ -9,22 +9,38 @@
  *   1. If a descriptor named `store-<type>` is already registered (because
  *      the user imported the module themselves, e.g. inside a custom
  *      preload), use it directly.
- *   2. Else try each candidate module specifier in turn and re-check the
- *      registry after each import succeeds. Candidates:
+ *   2. Else call the `importer` for each candidate specifier and re-check
+ *      the registry after each success. Candidates:
  *        a. `config.store.module` (explicit override / third-party path)
  *        b. `@flaky-tests/store-<type>` (convention for first-party adapters)
- *   3. If nothing matches, throw `MissingStorePackageError` with an
- *      actionable install hint.
+ *   3. If nothing matches, throw `MissingStorePackageError`.
  *
- * Dynamic `import()` is deliberate: it makes every store adapter an
- * `optionalDependencies` entry on consumers (cli / plugin-bun) so users
- * only pay the install cost for the backend they actually use.
+ * ## Why `importer` is an injected callback
+ *
+ * `await import(spec)` resolves specifiers relative to the **calling
+ * module's** filesystem location. If this file does the import, Node
+ * walks up from `packages/core/` — which misses store packages that
+ * were linked into a consumer's own `node_modules` (workspace symlinks
+ * don't hoist the way published-package installs do).
+ *
+ * The consumer (CLI, plugin-bun) owns its own dep graph, so the consumer
+ * passes a closure that captures *its* module context. The default
+ * `(spec) => import(spec)` is fine for tests and for tree-shaken
+ * published builds where core and the stores end up in the same
+ * `node_modules`, but every real host should pass its own:
+ *
+ * ```ts
+ * // In a CLI or plugin entry file:
+ * await createStoreFromConfig(config, (spec) => import(spec))
+ * ```
  */
 
 import type { Config } from './config'
 import { MissingStorePackageError } from './errors'
 import { listRegisteredPlugins } from './plugin'
 import type { IStore } from './types'
+
+export type StoreModuleImporter = (spec: string) => Promise<unknown>
 
 interface DynamicImportError extends Error {
   code?: string
@@ -47,7 +63,12 @@ function findDescriptor(storeType: string) {
   )
 }
 
-export async function createStoreFromConfig(config: Config): Promise<IStore> {
+const defaultImporter: StoreModuleImporter = (spec) => import(spec)
+
+export async function createStoreFromConfig(
+  config: Config,
+  importer: StoreModuleImporter = defaultImporter,
+): Promise<IStore> {
   const storeType = config.store.type
 
   let descriptor = findDescriptor(storeType)
@@ -60,7 +81,7 @@ export async function createStoreFromConfig(config: Config): Promise<IStore> {
 
     for (const spec of candidateModules) {
       try {
-        await import(spec)
+        await importer(spec)
       } catch (error) {
         if (isModuleNotFound(error)) continue
         throw error

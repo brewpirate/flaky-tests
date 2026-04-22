@@ -27,7 +27,10 @@ import {
 } from '@flaky-tests/core'
 import { FlakyTestsReporter } from '@flaky-tests/plugin-vitest'
 
-const store = await createStoreFromConfig(resolveConfig())
+const store = await createStoreFromConfig(
+  resolveConfig(),
+  (spec) => import(spec),
+)
 
 export default defineConfig({
   test: {

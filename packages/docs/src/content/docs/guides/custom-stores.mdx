@@ -149,7 +149,9 @@ import { createPreload } from '@flaky-tests/plugin-bun'
 
 const config = resolveConfig()
 if (!config.plugin.disabled) {
-  const store = await createStoreFromConfig(config)
+  // Pass YOUR file's `import()` closure so the dispatcher resolves
+  // specifiers against your node_modules — not core's.
+  const store = await createStoreFromConfig(config, (spec) => import(spec))
   createPreload(store)
 }
 ```
