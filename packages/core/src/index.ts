@@ -9,6 +9,7 @@ export {
   storeConfigSchema,
   type TestCredentials,
 } from './config'
+export { createStoreFromConfig } from './create-store'
 export {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
@@ -18,7 +19,7 @@ export {
   MS_PER_DAY,
 } from './defaults'
 export { DescribeStack } from './describe-stack'
-export { ConfigError, StoreError } from './errors'
+export { ConfigError, MissingStorePackageError, StoreError } from './errors'
 export { captureGitInfo, type RunCommand } from './git'
 export { escapeHtml } from './html-utils'
 export {

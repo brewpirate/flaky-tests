@@ -10,9 +10,9 @@
       "types": "./dist/index.d.ts"
     },
     "./preload": {
-      "bun": "./src/preload-sqlite.ts",
-      "import": "./dist/preload-sqlite.js",
-      "types": "./dist/preload-sqlite.d.ts"
+      "bun": "./src/preload-default.ts",
+      "import": "./dist/preload-default.js",
+      "types": "./dist/preload-default.d.ts"
     },
     "./run-tracked": {
       "bun": "./src/run-tracked.ts",
@@ -25,7 +25,7 @@
   "files": ["dist/", "src/", "package.json", "LICENSE"],
   "publishConfig": { "access": "public" },
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/preload-sqlite.ts ./src/run-tracked.ts --outdir dist --format esm --target node --external @flaky-tests/core --external @flaky-tests/store-sqlite --external bun:sqlite --external bun:test",
+    "build": "bun build ./src/index.ts ./src/preload-default.ts ./src/run-tracked.ts --outdir dist --format esm --target node --external @flaky-tests/core --external @flaky-tests/store-sqlite --external @flaky-tests/store-turso --external @flaky-tests/store-supabase --external @flaky-tests/store-postgres --external bun:sqlite --external bun:test",
     "build:types": "tsc --project tsconfig.build.json",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
@@ -35,8 +35,13 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@flaky-tests/core": "workspace:*",
-    "@flaky-tests/store-sqlite": "workspace:*"
+    "@flaky-tests/core": "workspace:*"
+  },
+  "optionalDependencies": {
+    "@flaky-tests/store-sqlite": "workspace:*",
+    "@flaky-tests/store-turso": "workspace:*",
+    "@flaky-tests/store-supabase": "workspace:*",
+    "@flaky-tests/store-postgres": "workspace:*"
   },
   "devDependencies": {
     "bun-types": "latest"

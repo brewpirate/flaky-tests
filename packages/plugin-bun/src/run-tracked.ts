@@ -10,14 +10,21 @@
  *   bun run @flaky-tests/plugin-bun/run-tracked [bun-test-args...]
  *
  * On non-zero exit, if the preload recorded status='pass', the run is
- * reconciled to 'fail' and errors_between_tests is incremented.
+ * reconciled to 'fail' and errors_between_tests is incremented. Reconciliation
+ * is SQLite-only today (relies on `SqliteStore.reconcileRun`), so non-sqlite
+ * configs skip it with a debug log and the run's status stays whatever the
+ * preload wrote.
  */
 
 // biome-ignore-all lint/suspicious/noConsole: CLI wrapper
 
-import { publishRunIdForSubprocess, resolveConfig } from '@flaky-tests/core'
-import { SqliteStore } from '@flaky-tests/store-sqlite'
+import {
+  createLogger,
+  publishRunIdForSubprocess,
+  resolveConfig,
+} from '@flaky-tests/core'
 
+const log = createLogger('run-tracked')
 const config = resolveConfig()
 const DB_PATH =
   config.store.type === 'sqlite' && config.store.path !== undefined
@@ -48,13 +55,26 @@ async function main(): Promise<number> {
   return exitCode
 }
 
-/** Flips a recorded-as-pass run to fail when the subprocess exited non-zero, catching failures that never surfaced as test-level errors. */
+/**
+ * Flips a recorded-as-pass run to fail when the subprocess exited non-zero.
+ * SQLite-only: uses `SqliteStore.reconcileRun`, which isn't in IStore and
+ * can't be ported to remote stores without a network round-trip we'd rather
+ * skip here. For non-sqlite configs we leave the run as-recorded and debug-log.
+ */
 async function reconcileRun(runId: string): Promise<void> {
+  if (config.store.type !== 'sqlite') {
+    log.debug(
+      `reconcileRun: skipped (store.type=${config.store.type}; only sqlite supports in-process reconcile)`,
+    )
+    return
+  }
   try {
     if (!(await Bun.file(DB_PATH).exists())) {
       // DB doesn't exist — preload never ran or a different path is in use.
       return
     }
+    // Dynamic import: store-sqlite is an optional dep on plugin-bun.
+    const { SqliteStore } = await import('@flaky-tests/store-sqlite')
     const store = new SqliteStore({ dbPath: DB_PATH })
     try {
       store.reconcileRun(runId)

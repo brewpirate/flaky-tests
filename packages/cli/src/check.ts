@@ -32,8 +32,10 @@ import { join } from 'node:path'
 import type { Config, FlakyPattern, IStore } from '@flaky-tests/core'
 import {
   createLogger,
+  createStoreFromConfig,
   getNewPatternsOptionsSchema,
   MAX_CLI_ERROR_MESSAGE_LENGTH,
+  MissingStorePackageError,
   parse,
   resolveConfig,
 } from '@flaky-tests/core'
@@ -50,40 +52,11 @@ import { copyToClipboard, generatePrompt } from './prompt'
 
 const log = createLogger('cli')
 
-/** Construct the store implementation for the resolved config's store variant.
- *  Import is deferred so users pay the dependency cost only for the backend
- *  they actually use. */
+/** Thin pass-through to the shared dispatcher. Kept here so the existing
+ *  CLI call site stays readable; all logic lives in @flaky-tests/core. */
 async function resolveStore(config: Config): Promise<IStore> {
-  const { store } = config
-  log.debug(`resolveStore: type=${store.type}`)
-
-  switch (store.type) {
-    case 'turso': {
-      const { TursoStore } = await import('@flaky-tests/store-turso')
-      return new TursoStore({
-        url: store.url,
-        ...(store.authToken !== undefined && { authToken: store.authToken }),
-      })
-    }
-    case 'supabase': {
-      const { SupabaseStore } = await import('@flaky-tests/store-supabase')
-      return new SupabaseStore({ url: store.url, key: store.key })
-    }
-    case 'postgres': {
-      const { PostgresStore } = await import('@flaky-tests/store-postgres')
-      return new PostgresStore(
-        store.connectionString !== undefined
-          ? { connectionString: store.connectionString }
-          : {},
-      )
-    }
-    case 'sqlite': {
-      const { SqliteStore } = await import('@flaky-tests/store-sqlite')
-      return new SqliteStore({
-        ...(store.path !== undefined && { dbPath: store.path }),
-      })
-    }
-  }
+  log.debug(`resolveStore: type=${config.store.type}`)
+  return createStoreFromConfig(config)
 }
 
 const VERSION = '0.1.0'
@@ -308,6 +281,10 @@ try {
 } catch (error) {
   if (error instanceof ConfigError) {
     console.error(`error: ${error.message}`)
+    process.exit(2)
+  }
+  if (error instanceof MissingStorePackageError) {
+    console.error(error.message)
     process.exit(2)
   }
   if (error instanceof CliError) {
