@@ -28,6 +28,22 @@ const DB_PATH =
     ? reportConfig.store.path
     : 'node_modules/.cache/flaky-tests/failures.db'
 const DEFAULT_OUT_PATH = 'test-report.html'
+
+// --- Rendering constants -------------------------------------------------
+const SEVERITY_HIGH_THRESHOLD = 10
+const SEVERITY_MEDIUM_THRESHOLD = 5
+const SEVERITY_LOW_THRESHOLD = 2
+const WARN_FLAKY_TEST_LIMIT = 3
+const REPORT_WINDOW_DAYS = 30
+const MS_PER_SECOND = 1000
+const SECONDS_PER_MINUTE = 60
+const SECONDS_PER_HOUR = 3600
+const SECONDS_PER_DAY = 86400
+const SHORT_SHA_LENGTH = 7
+const PERCENT_SCALE = 100
+const PASS_RATE_GOOD_THRESHOLD = 95
+const PASS_RATE_WARN_THRESHOLD = 80
+const MAX_LOGO_WALK_UP_DIRS = 5
 const outFlagIndex = process.argv.indexOf('--out')
 const OUT_PATH =
   outFlagIndex !== -1 && outFlagIndex + 1 < process.argv.length
@@ -224,9 +240,9 @@ function loadData(): {
 
 /** Bucket a failure count into a CSS severity class so the UI can colour-code it. */
 function severityClass(count: number): string {
-  if (count >= 10) return 'sev-high'
-  if (count >= 5) return 'sev-med'
-  if (count >= 2) return 'sev-low'
+  if (count >= SEVERITY_HIGH_THRESHOLD) return 'sev-high'
+  if (count >= SEVERITY_MEDIUM_THRESHOLD) return 'sev-med'
+  if (count >= SEVERITY_LOW_THRESHOLD) return 'sev-low'
   return 'sev-single'
 }
 
@@ -239,32 +255,36 @@ function kindBadge(kind: string): string {
 /** Humanize a millisecond duration as ms/s/min so run rows stay scannable. */
 function formatDuration(ms: number | null): string {
   if (ms === null) return '—'
-  if (ms < 1000) return `${ms}ms`
-  const s = ms / 1000
-  if (s < 60) return `${s.toFixed(1)}s`
-  return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`
+  if (ms < MS_PER_SECOND) return `${ms}ms`
+  const s = ms / MS_PER_SECOND
+  if (s < SECONDS_PER_MINUTE) return `${s.toFixed(1)}s`
+  return `${Math.floor(s / SECONDS_PER_MINUTE)}m ${Math.round(s % SECONDS_PER_MINUTE)}s`
 }
 
 /** Trim a git SHA to the conventional 7-char prefix for compact display. */
 function shortSha(sha: string | null): string {
   if (sha === null) return '—'
-  return sha.slice(0, 7)
+  return sha.slice(0, SHORT_SHA_LENGTH)
 }
 
 /** Convert an ISO timestamp to a coarse "Xs/m/h/d ago" string for at-a-glance recency. */
 function formatRelative(iso: string): string {
-  const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diffSec < 60) return `${diffSec}s ago`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
-  return `${Math.floor(diffSec / 86400)}d ago`
+  const diffSec = Math.floor(
+    (Date.now() - new Date(iso).getTime()) / MS_PER_SECOND,
+  )
+  if (diffSec < SECONDS_PER_MINUTE) return `${diffSec}s ago`
+  if (diffSec < SECONDS_PER_HOUR)
+    return `${Math.floor(diffSec / SECONDS_PER_MINUTE)}m ago`
+  if (diffSec < SECONDS_PER_DAY)
+    return `${Math.floor(diffSec / SECONDS_PER_HOUR)}h ago`
+  return `${Math.floor(diffSec / SECONDS_PER_DAY)}d ago`
 }
 
 /** Map a pass-rate percentage to a tone class so the summary card reflects health at a glance. */
 function passRateTone(pct: number | null): string {
   if (pct === null) return 'tone-muted'
-  if (pct >= 95) return 'tone-good'
-  if (pct >= 80) return 'tone-warn'
+  if (pct >= PASS_RATE_GOOD_THRESHOLD) return 'tone-good'
+  if (pct >= PASS_RATE_WARN_THRESHOLD) return 'tone-warn'
   return 'tone-bad'
 }
 
@@ -272,7 +292,7 @@ function passRateTone(pct: number | null): string {
 function renderSummary(s: Summary): string {
   let flakyTone = 'tone-bad'
   if (s.activeFlakyTests === 0) flakyTone = 'tone-good'
-  else if (s.activeFlakyTests <= 3) flakyTone = 'tone-warn'
+  else if (s.activeFlakyTests <= WARN_FLAKY_TEST_LIMIT) flakyTone = 'tone-warn'
   const flakyLabel =
     s.activeFlakyTests === 0
       ? 'none'
@@ -284,7 +304,9 @@ function renderSummary(s: Summary): string {
     ? escapeHtml(s.worstFile.file.split('/').pop() ?? s.worstFile.file)
     : '—'
   const pct =
-    s.recentRunPassRate !== null ? Math.round(s.recentRunPassRate * 100) : null
+    s.recentRunPassRate !== null
+      ? Math.round(s.recentRunPassRate * PERCENT_SCALE)
+      : null
 
   return `<section class="summary-grid">
     <div class="summary-card ${flakyTone}">
@@ -342,7 +364,7 @@ function renderFlaky(rows: FlakyRow[]): string {
         .split(',')
         .map((k) => kindBadge(k.trim()))
         .join(' ')
-      const prompt = generatePrompt(flakyRowToPattern(r), 30)
+      const prompt = generatePrompt(flakyRowToPattern(r), REPORT_WINDOW_DAYS)
       const escapedPrompt = escapeHtml(prompt)
       return `<tr>
       <td><span class="count ${severityClass(r.fails)}">${r.fails}</span></td>
@@ -372,7 +394,8 @@ function renderKinds(rows: KindRow[]): string {
   const total = rows.reduce((s, r) => s + r.count, 0)
   return `<div class="kind-grid">${rows
     .map((r) => {
-      const pct = total === 0 ? 0 : Math.round((r.count / total) * 100)
+      const pct =
+        total === 0 ? 0 : Math.round((r.count / total) * PERCENT_SCALE)
       return `<div class="kind-card kind-${escapeHtml(r.failure_kind)}">
       <div class="kind-label">${escapeHtml(r.failure_kind)}</div>
       <div class="kind-count">${r.count}</div>
@@ -427,7 +450,10 @@ function renderHotFiles(rows: HotFileRow[], flakyRows: FlakyRow[]): string {
       const worstTest = flakyRows.find((f) => f.test_file === r.test_file)
       let promptCell = ''
       if (worstTest) {
-        const prompt = generatePrompt(flakyRowToPattern(worstTest), 30)
+        const prompt = generatePrompt(
+          flakyRowToPattern(worstTest),
+          REPORT_WINDOW_DAYS,
+        )
         const escapedPrompt = escapeHtml(prompt)
         promptCell = `<td class="prompt-actions">
           <button class="copy-btn" data-prompt="${escapedPrompt}" title="Copy AI prompt for worst test">Copy</button>
@@ -539,7 +565,7 @@ function loadLogo(): string | null {
   try {
     // Walk up from this file to find the logo at the repo root
     let directory = dirname(new URL(import.meta.url).pathname)
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < MAX_LOGO_WALK_UP_DIRS; i++) {
       for (const filename of ['mrflaky-48.png', 'mrflaky.png']) {
         try {
           const buffer = readFileSync(resolve(directory, filename))

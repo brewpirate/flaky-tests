@@ -48,21 +48,61 @@
     "rules": {
       "complexity": {
         "noUselessTernary": "error",
-        "noUselessTypeConstraint": "error"
+        "noUselessTypeConstraint": "error",
+        "noForEach": "error"
+      },
+      "correctness": {
+        "noUnusedImports": "error"
       },
       "recommended": true,
       "suspicious": {
-        "noConsole": "error"
+        "noConsole": "error",
+        "noExplicitAny": "error",
+        "noTsIgnore": "error",
+        "noEmptyBlockStatements": "error"
       },
       "style": {
         "noNestedTernary": "error",
-        "useNodejsImportProtocol": "off"
+        "useNodejsImportProtocol": "off",
+        "noProcessEnv": "error",
+        "noMagicNumbers": "error",
+        "noParameterAssign": "error",
+        "useArrayLiterals": "error",
+        "noNonNullAssertion": "error",
+        "useImportType": "error",
+        "useExportType": "error"
       },
       "nursery": {
-        "useSortedClasses": "info"
+        "useSortedClasses": "info",
+        "noFloatingPromises": "error"
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.integration.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noMagicNumbers": "off"
+          },
+          "suspicious": {
+            "noEmptyBlockStatements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/core/src/config.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noProcessEnv": "off"
+          }
+        }
+      }
+    }
+  ],
   "vcs": {
     "clientKind": "git",
     "defaultBranch": "main",

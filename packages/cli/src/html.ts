@@ -52,17 +52,22 @@ function esc(s: string): string {
 
 /** Buckets a recent-failure count into the four visual severity tiers that
  *  drive card accents, TOC dots, and pill colors throughout the report. */
+const SEVERITY_CRITICAL_THRESHOLD = 10
+const SEVERITY_HIGH_THRESHOLD = 5
+const SEVERITY_MEDIUM_THRESHOLD = 2
+const MAX_VISIBLE_PATH_SEGMENTS = 3
+
 function severityRank(recentFails: number): {
   label: string
   className: string
 } {
-  if (recentFails >= 10) {
+  if (recentFails >= SEVERITY_CRITICAL_THRESHOLD) {
     return { label: 'critical', className: 'sev-critical' }
   }
-  if (recentFails >= 5) {
+  if (recentFails >= SEVERITY_HIGH_THRESHOLD) {
     return { label: 'high', className: 'sev-high' }
   }
-  if (recentFails >= 2) {
+  if (recentFails >= SEVERITY_MEDIUM_THRESHOLD) {
     return { label: 'medium', className: 'sev-medium' }
   }
   return { label: 'low', className: 'sev-low' }
@@ -72,10 +77,10 @@ function severityRank(recentFails: number): {
  *  scannable without losing the locating suffix. */
 function shortFile(path: string): string {
   const parts = path.split('/')
-  if (parts.length <= 3) {
+  if (parts.length <= MAX_VISIBLE_PATH_SEGMENTS) {
     return path
   }
-  return `…/${parts.slice(-3).join('/')}`
+  return `…/${parts.slice(-MAX_VISIBLE_PATH_SEGMENTS).join('/')}`
 }
 
 /** Renders one flaky-pattern card — severity-colored header, stats, last error,
@@ -131,19 +136,27 @@ function patternCard(p: FlakyPattern, i: number, windowDays: number): string {
 /**
  * Formats a millisecond duration as a compact human string.
  */
+const MS_PER_SECOND = 1000
+const SECONDS_PER_MINUTE = 60
+const MS_PER_MINUTE = MS_PER_SECOND * SECONDS_PER_MINUTE
+const MINUTES_PER_HOUR = 60
+const HOURS_PER_DAY = 24
+const SHORT_SHA_LENGTH = 7
+const PERCENT_SCALE = 100
+
 function formatDuration(ms: number | null): string {
   if (ms == null) {
     return '—'
   }
-  if (ms < 1000) {
+  if (ms < MS_PER_SECOND) {
     return `${ms}ms`
   }
-  const s = ms / 1000
-  if (s < 60) {
+  const s = ms / MS_PER_SECOND
+  if (s < SECONDS_PER_MINUTE) {
     return `${s.toFixed(1)}s`
   }
-  const m = Math.floor(s / 60)
-  const rem = Math.round(s % 60)
+  const m = Math.floor(s / SECONDS_PER_MINUTE)
+  const rem = Math.round(s % SECONDS_PER_MINUTE)
   return `${m}m ${rem}s`
 }
 
@@ -151,25 +164,25 @@ function formatDuration(ms: number | null): string {
  *  read asynchronously so exact times are noise. */
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
+  const mins = Math.floor(diff / MS_PER_MINUTE)
   if (mins < 1) {
     return 'just now'
   }
-  if (mins < 60) {
+  if (mins < MINUTES_PER_HOUR) {
     return `${mins}m ago`
   }
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) {
+  const hrs = Math.floor(mins / MINUTES_PER_HOUR)
+  if (hrs < HOURS_PER_DAY) {
     return `${hrs}h ago`
   }
-  const days = Math.floor(hrs / 24)
+  const days = Math.floor(hrs / HOURS_PER_DAY)
   return `${days}d ago`
 }
 
 /** Truncates a git SHA to the conventional 7-char display form, with an
  *  em-dash placeholder when the run has no recorded commit. */
 function shortSha(sha: string | null): string {
-  return sha ? sha.slice(0, 7) : '—'
+  return sha ? sha.slice(0, SHORT_SHA_LENGTH) : '—'
 }
 
 /** Maps a failure category to a themed CSS variable so assertions, timeouts,
@@ -205,13 +218,13 @@ function kindRgb(kind: string): string {
 /** Picks a numeric color for failure counts so totals in the stat strip and
  *  hot-files table self-flag as healthy, concerning, or critical. */
 function failColor(n: number): string {
-  if (n >= 10) {
+  if (n >= SEVERITY_CRITICAL_THRESHOLD) {
     return 'var(--red)'
   }
-  if (n >= 5) {
+  if (n >= SEVERITY_HIGH_THRESHOLD) {
     return 'var(--yellow)'
   }
-  if (n >= 2) {
+  if (n >= SEVERITY_MEDIUM_THRESHOLD) {
     return 'var(--text)'
   }
   return 'var(--green)'
@@ -311,7 +324,7 @@ function renderKindBar(kindBreakdown: KindBreakdown[]): string {
 
   const cards = kindBreakdown
     .map((k) => {
-      const pct = total ? ((k.count / total) * 100).toFixed(0) : '0'
+      const pct = total ? ((k.count / total) * PERCENT_SCALE).toFixed(0) : '0'
       const color = kindColor(k.failureKind)
       const rgb = kindRgb(k.failureKind)
       return `<div class="kind-card" style="border-left-color:${color};background:linear-gradient(135deg, rgba(${rgb}, 0.06) 0%, transparent 60%), var(--bg-elev)">
