@@ -52,6 +52,18 @@ const STACK_SCAN_MAX_LINES = 200
 /** Module-level idempotency guard — double-registration would double-count everything. */
 let installed = false
 
+/**
+ * Test-only introspection so `preload.test.ts` can skip itself when a
+ * real preload (e.g. the monorepo's own dogfood bunfig) has already
+ * wired bun:test. The guard is irreversible (mock.module and afterAll
+ * can't be cleanly undone), so the test's `createPreload(mockStore)`
+ * call would no-op against an active real install — the right move is
+ * to skip the self-test when that state is detected.
+ */
+export function isInstalledForTesting(): boolean {
+  return installed
+}
+
 /** Outstanding fire-and-forget writes tracked so `afterAll` can drain them
  *  before the run is finalized. Without the drain, remote-store writes
  *  (Turso / Supabase / Postgres) get orphaned mid-flight when Bun exits
