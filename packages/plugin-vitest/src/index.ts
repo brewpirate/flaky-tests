@@ -136,6 +136,12 @@ export class FlakyTestsReporter {
     log.debug(
       `onInit: runId=${this.runId}, gitSha=${git.sha ?? 'none'}, gitDirty=${git.dirty}, nodeVersion=${process.version}`,
     )
+    // Migrate first so fresh remote DBs have their schema before the
+    // first write. Idempotent on every adapter (CREATE TABLE IF NOT
+    // EXISTS); skip the warn swallow so a real schema error surfaces.
+    await this.store
+      .migrate()
+      .catch((e: unknown) => log.warn('migrate failed:', e))
     await this.store
       .insertRun(
         parse(insertRunInputSchema, {

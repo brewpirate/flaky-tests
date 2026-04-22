@@ -1,0 +1,14 @@
+# Dogfood the preload on our own test suite. Default run (`bun test`) is
+# gated OFF by `FLAKY_TESTS_DISABLE=1` in `.env.test` so plugin-bun's
+# self-tests — which call `createPreload(mockStore)` themselves — keep
+# working. Opt into capture with:
+#
+#   FLAKY_TESTS_DISABLE= bun test
+#   # or via the npm script:
+#   bun run test:flaky
+#
+[test]
+# Relative path (not a package specifier) so it resolves from the repo
+# root — the root package.json doesn't list `@flaky-tests/plugin-bun`,
+# so a bare specifier wouldn't find the workspace package.
+preload = ["./packages/plugin-bun/src/preload-default.ts"]

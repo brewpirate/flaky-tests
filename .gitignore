@@ -12,3 +12,12 @@ bun.lockb
 # Loaded via `bun --env-file=packages/store-*/.env.local test …`.
 .env.local
 *.env.local
+
+# The root `.env` typically holds real Turso/GH creds — never commit.
+# `.env.example` is the committed template; `.env.test` is the gated
+# default for `bun test` and is safe to commit.
+.env
+
+# Local log output from FLAKY_TESTS_LOG_FILE.
+flaky.log
+*.flaky.log

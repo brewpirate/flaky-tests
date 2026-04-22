@@ -32,8 +32,11 @@ afterEach(() => {
 })
 
 describe('resolveLogLevel', () => {
-  test('defaults to warn when config parsing fails', () => {
-    resetConfigForTesting()
+  test('returns the level from the injected config', () => {
+    // Explicit inject so the result doesn't depend on whatever the
+    // developer has in their local .env — previously this test read
+    // a stray FLAKY_TESTS_LOG=debug and flapped.
+    useLevel('warn')
     expect(resolveLogLevel()).toBe('warn')
   })
 
