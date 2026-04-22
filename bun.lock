@@ -59,7 +59,6 @@
         "@flaky-tests/core": "workspace:*",
       },
       "devDependencies": {
-        "@flaky-tests/store-sqlite": "workspace:*",
         "bun-types": "latest",
       },
       "optionalDependencies": {

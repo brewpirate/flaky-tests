@@ -25,6 +25,13 @@ import {
 } from '@flaky-tests/core'
 
 const log = createLogger('run-tracked')
+
+/** Dynamic import whose specifier is string-typed at the call site so tsc
+ *  does not attempt to statically resolve it. Used for optional peers
+ *  whose `dist/*.d.ts` may not be built during plugin-bun's typecheck. */
+async function loadOptionalModule<T>(spec: string): Promise<T> {
+  return (await import(spec)) as T
+}
 const config = resolveConfig()
 const DB_PATH =
   config.store.type === 'sqlite' && config.store.path !== undefined
@@ -73,9 +80,23 @@ async function reconcileRun(runId: string): Promise<void> {
       // DB doesn't exist — preload never ran or a different path is in use.
       return
     }
-    // Dynamic import: store-sqlite is an optional dep on plugin-bun.
-    const { SqliteStore } = await import('@flaky-tests/store-sqlite')
-    const store = new SqliteStore({ dbPath: DB_PATH })
+    // Dynamic import via a string-typed variable so tsc doesn't try to
+    // statically resolve the specifier. store-sqlite is an optional peer
+    // (its dist types may not exist during plugin-bun's build:types run),
+    // and we only touch a tiny slice of its surface here — the inline
+    // interface captures exactly what's needed.
+    interface SqliteStoreModule {
+      SqliteStore: new (options: {
+        dbPath?: string
+      }) => {
+        reconcileRun(runId: string): void
+        close(): Promise<void>
+      }
+    }
+    const mod = await loadOptionalModule<SqliteStoreModule>(
+      '@flaky-tests/store-sqlite',
+    )
+    const store = new mod.SqliteStore({ dbPath: DB_PATH })
     try {
       store.reconcileRun(runId)
     } finally {

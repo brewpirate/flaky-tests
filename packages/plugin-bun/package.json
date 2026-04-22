@@ -44,7 +44,6 @@
     "@flaky-tests/store-postgres": "workspace:*"
   },
   "devDependencies": {
-    "@flaky-tests/store-sqlite": "workspace:*",
     "bun-types": "latest"
   },
   "engines": {
