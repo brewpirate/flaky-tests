@@ -40,9 +40,14 @@ function getRegistry(): Registry {
 }
 
 /**
- * Register a plugin descriptor. Throws if a plugin with the same name is
- * already registered — silent overwrites would make the registry a
- * last-import-wins lottery.
+ * Register a plugin descriptor.
+ *
+ * Silent overwrites would make the registry a last-import-wins lottery,
+ * so duplicate names are rejected. Re-calling `definePlugin` with the
+ * same descriptor instance (module-init idempotence) is allowed.
+ *
+ * @throws `Error` when another descriptor with `descriptor.name` is
+ *   already registered and it isn't the same object reference.
  */
 export function definePlugin<Instance>(
   descriptor: FlakyPluginDescriptor<Instance>,

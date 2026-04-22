@@ -125,9 +125,18 @@ export function isRetryableError(error: unknown): boolean {
  * that delay. An `AbortSignal` cancels any pending sleep and rejects with
  * the signal's reason.
  *
- * On exhaustion, re-throws the last caught error so callers see the real
- * driver exception (wrapped in `StoreError` by the store adapter's own
- * `wrap` helper).
+ * **Re-throw contract:** on exhaustion the last caught error is re-thrown
+ * unchanged. Non-retryable errors are also re-thrown as-is on the first
+ * attempt. Callers see the real driver exception (which store adapters
+ * wrap in `StoreError` via their own `wrap` helper further up the stack).
+ *
+ * @throws `TypeError` when `opts.attempts` is not a positive integer — a
+ *   configuration bug, thrown before `op` runs so the failure is loud.
+ * @throws `DOMException` with `name === 'AbortError'` when `opts.signal`
+ *   is already aborted at entry, or aborts during a pending sleep.
+ * @throws re-throws the caller's own error — whatever `op` surfaces — when
+ *   it is classified non-retryable (first occurrence) or when retry
+ *   attempts are exhausted (last occurrence).
  */
 export async function withRetry<T>(
   op: () => Promise<T>,

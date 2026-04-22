@@ -274,6 +274,14 @@ function isConfigObject(value: unknown): value is Config {
  *   - no args → read `process.env` (memoized; repeated calls are free)
  *   - a `NodeJS.ProcessEnv` record → parse that instead (fresh each call)
  *   - a pre-built `Config` → install it as the cached resolution (useful in tests)
+ *
+ * @throws {@link ConfigError} when a required env var is missing for the
+ *   selected store (`FLAKY_TESTS_CONNECTION_STRING` for turso/supabase,
+ *   `FLAKY_TESTS_AUTH_TOKEN` for supabase), when a numeric env var is not
+ *   a positive number (`FLAKY_TESTS_WINDOW`, `FLAKY_TESTS_THRESHOLD`),
+ *   when `FLAKY_TESTS_STORE` names an unknown type, or when the final
+ *   object fails the arktype config schema. The original cause is
+ *   preserved on `error.cause`.
  */
 export function resolveConfig(source?: NodeJS.ProcessEnv | Config): Config {
   if (isConfigObject(source)) {

@@ -65,6 +65,25 @@ function findDescriptor(storeType: string) {
 
 const defaultImporter: StoreModuleImporter = (spec) => import(spec)
 
+/**
+ * Resolve a store instance from the unified config. Looks up a
+ * registered plugin descriptor by store type; if none is found, tries
+ * to dynamic-import `config.store.module` and then the convention
+ * `@flaky-tests/store-<type>` so each adapter self-registers via its
+ * own `definePlugin` call.
+ *
+ * @throws {@link MissingStorePackageError} when no matching plugin
+ *   descriptor is registered and none of the candidate module specifiers
+ *   can be imported. The error names both the store type and the exact
+ *   install command.
+ * @throws re-throws any non-"module-not-found" error from `importer()`
+ *   unchanged so real import failures (syntax errors, runtime throws in
+ *   the adapter's top-level code) surface with their original stacks.
+ * @throws re-throws any error from the adapter's `create(config)` —
+ *   this function does **not** wrap constructor failures. A store that
+ *   throws `ValidationError` or `Error` from its constructor will
+ *   propagate that error as-is.
+ */
 export async function createStoreFromConfig(
   config: Config,
   importer: StoreModuleImporter = defaultImporter,
