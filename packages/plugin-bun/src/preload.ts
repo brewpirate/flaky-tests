@@ -35,6 +35,7 @@ import {
   updateRunInputSchema,
 } from '@flaky-tests/core'
 import { captureGitInfo } from './git'
+import { createPendingWriteTracker } from './pending-writes'
 
 const log = createLogger('plugin-bun')
 
@@ -51,20 +52,17 @@ const STACK_SCAN_MAX_LINES = 200
 /** Module-level idempotency guard — double-registration would double-count everything. */
 let installed = false
 
-/** Outstanding fire-and-forget writes. `afterAll` drains this before the
- *  run is finalized — without the drain, remote-store writes (Turso,
- *  Supabase, Postgres) get orphaned mid-flight when Bun exits and silently
- *  drop test data. See issue #44. */
-const pendingWrites = new Set<Promise<unknown>>()
+/** Outstanding fire-and-forget writes tracked so `afterAll` can drain them
+ *  before the run is finalized. Without the drain, remote-store writes
+ *  (Turso / Supabase / Postgres) get orphaned mid-flight when Bun exits
+ *  and silently drop test data. See issue #44. */
+const pendingWrites = createPendingWriteTracker(log)
 
 /** Kick off an async side-effect that must never throw into the caller.
  *  The returned promise is tracked in {@link pendingWrites} so the run's
  *  `afterAll` can wait for in-flight writes before closing the store. */
 function safeVoid(label: string, effect: () => Promise<void>): void {
-  const promise: Promise<unknown> = effect()
-    .catch((error: unknown) => log.warn(`${label}:`, error))
-    .finally(() => pendingWrites.delete(promise))
-  pendingWrites.add(promise)
+  pendingWrites.track(label, effect)
 }
 
 /**
@@ -277,12 +275,8 @@ export function createPreload(store: IStore): void {
       `afterAll: runId=${runId}, status=${status}, total=${testsRun}, passed=${passedTests}, failed=${testsFailed}, errorsBetweenTests=${errorsBetweenTests}, durationMs=${durationMs}, pendingWrites=${pendingWrites.size}`,
     )
 
-    // Drain in-flight writes before finalizing. allSettled (not all) so
-    // one slow/failed network write doesn't hide another's error, and so
-    // the updateRun/close still run even if a write rejects.
-    if (pendingWrites.size > 0) {
-      await Promise.allSettled([...pendingWrites])
-    }
+    // Drain in-flight writes before finalizing. See pending-writes.ts.
+    await pendingWrites.drain()
 
     await store
       .updateRun(
