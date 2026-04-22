@@ -111,6 +111,7 @@ export class SqliteStore implements IStore {
   /**
    * Open (or create) a SQLite store.
    * @param options - Store configuration; uses sensible defaults when omitted.
+   * @throws {@link ValidationError} when `options` fails schema validation.
    */
   constructor(options: SqliteStoreOptions = {}) {
     const validated = parse(sqliteStoreOptionsSchema, options)
@@ -132,6 +133,10 @@ export class SqliteStore implements IStore {
    * tracks applied versions in the `schema_version` table, and for databases
    * created before versioning existed, seeds a baseline by probing which
    * columns already exist — so we never re-run DDL that would fail.
+   *
+   * @throws {@link SQLiteError} (from `bun:sqlite`) when a migration DDL
+   *   statement fails — e.g. corrupt DB file, insufficient filesystem
+   *   permissions.
    */
   async migrate(): Promise<void> {
     this.db.exec(CREATE_SCHEMA_VERSION_TABLE)
@@ -196,6 +201,9 @@ export class SqliteStore implements IStore {
   /**
    * Record a new test run. Called at the start of a test session.
    * @param input - Run metadata including ID, timestamp, and optional git info.
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link SQLiteError} (from `bun:sqlite`) when the insert is
+   *   rejected — most commonly a duplicate `run_id`.
    */
   async insertRun(input: InsertRunInput): Promise<void> {
     parse(insertRunInputSchema, input)
@@ -218,6 +226,8 @@ export class SqliteStore implements IStore {
    * Finalize a run with end-of-session stats (duration, pass/fail counts, status).
    * @param runId - The run to update.
    * @param input - Completion data for the run.
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link SQLiteError} (from `bun:sqlite`) when the update fails.
    */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     parse(updateRunInputSchema, input)
@@ -247,6 +257,10 @@ export class SqliteStore implements IStore {
   /**
    * Record an individual test failure within a run.
    * @param input - Failure details including test identity, error info, and timing.
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link SQLiteError} (from `bun:sqlite`) when the insert fails —
+   *   e.g. foreign-key violation when `input.runId` has no matching row in
+   *   `runs`.
    */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     parse(insertFailureInputSchema, input)
@@ -267,7 +281,14 @@ export class SqliteStore implements IStore {
     )
   }
 
-  /** Insert multiple failures in a single SQLite transaction. */
+  /**
+   * Insert multiple failures in a single SQLite transaction.
+   *
+   * @throws {@link ValidationError} when any entry in `inputs` fails schema
+   *   validation — the transaction rolls back and nothing is written.
+   * @throws {@link SQLiteError} (from `bun:sqlite`) when the transaction
+   *   fails at the driver level.
+   */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
     if (inputs.length === 0) {
       return
@@ -329,6 +350,11 @@ export class SqliteStore implements IStore {
    *
    * @param options - Window size and threshold overrides.
    * @returns Flaky patterns sorted by recent failure count descending.
+   * @throws {@link ValidationError} when `options` fails schema validation.
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts before the query starts — `bun:sqlite` is
+   *   synchronous so mid-query cancellation is not supported.
+   * @throws {@link SQLiteError} (from `bun:sqlite`) when the query fails.
    */
   async getNewPatterns(
     options: GetNewPatternsOptions = {},
@@ -404,7 +430,13 @@ export class SqliteStore implements IStore {
     return patterns
   }
 
-  /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
+  /**
+   * Return the N most recent runs ordered by `startedAt` DESC, filtered by project.
+   *
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts before the query starts.
+   * @throws {@link SQLiteError} (from `bun:sqlite`) when the query fails.
+   */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
     options.signal?.throwIfAborted()
     const { limit, project = null } = options
@@ -463,7 +495,12 @@ export class SqliteStore implements IStore {
   }
 }
 
-/** Lazy plugin descriptor — `create(config)` builds a SqliteStore from the resolved config. */
+/**
+ * Lazy plugin descriptor — `create(config)` builds a SqliteStore from the
+ * resolved config.
+ *
+ * @throws `Error` from `create()` when `config.store.type !== 'sqlite'`.
+ */
 export const sqliteStorePlugin = definePlugin({
   name: 'store-sqlite',
   configSchema: sqliteStoreOptionsSchema,

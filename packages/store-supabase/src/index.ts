@@ -68,7 +68,14 @@ export class SupabaseStore implements IStore {
   private failuresTable: string
   private retryOptions: RetryOptions
 
-  /** Validate options, construct a supabase-js client, and resolve the runs/failures table names from `tablePrefix` (default `flaky_test`). */
+  /**
+   * Validate options, construct a supabase-js client, and resolve the
+   * runs/failures table names from `tablePrefix` (default `flaky_test`).
+   *
+   * @throws {@link ValidationError} when `options` fails schema validation.
+   * @throws `Error` when `tablePrefix` contains characters outside
+   *   `[a-z0-9_]` (via `validateTablePrefix`).
+   */
   constructor(options: SupabaseStoreOptions) {
     const validated = parse(supabaseStoreOptionsSchema, options)
     // Validate the prefix before creating any client — a malicious prefix
@@ -85,6 +92,10 @@ export class SupabaseStore implements IStore {
    * Supabase does not support DDL through the JS client.
    * Tables must be created via the Supabase Dashboard SQL editor or migrations.
    * See the docs for the required schema: https://brewpirate.github.io/flaky-tests/stores/supabase/
+   *
+   * @throws {@link StoreError} when the runs table isn't reachable — the
+   *   error message points at the docs, and `.cause` is the underlying
+   *   supabase-js error (auth, network, or missing table).
    */
   async migrate(): Promise<void> {
     // Verify tables exist by attempting a lightweight query
@@ -102,7 +113,14 @@ export class SupabaseStore implements IStore {
     }
   }
 
-  /** Insert a new run row at the start of a test session so failures can reference it via `run_id`. */
+  /**
+   * Insert a new run row at the start of a test session so failures can
+   * reference it via `run_id`.
+   *
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when supabase-js returns a non-null `error`
+   *   (auth, RLS policy rejection, duplicate key, network).
+   */
   async insertRun(input: InsertRunInput): Promise<void> {
     parse(insertRunInputSchema, input)
     const { error } = await this.client.from(this.runsTable).insert({
@@ -128,6 +146,8 @@ export class SupabaseStore implements IStore {
    * Update an existing test run with final results.
    * @param runId - The run to update (matched via `run_id` column).
    * @param input - Fields to set (nulls are written explicitly).
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when supabase-js returns a non-null `error`.
    */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     parse(updateRunInputSchema, input)
@@ -153,7 +173,12 @@ export class SupabaseStore implements IStore {
     }
   }
 
-  /** Record a single test failure. `durationMs` is rounded to the nearest integer. */
+  /**
+   * Record a single test failure. `durationMs` is rounded to the nearest integer.
+   *
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when supabase-js returns a non-null `error`.
+   */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     parse(insertFailureInputSchema, input)
     const { error } = await this.client.from(this.failuresTable).insert({
@@ -180,6 +205,11 @@ export class SupabaseStore implements IStore {
   /**
    * Insert multiple failures. Supabase does not support transactions through the
    * JS client, so this uses a single bulk insert call for atomicity at the REST level.
+   *
+   * @throws {@link ValidationError} when any entry in `inputs` fails schema
+   *   validation — nothing is sent.
+   * @throws {@link StoreError} when supabase-js returns a non-null `error`
+   *   on the bulk insert.
    */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
     if (inputs.length === 0) {
@@ -215,6 +245,13 @@ export class SupabaseStore implements IStore {
    * Returns tests that failed >= `threshold` times recently but zero times in the
    * prior window, sorted by failure count descending. Only considers runs with
    * fewer than 10 total failures and a non-null `ended_at`.
+   *
+   * @throws {@link ValidationError} when `options` fails schema validation.
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts — forwarded to supabase-js via
+   *   `.abortSignal()`, then re-asserted via `throwIfAborted()` after the
+   *   await to normalize the shape.
+   * @throws {@link StoreError} when supabase-js returns a non-null `error`.
    */
   async getNewPatterns(
     options: GetNewPatternsOptions = {},
@@ -350,7 +387,15 @@ export class SupabaseStore implements IStore {
     return patterns
   }
 
-  /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
+  /**
+   * Return the N most recent runs ordered by `startedAt` DESC, filtered by project.
+   *
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts — forwarded to supabase-js via
+   *   `.abortSignal()`, then re-asserted via `throwIfAborted()` after the
+   *   await to normalize the shape.
+   * @throws {@link StoreError} when supabase-js returns a non-null `error`.
+   */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
     options.signal?.throwIfAborted()
     const { limit, project = null, signal } = options
@@ -422,7 +467,12 @@ export class SupabaseStore implements IStore {
   }
 }
 
-/** Lazy plugin descriptor — `create(config)` builds a SupabaseStore from the resolved config. */
+/**
+ * Lazy plugin descriptor — `create(config)` builds a SupabaseStore from the
+ * resolved config.
+ *
+ * @throws `Error` from `create()` when `config.store.type !== 'supabase'`.
+ */
 export const supabaseStorePlugin = definePlugin({
   name: 'store-supabase',
   configSchema: supabaseStoreOptionsSchema,

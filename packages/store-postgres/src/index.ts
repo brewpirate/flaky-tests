@@ -109,7 +109,13 @@ export class PostgresStore implements IStore {
   private failuresTable: string
   private retryOptions: RetryOptions
 
-  /** Accepts either a full `connectionString` or individual host/port/credentials fields. */
+  /**
+   * Accepts either a full `connectionString` or individual host/port/credentials fields.
+   *
+   * @throws {@link ValidationError} when `options` fails schema validation.
+   * @throws `Error` when `tablePrefix` contains characters outside
+   *   `[a-z0-9_]` (via `validateTablePrefix`).
+   */
   constructor(options: PostgresStoreOptions = {}) {
     const validated = parse(postgresStoreOptionsSchema, options)
     const prefix = validated.tablePrefix ?? 'flaky_test'
@@ -152,7 +158,12 @@ export class PostgresStore implements IStore {
     }
   }
 
-  /** Create tables and run idempotent schema migrations. Safe to call on every startup. */
+  /**
+   * Create tables and run idempotent schema migrations. Safe to call on every startup.
+   *
+   * @throws {@link StoreError} when a DDL statement fails at the postgres
+   *   driver level (connection refused, insufficient privileges, etc.).
+   */
   async migrate(): Promise<void> {
     const runs = this.runsTable
     const failures = this.failuresTable
@@ -212,7 +223,13 @@ export class PostgresStore implements IStore {
     })
   }
 
-  /** Insert a new test run record. Must be called before any failures reference this run. */
+  /**
+   * Insert a new test run record. Must be called before any failures reference this run.
+   *
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when the postgres driver rejects the insert
+   *   (network, auth, duplicate `run_id`, etc.).
+   */
   async insertRun(input: InsertRunInput): Promise<void> {
     parse(insertRunInputSchema, input)
     const runs = this.runsTable
@@ -228,7 +245,12 @@ export class PostgresStore implements IStore {
     })
   }
 
-  /** Update a run with final results (duration, status, test counts) after it completes. */
+  /**
+   * Update a run with final results (duration, status, test counts) after it completes.
+   *
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when the postgres driver rejects the update.
+   */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     parse(updateRunInputSchema, input)
     const runs = this.runsTable
@@ -247,7 +269,12 @@ export class PostgresStore implements IStore {
     })
   }
 
-  /** Record a single test failure associated with an existing run. */
+  /**
+   * Record a single test failure associated with an existing run.
+   *
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when the postgres driver rejects the insert.
+   */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     parse(insertFailureInputSchema, input)
     const failures = this.failuresTable
@@ -266,7 +293,14 @@ export class PostgresStore implements IStore {
     })
   }
 
-  /** Insert multiple failures in a single Postgres transaction. */
+  /**
+   * Insert multiple failures in a single Postgres transaction.
+   *
+   * @throws {@link ValidationError} when any entry in `inputs` fails schema
+   *   validation — the transaction rolls back and nothing is written.
+   * @throws {@link StoreError} when the postgres driver rejects the
+   *   transaction.
+   */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
     if (inputs.length === 0) {
       return
@@ -296,6 +330,13 @@ export class PostgresStore implements IStore {
    * Detect newly-flaky tests by comparing a recent window to a prior window of equal length.
    * Returns tests that failed >= `threshold` times in the recent window but zero times
    * in the prior window, filtering out runs with 10+ failures (likely infrastructure issues).
+   *
+   * @throws {@link ValidationError} when `options` fails schema validation.
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts — via `throwIfAborted()` at entry or the
+   *   `cancelOnAbort` wrapper, which also fires the pending query's
+   *   server-side `cancel()` so the DB releases the connection.
+   * @throws {@link StoreError} when the postgres driver rejects the query.
    */
   async getNewPatterns(
     options: GetNewPatternsOptions = {},
@@ -363,7 +404,14 @@ export class PostgresStore implements IStore {
     return patterns
   }
 
-  /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
+  /**
+   * Return the N most recent runs ordered by `startedAt` DESC, filtered by project.
+   *
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts — server-side cancel is fired via
+   *   `cancelOnAbort`.
+   * @throws {@link StoreError} when the postgres driver rejects the query.
+   */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
     options.signal?.throwIfAborted()
     const { limit, project = null, signal } = options
@@ -429,13 +477,23 @@ export class PostgresStore implements IStore {
     }))
   }
 
-  /** Gracefully close the underlying PostgreSQL connection pool. */
+  /**
+   * Gracefully close the underlying PostgreSQL connection pool.
+   *
+   * @throws {@link StoreError} when `sql.end()` errors draining pending
+   *   queries or releasing the connection.
+   */
   async close(): Promise<void> {
     await this.wrap('close', () => this.sql.end())
   }
 }
 
-/** Lazy plugin descriptor — `create(config)` builds a PostgresStore from the resolved config. */
+/**
+ * Lazy plugin descriptor — `create(config)` builds a PostgresStore from the
+ * resolved config.
+ *
+ * @throws `Error` from `create()` when `config.store.type !== 'postgres'`.
+ */
 export const postgresStorePlugin = definePlugin({
   name: 'store-postgres',
   configSchema: postgresStoreOptionsSchema,

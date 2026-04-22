@@ -80,7 +80,11 @@ export class TursoStore implements IStore {
   private client: Client
   private retryOptions: RetryOptions
 
-  /** Builds the libSQL client from a validated URL and optional auth token. */
+  /**
+   * Builds the libSQL client from a validated URL and optional auth token.
+   *
+   * @throws {@link ValidationError} when `options` fails schema validation.
+   */
   constructor(options: TursoStoreOptions) {
     const validated = parse(tursoStoreOptionsSchema, options)
     this.client = createClient({
@@ -111,6 +115,9 @@ export class TursoStore implements IStore {
    * applying pending migrations from {@link SQLITE_MIGRATIONS}. Tracks
    * applied versions in a `schema_version` table and seeds a baseline for
    * databases created before versioning landed by probing the live schema.
+   *
+   * @throws {@link StoreError} when a migration statement fails at the
+   *   libSQL driver level (network, credentials, incompatible server).
    */
   async migrate(): Promise<void> {
     await this.wrap('migrate', async () => {
@@ -223,7 +230,13 @@ export class TursoStore implements IStore {
     })
   }
 
-  /** Persist a new test-run row. Call before any failures are recorded. */
+  /**
+   * Persist a new test-run row. Call before any failures are recorded.
+   *
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when the libSQL driver rejects the insert
+   *   (network, auth, duplicate `run_id`, etc.).
+   */
   async insertRun(input: InsertRunInput): Promise<void> {
     parse(insertRunInputSchema, input)
     await this.wrap('insertRun', () =>
@@ -243,7 +256,12 @@ export class TursoStore implements IStore {
     )
   }
 
-  /** Update a run with its final summary (status, counts, duration). */
+  /**
+   * Update a run with its final summary (status, counts, duration).
+   *
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when the libSQL driver rejects the update.
+   */
   async updateRun(runId: string, input: UpdateRunInput): Promise<void> {
     parse(updateRunInputSchema, input)
     await this.wrap('updateRun', () =>
@@ -271,7 +289,12 @@ export class TursoStore implements IStore {
     )
   }
 
-  /** Record a single test failure linked to an existing run. */
+  /**
+   * Record a single test failure linked to an existing run.
+   *
+   * @throws {@link ValidationError} when `input` fails schema validation.
+   * @throws {@link StoreError} when the libSQL driver rejects the insert.
+   */
   async insertFailure(input: InsertFailureInput): Promise<void> {
     parse(insertFailureInputSchema, input)
     await this.wrap('insertFailure', () =>
@@ -294,7 +317,13 @@ export class TursoStore implements IStore {
     )
   }
 
-  /** Insert multiple failures in a single batch transaction. */
+  /**
+   * Insert multiple failures in a single batch transaction.
+   *
+   * @throws {@link ValidationError} when any entry in `inputs` fails schema
+   *   validation — the batch is not sent.
+   * @throws {@link StoreError} when the libSQL driver rejects the batch.
+   */
   async insertFailures(inputs: readonly InsertFailureInput[]): Promise<void> {
     if (inputs.length === 0) {
       return
@@ -333,6 +362,12 @@ export class TursoStore implements IStore {
    * @param options.windowDays - Length of the recent window (default 7).
    * @param options.threshold  - Minimum recent failures to qualify (default 2).
    * @returns Patterns sorted by recent failure count descending.
+   * @throws {@link ValidationError} when `options` fails schema validation.
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts — via `throwIfAborted()` at entry or the
+   *   `raceAbort` wrapper that rejects the caller while the underlying
+   *   libSQL request continues in the background.
+   * @throws {@link StoreError} when the libSQL driver rejects the query.
    */
   async getNewPatterns(
     options: GetNewPatternsOptions = {},
@@ -408,7 +443,13 @@ export class TursoStore implements IStore {
     return patterns
   }
 
-  /** Return the N most recent runs ordered by `startedAt` DESC, filtered by project. */
+  /**
+   * Return the N most recent runs ordered by `startedAt` DESC, filtered by project.
+   *
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts.
+   * @throws {@link StoreError} when the libSQL driver rejects the query.
+   */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
     options.signal?.throwIfAborted()
     const { limit, project = null, signal } = options
@@ -455,7 +496,12 @@ export class TursoStore implements IStore {
     })
   }
 
-  /** Close the underlying libSQL connection. */
+  /**
+   * Close the underlying libSQL connection.
+   *
+   * @throws {@link StoreError} when the driver's `close()` throws — rare
+   *   in practice, but wrapped for a uniform error surface.
+   */
   async close(): Promise<void> {
     await this.wrap('close', () => {
       this.client.close()
@@ -464,7 +510,12 @@ export class TursoStore implements IStore {
   }
 }
 
-/** Lazy plugin descriptor — `create(config)` builds a TursoStore from the resolved config. */
+/**
+ * Lazy plugin descriptor — `create(config)` builds a TursoStore from the
+ * resolved config.
+ *
+ * @throws `Error` from `create()` when `config.store.type !== 'turso'`.
+ */
 export const tursoStorePlugin = definePlugin({
   name: 'store-turso',
   configSchema: tursoStoreOptionsSchema,
