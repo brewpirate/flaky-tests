@@ -28,6 +28,9 @@ function makeFakeStore(): IStore {
     async getRecentRuns() {
       return []
     },
+    async listFailures() {
+      return []
+    },
     async close() {},
   }
 }

@@ -52,6 +52,9 @@ function createMockStore(): { store: IStore; calls: StoreCalls } {
     async getRecentRuns() {
       return []
     },
+    async listFailures() {
+      return []
+    },
     async close() {
       calls.closed = true
     },

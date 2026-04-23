@@ -71,6 +71,45 @@ export interface GetRecentRunsOptions {
 }
 
 /**
+ * Raw failure row returned by {@link IStore.listFailures}. Everything the
+ * HTML report needs to aggregate — by kind, by file, or by run — lives on
+ * this one shape so every adapter produces the same bytes and the grouping
+ * logic stays in core.
+ */
+export interface FailureRow {
+  runId: string
+  testFile: string
+  testName: string
+  failureKind: string
+  errorMessage: string | null
+  failedAt: string
+}
+
+/**
+ * Options for {@link IStore.listFailures}. At least one of `since` or
+ * `runIds` must be provided; both are AND-combined when present so callers
+ * can further narrow a window-filtered list to specific runs.
+ */
+export interface ListFailuresOptions {
+  /** ISO timestamp lower bound — returns failures where `failedAt > since`. */
+  since?: string
+  /** Restrict to failures tied to these run IDs. */
+  runIds?: readonly string[]
+  /** Filter to a single project. Null-or-undefined matches rows whose `project` column is NULL. */
+  project?: string | null
+  /**
+   * Drop failures attached to runs with `failed_tests >= MAX_FAILED_TESTS_PER_RUN`
+   * or `ended_at IS NULL` — the same "infra blowup" filter
+   * {@link IStore.getNewPatterns} applies. Defaults to `true`; set `false`
+   * when the caller wants every failure regardless (e.g. drill-downs tied
+   * to explicit `runIds`).
+   */
+  excludeInfraBlowups?: boolean
+  /** Abort the query when this signal aborts; caller receives an `AbortError`. */
+  signal?: AbortSignal
+}
+
+/**
  * Storage backend interface. All methods are async so implementations can
  * use any backend — SQLite, Supabase, Postgres, or custom.
  *
@@ -114,6 +153,14 @@ export interface IStore {
    * see run history even when there are no newly-flaky patterns.
    */
   getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]>
+  /**
+   * Raw failure rows used by the HTML report to build kind breakdowns,
+   * hot-file lists, and per-run drill-downs. The primitive every adapter
+   * exposes — grouping and summarising happens in core so the logic lives
+   * in one place. Respects `MAX_FAILED_TESTS_PER_RUN` by default; set
+   * `excludeInfraBlowups: false` to disable.
+   */
+  listFailures(options: ListFailuresOptions): Promise<FailureRow[]>
   /** Release pooled connections and file handles. */
   close(): Promise<void>
 }

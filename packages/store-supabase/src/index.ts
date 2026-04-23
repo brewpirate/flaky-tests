@@ -4,6 +4,7 @@ import {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   definePlugin,
+  type FailureRow,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -14,6 +15,7 @@ import {
   type IStore,
   insertFailureInputSchema,
   insertRunInputSchema,
+  type ListFailuresOptions,
   MAX_FAILED_TESTS_PER_RUN,
   MS_PER_DAY,
   parse,
@@ -458,6 +460,99 @@ export class SupabaseStore implements IStore {
       errorsBetweenTests: row.errors_between_tests,
       gitSha: row.git_sha,
       gitDirty: row.git_dirty,
+    }))
+  }
+
+  /**
+   * Raw failure rows — primitive used by the HTML report to bucket
+   * failures by kind, file, or run. See {@link IStore.listFailures}.
+   *
+   * Postgrest has no native AND-of-filters + join filter chaining for our
+   * exact case; when the caller only provides `runIds` we can skip the
+   * inner join entirely. When `since` or the infra-blowup filter applies,
+   * we join `runs` via `!inner` to filter at the DB layer.
+   *
+   * @throws `DOMException` with `name === 'AbortError'` when `options.signal`
+   *   aborts — forwarded to supabase-js via `.abortSignal()`.
+   * @throws {@link StoreError} when supabase-js returns a non-null `error`.
+   */
+  async listFailures(options: ListFailuresOptions): Promise<FailureRow[]> {
+    options.signal?.throwIfAborted()
+    const {
+      since,
+      runIds,
+      project = null,
+      excludeInfraBlowups = true,
+      signal,
+    } = options
+    if (runIds !== undefined && runIds.length === 0) {
+      return []
+    }
+
+    const needsRunsJoin = excludeInfraBlowups || since !== undefined
+    type Row = {
+      run_id: string
+      test_file: string
+      test_name: string
+      failure_kind: string
+      error_message: string | null
+      failed_at: string
+    }
+    const runQuery = async (): Promise<Row[]> => {
+      const selectColumns = needsRunsJoin
+        ? `run_id, test_file, test_name, failure_kind, error_message, failed_at,
+           ${this.runsTable}!inner(failed_tests, ended_at, project)`
+        : 'run_id, test_file, test_name, failure_kind, error_message, failed_at'
+      let query = this.client
+        .from(this.failuresTable)
+        .select(selectColumns)
+        .order('failed_at', { ascending: true })
+      if (since !== undefined) {
+        query = query.gt('failed_at', since)
+      }
+      if (runIds !== undefined) {
+        query = query.in('run_id', runIds as readonly string[])
+      }
+      if (needsRunsJoin) {
+        query =
+          project === null
+            ? query.is(`${this.runsTable}.project`, null)
+            : query.eq(`${this.runsTable}.project`, project)
+        if (excludeInfraBlowups) {
+          query = query
+            .lt(`${this.runsTable}.failed_tests`, MAX_FAILED_TESTS_PER_RUN)
+            .not(`${this.runsTable}.ended_at`, 'is', null)
+        }
+      }
+      const finalized = signal !== undefined ? query.abortSignal(signal) : query
+      const { data, error } = await finalized
+      signal?.throwIfAborted()
+      if (error) {
+        throw error
+      }
+      return (data ?? []) as unknown as Row[]
+    }
+
+    let rows: Row[]
+    try {
+      rows = await withRetry(runQuery, { ...this.retryOptions, signal })
+    } catch (error) {
+      signal?.throwIfAborted()
+      throw new StoreError({
+        package: PACKAGE,
+        method: 'listFailures',
+        message: error instanceof Error ? error.message : String(error),
+        cause: error,
+      })
+    }
+
+    return rows.map((row) => ({
+      runId: row.run_id,
+      testFile: row.test_file,
+      testName: row.test_name,
+      failureKind: row.failure_kind,
+      errorMessage: row.error_message,
+      failedAt: row.failed_at,
     }))
   }
 

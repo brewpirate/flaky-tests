@@ -7,6 +7,7 @@ import {
   definePlugin,
   detectBaselineVersion,
   extractMessage,
+  type FailureRow,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -17,6 +18,7 @@ import {
   type IStore,
   insertFailureInputSchema,
   insertRunInputSchema,
+  type ListFailuresOptions,
   MAX_FAILED_TESTS_PER_RUN,
   MS_PER_DAY,
   mapRowToPattern,
@@ -492,6 +494,84 @@ export class TursoStore implements IStore {
             : Number(r.errors_between_tests),
         gitSha: r.git_sha == null ? null : String(r.git_sha),
         gitDirty: r.git_dirty == null ? null : Number(r.git_dirty) !== 0,
+      }
+    })
+  }
+
+  /**
+   * Raw failure rows in the same shape as store-sqlite — Turso speaks SQLite.
+   * See {@link IStore.listFailures}.
+   *
+   * @throws `DOMException` with `name === 'AbortError'` when `options.signal` aborts.
+   * @throws {@link StoreError} when the libSQL driver rejects the query.
+   */
+  async listFailures(options: ListFailuresOptions): Promise<FailureRow[]> {
+    options.signal?.throwIfAborted()
+    const {
+      since,
+      runIds,
+      project = null,
+      excludeInfraBlowups = true,
+      signal,
+    } = options
+
+    const conditions: string[] = []
+    const args: (string | number)[] = []
+
+    if (since !== undefined) {
+      conditions.push('f.failed_at > ?')
+      args.push(since)
+    }
+    if (runIds !== undefined) {
+      if (runIds.length === 0) {
+        return []
+      }
+      const placeholders = runIds.map(() => '?').join(', ')
+      conditions.push(`f.run_id IN (${placeholders})`)
+      args.push(...runIds)
+    }
+    if (project === null) {
+      conditions.push('r.project IS NULL')
+    } else {
+      conditions.push('r.project = ?')
+      args.push(project)
+    }
+    if (excludeInfraBlowups) {
+      conditions.push(`r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}`)
+      conditions.push('r.ended_at IS NOT NULL')
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    const result = await this.wrap('listFailures', () =>
+      withRetry(
+        () =>
+          raceAbort(
+            this.client.execute({
+              sql: `SELECT f.run_id, f.test_file, f.test_name, f.failure_kind,
+                           f.error_message, f.failed_at
+                      FROM failures f
+                      JOIN runs r ON r.run_id = f.run_id
+                      ${whereClause}
+                     ORDER BY f.failed_at ASC`,
+              args: args as InArgs,
+            }),
+            signal,
+          ),
+        { ...this.retryOptions, signal },
+      ),
+    )
+
+    return result.rows.map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      return {
+        runId: String(r.run_id),
+        testFile: String(r.test_file),
+        testName: String(r.test_name),
+        failureKind: String(r.failure_kind),
+        errorMessage: r.error_message == null ? null : String(r.error_message),
+        failedAt: String(r.failed_at),
       }
     })
   }

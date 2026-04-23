@@ -1,8 +1,10 @@
 /**
  * Dashboard aggregate types consumed by the HTML report.
  *
- * Kept local to the html module so the report stays self-contained and
- * does not extend core's public surface for renderer-only concerns.
+ * Produced in-process by `aggregateDashboard()` (core) from raw
+ * {@link FailureRow} rows returned by {@link IStore.listFailures}. These
+ * types are renderer-local — the IStore contract exposes only the raw row
+ * primitive; aggregation lives here so every adapter produces one shape.
  */
 
 /** Count of failures grouped by error category for the dashboard summary. */
