@@ -26,17 +26,13 @@ import type {
   RunCommand,
 } from '@flaky-tests/core'
 import {
+  buildInsertFailureInput,
+  buildInsertRunInput,
+  buildUpdateRunInput,
   captureGitInfo as captureGitInfoCore,
-  categorizeError,
   createLogger,
   definePlugin,
-  extractMessage,
-  extractStack,
-  insertFailureInputSchema,
-  insertRunInputSchema,
-  parse,
   resolveConfig,
-  updateRunInputSchema,
 } from '@flaky-tests/core'
 
 const log = createLogger('plugin-vitest')
@@ -147,14 +143,11 @@ export class FlakyTestsReporter {
       .catch((e: unknown) => log.warn('migrate failed:', e))
     await this.store
       .insertRun(
-        parse(insertRunInputSchema, {
+        buildInsertRunInput({
           runId: this.runId,
           project: resolveConfig().project ?? null,
-          startedAt: new Date().toISOString(),
-          gitSha: git.sha,
-          gitDirty: git.dirty,
+          git,
           runtimeVersion: process.version,
-          testArgs: process.argv.slice(2).join(' '),
         }),
       )
       .catch((e: unknown) => log.warn('insertRun failed:', e))
@@ -202,17 +195,12 @@ export class FlakyTestsReporter {
           failedTests++
           const firstError = (result.errors ?? [])[0]
           failureInputs.push(
-            parse(insertFailureInputSchema, {
+            buildInsertFailureInput({
               runId: this.runId,
               testFile: task.file?.filepath ?? 'unknown',
               testName: getTestPath(task),
-              failureKind: categorizeError(firstError),
-              errorMessage:
-                firstError != null ? extractMessage(firstError) : null,
-              errorStack: firstError != null ? extractStack(firstError) : null,
-              durationMs:
-                result.duration != null ? Math.round(result.duration) : null,
-              failedAt: new Date().toISOString(),
+              error: firstError ?? null,
+              durationMs: result.duration ?? null,
             }),
           )
         }
@@ -232,10 +220,8 @@ export class FlakyTestsReporter {
     await this.store
       .updateRun(
         this.runId,
-        parse(updateRunInputSchema, {
-          endedAt: new Date().toISOString(),
+        buildUpdateRunInput({
           durationMs,
-          status,
           totalTests,
           passedTests,
           failedTests,

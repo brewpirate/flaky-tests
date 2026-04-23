@@ -34,6 +34,12 @@ export {
   StoreError,
 } from './errors'
 export {
+  type BuildInsertFailureInputOpts,
+  type BuildInsertRunInputOpts,
+  type BuildUpdateRunInputOpts,
+  buildInsertFailureInput,
+  buildInsertRunInput,
+  buildUpdateRunInput,
   captureGitInfo,
   categorizeError,
   DescribeStack,
