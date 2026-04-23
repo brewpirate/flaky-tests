@@ -1,5 +1,5 @@
-import { MAX_PROMPT_STACK_LINES } from './defaults'
-import type { FlakyPattern } from './types'
+import { MAX_PROMPT_STACK_LINES } from '#core/config/defaults'
+import type { FlakyPattern } from '#core/types'
 
 /**
  * Generates a structured investigation prompt for a flaky test pattern.

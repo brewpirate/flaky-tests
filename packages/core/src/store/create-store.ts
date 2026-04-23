@@ -35,10 +35,10 @@
  * ```
  */
 
-import type { Config } from './config'
-import { MissingStorePackageError } from './errors'
+import type { Config } from '#core/config/config'
+import { MissingStorePackageError } from '#core/errors/errors'
+import type { IStore } from '#core/types'
 import { listRegisteredPlugins } from './plugin'
-import type { IStore } from './types'
 
 export type StoreModuleImporter = (spec: string) => Promise<unknown>
 

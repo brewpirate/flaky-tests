@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
+import type { FlakyPattern } from '#core/types'
 import { generatePrompt } from './prompt'
-import type { FlakyPattern } from './types'
 
 function makePattern(overrides: Partial<FlakyPattern> = {}): FlakyPattern {
   return {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { categorizeError, extractMessage, extractStack } from '../src'
+import { categorizeError, extractMessage, extractStack } from '#core'
 
 describe('categorizeError', () => {
   test('returns unknown for non-Error values', () => {

@@ -22,6 +22,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import {
   type Config,
   createStoreFromConfig,
+  type FlakyPattern,
   getTestCredentials,
   resolveConfig,
 } from '@flaky-tests/core'
@@ -116,7 +117,9 @@ describe.skipIf(SKIP)('TursoStore — live E2E via dispatcher', () => {
         windowDays: 7,
         threshold: 2,
       })
-      const hit = patterns.find((pattern) => pattern.testName === testName)
+      const hit = patterns.find(
+        (pattern: FlakyPattern) => pattern.testName === testName,
+      )
       expect(hit).toBeDefined()
       expect(hit?.recentFails).toBe(2)
       expect(hit?.priorFails).toBe(0)

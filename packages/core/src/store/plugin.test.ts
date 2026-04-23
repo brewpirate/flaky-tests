@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { Config } from './config'
+import type { Config } from '#core/config/config'
 import { definePlugin, listRegisteredPlugins } from './plugin'
 
 const fakeConfig: Config = {

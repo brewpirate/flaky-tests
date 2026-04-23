@@ -16,8 +16,8 @@
 // biome-ignore-all lint/suspicious/noConsole: this is the logger — it owns console.*
 
 import { appendFileSync } from 'node:fs'
-import type { Config } from './config'
-import { resolveConfig } from './config'
+import type { Config } from '#core/config/config'
+import { resolveConfig } from '#core/config/config'
 
 /** Log severity. Levels are inclusive: `warn` emits warn+error, `debug` emits everything. */
 export type LogLevel = 'silent' | 'error' | 'warn' | 'debug'

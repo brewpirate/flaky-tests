@@ -4,7 +4,11 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type Config, resetConfigForTesting, resolveConfig } from './config'
+import {
+  type Config,
+  resetConfigForTesting,
+  resolveConfig,
+} from '#core/config/config'
 import { createLogger, type LogLevel, resolveLogLevel } from './log'
 
 function baseConfig(level: LogLevel, file?: string): Config {

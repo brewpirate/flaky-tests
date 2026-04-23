@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
+import { ConfigError } from '#core/errors/errors'
 import { resolveConfig } from './config'
-import { ConfigError } from './errors'
 
 function env(overrides: Record<string, string | undefined>): NodeJS.ProcessEnv {
   return overrides as NodeJS.ProcessEnv

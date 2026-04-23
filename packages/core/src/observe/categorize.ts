@@ -1,4 +1,4 @@
-import type { FailureKind } from './types'
+import type { FailureKind } from '#core/types'
 
 /** Cap on how much of `error.message` we scan — guards against regex-DoS on huge messages. */
 const MAX_MESSAGE_SCAN_LENGTH = 4096

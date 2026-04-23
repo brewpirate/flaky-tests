@@ -30,3 +30,4 @@ bun.lockb
 # Local log output from FLAKY_TESTS_LOG_FILE.
 flaky.log
 *.flaky.log
+tsconfig.tsbuildinfo
