@@ -4,7 +4,6 @@ import {
   DEFAULT_THRESHOLD,
   DEFAULT_WINDOW_DAYS,
   definePlugin,
-  extractMessage,
   type FailureRow,
   type FlakyPattern,
   flakyPatternSchema,
@@ -19,6 +18,7 @@ import {
   type ListFailuresOptions,
   MAX_FAILED_TESTS_PER_RUN,
   MS_PER_DAY,
+  makeStoreWrapper,
   mapRowToPattern,
   parse,
   parseArray,
@@ -26,7 +26,6 @@ import {
   type RetryOptions,
   type RunStatus,
   retryOptionsSchema,
-  StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
   validateTablePrefix,
@@ -100,6 +99,8 @@ export class PostgresStore implements IStore {
   private runsTable: string
   private failuresTable: string
   private retryOptions: RetryOptions
+  /** Wraps driver calls in {@link StoreError}; see {@link makeStoreWrapper}. */
+  private wrap = makeStoreWrapper(PACKAGE)
 
   /**
    * Accepts either a full `connectionString` or individual host/port/credentials fields.
@@ -132,20 +133,6 @@ export class PostgresStore implements IStore {
           password: validated.password,
         }),
         ...(validated.ssl !== undefined && { ssl: validated.ssl }),
-      })
-    }
-  }
-
-  /** Wraps a driver call so any thrown postgres.js error becomes a {@link StoreError} with `cause` preserved for stack inspection. */
-  private async wrap<T>(method: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn()
-    } catch (error) {
-      throw new StoreError({
-        package: PACKAGE,
-        method,
-        message: extractMessage(error),
-        cause: error,
       })
     }
   }

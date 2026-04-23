@@ -18,4 +18,8 @@ export {
   listRegisteredPlugins,
   resetPluginRegistryForTesting,
 } from './plugin'
-export { stripTimestampPrefix } from './store-utils'
+export {
+  makeStoreWrapper,
+  type StoreCallWrapper,
+  stripTimestampPrefix,
+} from './store-utils'
