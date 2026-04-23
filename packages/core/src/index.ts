@@ -63,6 +63,7 @@ export {
   detectBaselineVersion,
   type FlakyPluginDescriptor,
   listRegisteredPlugins,
+  makeStoreWrapper,
   mapRowToPattern,
   type PatternRow,
   pendingMigrations,
@@ -71,6 +72,7 @@ export {
   type SchemaInspector,
   SQLITE_MIGRATIONS,
   type SqliteMigration,
+  type StoreCallWrapper,
   type StoreModuleImporter,
   stripTimestampPrefix,
 } from './store'

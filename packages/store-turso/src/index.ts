@@ -6,7 +6,6 @@ import {
   DEFAULT_WINDOW_DAYS,
   definePlugin,
   detectBaselineVersion,
-  extractMessage,
   type FailureRow,
   type FlakyPattern,
   flakyPatternSchema,
@@ -21,6 +20,7 @@ import {
   type ListFailuresOptions,
   MAX_FAILED_TESTS_PER_RUN,
   MS_PER_DAY,
+  makeStoreWrapper,
   mapRowToPattern,
   type PatternRow,
   parse,
@@ -35,7 +35,6 @@ import {
   type SchemaInspector,
   SQLITE_MIGRATIONS,
   type SqliteMigration,
-  StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
   withRetry,
@@ -71,6 +70,8 @@ interface SchemaVersionRow {
 export class TursoStore implements IStore {
   private client: Client
   private retryOptions: RetryOptions
+  /** Wraps driver calls in {@link StoreError}; see {@link makeStoreWrapper}. */
+  private wrap = makeStoreWrapper(PACKAGE)
 
   /**
    * Builds the libSQL client from a validated URL and optional auth token.
@@ -86,20 +87,6 @@ export class TursoStore implements IStore {
       }),
     })
     this.retryOptions = validated.retry ?? {}
-  }
-
-  /** Wraps a driver call so any thrown libSQL error becomes a {@link StoreError} with `cause` preserved for stack inspection. */
-  private async wrap<T>(method: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn()
-    } catch (error) {
-      throw new StoreError({
-        package: PACKAGE,
-        method,
-        message: extractMessage(error),
-        cause: error,
-      })
-    }
   }
 
   /**

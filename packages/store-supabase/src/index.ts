@@ -18,6 +18,7 @@ import {
   type ListFailuresOptions,
   MAX_FAILED_TESTS_PER_RUN,
   MS_PER_DAY,
+  makeStoreWrapper,
   parse,
   parseArray,
   type RecentRun,
@@ -59,6 +60,8 @@ export class SupabaseStore implements IStore {
   private runsTable: string
   private failuresTable: string
   private retryOptions: RetryOptions
+  /** Wraps driver calls in {@link StoreError}; see {@link makeStoreWrapper}. */
+  private wrap = makeStoreWrapper(PACKAGE)
 
   /**
    * Validate options, construct a supabase-js client, and resolve the
@@ -284,21 +287,9 @@ export class SupabaseStore implements IStore {
       }
       return (data ?? []) as unknown[]
     }
-    let data: unknown[]
-    try {
-      data = await withRetry(runQuery, {
-        ...this.retryOptions,
-        signal: options.signal,
-      })
-    } catch (error) {
-      options.signal?.throwIfAborted()
-      throw new StoreError({
-        package: PACKAGE,
-        method: 'getNewPatterns',
-        message: error instanceof Error ? error.message : String(error),
-        cause: error,
-      })
-    }
+    const data = await this.wrap('getNewPatterns', () =>
+      withRetry(runQuery, { ...this.retryOptions, signal: options.signal }),
+    )
 
     type Row = {
       test_file: string
@@ -411,18 +402,9 @@ export class SupabaseStore implements IStore {
       }
       return (data ?? []) as unknown[]
     }
-    let data: unknown[]
-    try {
-      data = await withRetry(runQuery, { ...this.retryOptions, signal })
-    } catch (error) {
-      signal?.throwIfAborted()
-      throw new StoreError({
-        package: PACKAGE,
-        method: 'getRecentRuns',
-        message: error instanceof Error ? error.message : String(error),
-        cause: error,
-      })
-    }
+    const data = await this.wrap('getRecentRuns', () =>
+      withRetry(runQuery, { ...this.retryOptions, signal }),
+    )
     type Row = {
       run_id: string
       project: string | null
@@ -523,18 +505,9 @@ export class SupabaseStore implements IStore {
       return (data ?? []) as unknown as Row[]
     }
 
-    let rows: Row[]
-    try {
-      rows = await withRetry(runQuery, { ...this.retryOptions, signal })
-    } catch (error) {
-      signal?.throwIfAborted()
-      throw new StoreError({
-        package: PACKAGE,
-        method: 'listFailures',
-        message: error instanceof Error ? error.message : String(error),
-        cause: error,
-      })
-    }
+    const rows = await this.wrap('listFailures', () =>
+      withRetry(runQuery, { ...this.retryOptions, signal }),
+    )
 
     return rows.map((row) => ({
       runId: row.run_id,
