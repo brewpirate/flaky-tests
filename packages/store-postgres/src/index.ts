@@ -507,7 +507,9 @@ export class PostgresStore implements IStore {
       filters.push(this.sql`f.failed_at > ${new Date(since)}`)
     }
     if (runIds !== undefined) {
-      filters.push(this.sql`f.run_id IN ${this.sql(runIds as readonly string[])}`)
+      filters.push(
+        this.sql`f.run_id IN ${this.sql(runIds as readonly string[])}`,
+      )
     }
     filters.push(
       project === null
@@ -519,9 +521,8 @@ export class PostgresStore implements IStore {
       filters.push(this.sql`r.ended_at IS NOT NULL`)
     }
     // Build `A AND B AND C …` by reducing the filter fragments.
-    const whereClause = filters.reduce(
-      (accumulator, filter, index) =>
-        index === 0 ? filter : this.sql`${accumulator} AND ${filter}`,
+    const whereClause = filters.reduce((accumulator, filter, index) =>
+      index === 0 ? filter : this.sql`${accumulator} AND ${filter}`,
     )
 
     const rows = await this.wrap('listFailures', () =>
