@@ -1,4 +1,4 @@
-import type { FlakyPattern } from '@flaky-tests/core'
+import type { FlakyPattern } from '../../index'
 import { generatePrompt } from '../prompt'
 import { esc, severityRank, shortFile } from './utils'
 

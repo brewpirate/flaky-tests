@@ -14,13 +14,6 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist/**/*",
-    "src/**/*",
-    "!**/*.test.ts",
-    "!**/*.test.js",
-    "!**/*.test.d.ts",
-    "!**/*.test.d.ts.map",
-    "!**/*.integration.test.ts",
-    "!**/__snapshots__/**",
     "package.json",
     "LICENSE"
   ],
@@ -37,7 +30,16 @@
     "check:fix": "biome check --write .",
     "test:live": "bun --env-file=.env.local test src/live.integration.test.ts"
   },
+  "sideEffects": false,
   "license": "MIT",
+  "homepage": "https://github.com/brewpirate/flaky-tests#readme",
+  "bugs": {
+    "url": "https://github.com/brewpirate/flaky-tests/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brewpirate/flaky-tests.git"
+  },
   "dependencies": {
     "@flaky-tests/core": "workspace:*",
     "@libsql/client": "^0.17.0",

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
-import type { FlakyPattern } from '@flaky-tests/core'
 import { type } from 'arktype'
+import type { FlakyPattern } from '../index'
 import {
   createIssue,
   findExistingIssue,

@@ -23,13 +23,13 @@ The CLI can emit a **self-contained HTML report** — a single `.html` file with
 
    <TabItem label="Bun">
 
-   <PackageManagers type="exec" pkg="@flaky-tests/cli" args="--html" />
+   <PackageManagers type="exec" pkg="@flaky-tests/core" args="--html" />
 
    </TabItem>
 
    <TabItem label="Vitest">
 
-   <PackageManagers type="exec" pkg="@flaky-tests/cli" args="--html" />
+   <PackageManagers type="exec" pkg="@flaky-tests/core" args="--html" />
 
    </TabItem>
 
@@ -40,7 +40,7 @@ The CLI can emit a **self-contained HTML report** — a single `.html` file with
 2. **Or write to a specific location with `--out`**
 
    ```sh
-   bunx @flaky-tests/cli --html --out flaky-report.html
+   bunx @flaky-tests/core --html --out flaky-report.html
    ```
 
    Use this when you want to commit the file, attach it to a PR, or upload it as a CI artifact.
@@ -56,7 +56,7 @@ The CLI can emit a **self-contained HTML report** — a single `.html` file with
 Drop a dedicated script into `package.json` so report generation is a
 single command everyone on the team can run:
 
-<PackageManagers pkg="@flaky-tests/cli" dev />
+<PackageManagers pkg="@flaky-tests/core" dev />
 
 ```json title="package.json"
 {
@@ -146,7 +146,7 @@ The same text is available headlessly:
 ```sh
 bun run flaky:prompt     # if you added the script
 # or
-bunx @flaky-tests/cli --prompt
+bunx @flaky-tests/core --prompt
 ```
 
 Useful when you want to pipe prompts into a tool instead of opening
@@ -187,7 +187,7 @@ Because the report is a single `.html` file with no external dependencies, it tr
 
 ```yaml title=".github/workflows/flaky-check.yml"
 - name: Generate flaky report
-  run: bunx @flaky-tests/cli --html --out flaky-report.html
+  run: bunx @flaky-tests/core --html --out flaky-report.html
 
 - name: Upload report
   uses: actions/upload-artifact@v4

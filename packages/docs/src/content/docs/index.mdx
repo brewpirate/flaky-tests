@@ -41,6 +41,6 @@ import reportPreview from '../../assets/flaky-report-preview.png'
 
 2. **Run your tests as usual** — the plugin captures pass/fail results, error categories (assertion, timeout, uncaught), stack traces, git SHA, and timing data. No test code changes needed.
 
-3. **Detect flakiness** — run `bunx @flaky-tests/cli` (or `npx`) to analyze recorded results. It compares the current time window against the prior window and surfaces tests that are newly failing intermittently.
+3. **Detect flakiness** — run `bunx @flaky-tests/core` (or `npx`) to analyze recorded results. It compares the current time window against the prior window and surfaces tests that are newly failing intermittently.
 
 4. **Take action** — use `--prompt` to generate an investigation prompt you can paste into an AI assistant, `--create-issue` to open a GitHub issue for each flaky pattern, or `--html` to generate a visual report.

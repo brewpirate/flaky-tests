@@ -1,4 +1,4 @@
-export { generatePrompt } from '@flaky-tests/core'
+export { generatePrompt } from '../index'
 
 /** Copy text to the system clipboard. Returns true on success, false if unavailable. */
 export function copyToClipboard(text: string): boolean {

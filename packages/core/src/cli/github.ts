@@ -5,9 +5,9 @@
 
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
-import type { Config, FlakyPattern } from '@flaky-tests/core'
-import { createLogger } from '@flaky-tests/core'
 import { type } from 'arktype'
+import type { Config, FlakyPattern } from '../index'
+import { createLogger } from '../index'
 import { generatePrompt } from './prompt'
 
 const log = createLogger('cli:github')

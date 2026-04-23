@@ -46,7 +46,7 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
    After a few runs (or in CI after a few days):
 
    ```sh
-   bunx @flaky-tests/cli
+   bunx @flaky-tests/core
    ```
 
    If new patterns are detected you'll see something like:
@@ -64,7 +64,7 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 5. **Generate an investigation prompt**
 
    ```sh
-   bunx @flaky-tests/cli --prompt
+   bunx @flaky-tests/core --prompt
    ```
 
    Copy the output into Claude, Cursor, or Copilot to investigate.
@@ -108,7 +108,7 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 
    After a few runs (or in CI after a few days):
 
-   <PackageManagers type="exec" pkg="@flaky-tests/cli" />
+   <PackageManagers type="exec" pkg="@flaky-tests/core" />
 
 
    If new patterns are detected you'll see something like:
@@ -125,7 +125,7 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 
 5. **Generate an investigation prompt**
 
-   <PackageManagers type="exec" pkg="@flaky-tests/cli" args="--prompt" />
+   <PackageManagers type="exec" pkg="@flaky-tests/core" args="--prompt" />
 
    Copy the output into Claude, Cursor, or Copilot to investigate.
 
@@ -140,7 +140,7 @@ Pick your test runner. Both paths use the default **SQLite** store and capture f
 Typing `bunx` / `npx` each time gets old. Install the CLI as a dev
 dependency and add scripts so the whole team runs the same invocation:
 
-<PackageManagers pkg="@flaky-tests/cli" dev />
+<PackageManagers pkg="@flaky-tests/core" dev />
 
 ```json title="package.json"
 {

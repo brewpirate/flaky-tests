@@ -10,35 +10,22 @@
         "typescript": "^6.0.2",
       },
     },
-    "packages/cli": {
-      "name": "@flaky-tests/cli",
-      "version": "0.1.0",
-      "bin": {
-        "flaky-tests": "./dist/check.js",
-      },
-      "dependencies": {
-        "@flaky-tests/core": "workspace:*",
-        "@flaky-tests/store-sqlite": "workspace:*",
-        "arktype": "^2.1.0",
-      },
-      "devDependencies": {
-        "@flaky-tests/plugin-bun": "workspace:*",
-        "@flaky-tests/plugin-vitest": "workspace:*",
-        "bun-types": "latest",
-      },
-      "optionalDependencies": {
-        "@flaky-tests/store-postgres": "workspace:*",
-        "@flaky-tests/store-supabase": "workspace:*",
-        "@flaky-tests/store-turso": "workspace:*",
-      },
-    },
     "packages/core": {
       "name": "@flaky-tests/core",
       "version": "0.1.0",
+      "bin": {
+        "flaky-tests": "./dist/cli/check.js",
+      },
       "dependencies": {
         "arktype": "^2.2.0",
       },
       "devDependencies": {
+        "@flaky-tests/plugin-bun": "workspace:*",
+        "@flaky-tests/plugin-vitest": "workspace:*",
+        "@flaky-tests/store-postgres": "workspace:*",
+        "@flaky-tests/store-sqlite": "workspace:*",
+        "@flaky-tests/store-supabase": "workspace:*",
+        "@flaky-tests/store-turso": "workspace:*",
         "bun-types": "latest",
       },
     },
@@ -287,8 +274,6 @@
     "@expressive-code/plugin-shiki": ["@expressive-code/plugin-shiki@0.41.7", "", { "dependencies": { "@expressive-code/core": "^0.41.7", "shiki": "^3.2.2" } }, "sha512-DL605bLrUOgqTdZ0Ot5MlTaWzppRkzzqzeGEu7ODnHF39IkEBbFdsC7pbl3LbUQ1DFtnfx6rD54k/cdofbW6KQ=="],
 
     "@expressive-code/plugin-text-markers": ["@expressive-code/plugin-text-markers@0.41.7", "", { "dependencies": { "@expressive-code/core": "^0.41.7" } }, "sha512-Ewpwuc5t6eFdZmWlFyeuy3e1PTQC0jFvw2Q+2bpcWXbOZhPLsT7+h8lsSIJxb5mS7wZko7cKyQ2RLYDyK6Fpmw=="],
-
-    "@flaky-tests/cli": ["@flaky-tests/cli@workspace:packages/cli"],
 
     "@flaky-tests/core": ["@flaky-tests/core@workspace:packages/core"],
 
