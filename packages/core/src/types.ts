@@ -7,7 +7,7 @@ import type {
   insertRunInputSchema,
   runStatusSchema,
   updateRunInputSchema,
-} from './schemas'
+} from './schema/schemas'
 
 /** Coarse classification of why a test failed. */
 export type FailureKind = typeof failureKindSchema.infer

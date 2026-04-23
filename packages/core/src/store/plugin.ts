@@ -16,7 +16,7 @@
  */
 
 import type { Type } from 'arktype'
-import type { Config } from './config'
+import type { Config } from '#core/config/config'
 
 export interface FlakyPluginDescriptor<Instance = unknown> {
   readonly name: string

@@ -1,5 +1,5 @@
 import { stripTimestampPrefix } from './store-utils'
-import type { FlakyPattern } from './types'
+import type { FlakyPattern } from '#core/types'
 
 /**
  * Raw row shape returned by the getNewPatterns query across all SQL stores.

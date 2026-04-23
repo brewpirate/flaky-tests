@@ -1,5 +1,5 @@
-import { createLogger } from './log'
-import type { GitInfo } from './types'
+import { createLogger } from '#core/errors/log'
+import type { GitInfo } from '#core/types'
 
 const log = createLogger('core:git')
 

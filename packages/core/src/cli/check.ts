@@ -53,7 +53,7 @@ import {
   gitHubConfigSchema,
   resolveRepo,
 } from './github'
-import { aggregateDashboard, generateHtml } from './html'
+import { aggregateDashboard, generateHtml } from '../report/html'
 import { copyToClipboard, generatePrompt } from './prompt'
 
 const log = createLogger('cli')

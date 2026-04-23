@@ -10,8 +10,8 @@
 import { readFileSync } from 'node:fs'
 import { basename, dirname, resolve } from 'node:path'
 import { type } from 'arktype'
-import { ConfigError } from './errors'
-import { parse } from './validate-schemas'
+import { ConfigError } from '#core/errors/errors'
+import { parse } from '#core/schema/validate-schemas'
 
 // ---------------------------------------------------------------------------
 // Schema

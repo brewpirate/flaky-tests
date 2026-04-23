@@ -23,6 +23,9 @@
       "types": "./dist/cli/index.d.ts"
     }
   },
+  "imports": {
+    "#core/*": "./src/*"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

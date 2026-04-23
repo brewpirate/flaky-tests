@@ -5,5 +5,5 @@ export {
   type AggregatedDashboard,
   aggregateDashboard,
   generateHtml,
-} from './html'
+} from '../report/html'
 export { copyToClipboard, generatePrompt } from './prompt'
