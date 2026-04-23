@@ -90,6 +90,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@flaky-tests/core": "workspace:*",
+        "@libsql/client": "^0.17.0",
         "arktype": "^2.1.0",
       },
       "devDependencies": {

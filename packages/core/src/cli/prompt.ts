@@ -1,24 +1,28 @@
+import { spawnSync } from 'node:child_process'
+
 export { generatePrompt } from '@flaky-tests/core'
 
 /** Copy text to the system clipboard. Returns true on success, false if unavailable. */
 export function copyToClipboard(text: string): boolean {
-  let cmd: string[]
+  let command: string
+  let args: string[]
   if (process.platform === 'darwin') {
-    cmd = ['pbcopy']
+    command = 'pbcopy'
+    args = []
   } else if (process.platform === 'win32') {
-    cmd = ['clip']
+    command = 'clip'
+    args = []
   } else {
-    cmd = ['xclip', '-selection', 'clipboard']
+    command = 'xclip'
+    args = ['-selection', 'clipboard']
   }
 
   try {
-    const result = Bun.spawnSync({
-      cmd,
-      stdin: new TextEncoder().encode(text),
-      stdout: 'ignore',
-      stderr: 'ignore',
+    const result = spawnSync(command, args, {
+      input: text,
+      stdio: ['pipe', 'ignore', 'ignore'],
     })
-    return result.exitCode === 0
+    return result.status === 0
   } catch {
     return false
   }

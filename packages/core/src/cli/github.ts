@@ -5,6 +5,7 @@
 
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
+import { spawnSync } from 'node:child_process'
 import type { Config, FlakyPattern } from '@flaky-tests/core'
 import { createLogger } from '@flaky-tests/core'
 import { type } from 'arktype'
@@ -100,13 +101,11 @@ export function resolveRepo(
 
   // Parse git remote
   try {
-    const result = Bun.spawnSync({
-      cmd: ['git', 'remote', 'get-url', 'origin'],
-      stdout: 'pipe',
-      stderr: 'ignore',
+    const result = spawnSync('git', ['remote', 'get-url', 'origin'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
     })
-    if (result.exitCode === 0) {
-      const url = new TextDecoder().decode(result.stdout).trim()
+    if (result.status === 0) {
+      const url = result.stdout.toString('utf8').trim()
       // https://github.com/owner/repo.git  or  git@github.com:owner/repo.git
       const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/)
       const owner = match?.[1]
