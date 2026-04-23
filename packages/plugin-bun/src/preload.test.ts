@@ -50,6 +50,9 @@ describe.skipIf(SKIP_IF_PRELOAD_ACTIVE)('createPreload store contract', () => {
       async getRecentRuns() {
         return []
       },
+      async listFailures() {
+        return []
+      },
       async close() {},
     }
 

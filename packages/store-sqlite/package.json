@@ -8,11 +8,6 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./report": {
-      "bun": "./src/report.ts",
-      "import": "./dist/report.js",
-      "types": "./dist/report.d.ts"
     }
   },
   "main": "./dist/index.js",
@@ -33,7 +28,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/report.ts --outdir dist --format esm --target node --external @flaky-tests/core --external arktype --external bun:sqlite",
+    "build": "bun build ./src/index.ts --outdir dist --format esm --target node --external @flaky-tests/core --external arktype --external bun:sqlite",
     "build:types": "tsc --project tsconfig.build.json",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",

@@ -5,6 +5,7 @@ import {
   DEFAULT_WINDOW_DAYS,
   definePlugin,
   extractMessage,
+  type FailureRow,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -15,6 +16,7 @@ import {
   type IStore,
   insertFailureInputSchema,
   insertRunInputSchema,
+  type ListFailuresOptions,
   MAX_FAILED_TESTS_PER_RUN,
   MS_PER_DAY,
   mapRowToPattern,
@@ -474,6 +476,90 @@ export class PostgresStore implements IStore {
       errorsBetweenTests: row.errors_between_tests,
       gitSha: row.git_sha,
       gitDirty: row.git_dirty,
+    }))
+  }
+
+  /**
+   * Raw failure rows — primitive used by the HTML report to bucket
+   * failures by kind, file, or run. See {@link IStore.listFailures}.
+   *
+   * @throws `DOMException` with `name === 'AbortError'` when `options.signal`
+   *   aborts — server-side cancel is fired via `cancelOnAbort`.
+   * @throws {@link StoreError} when the postgres driver rejects the query.
+   */
+  async listFailures(options: ListFailuresOptions): Promise<FailureRow[]> {
+    options.signal?.throwIfAborted()
+    const {
+      since,
+      runIds,
+      project = null,
+      excludeInfraBlowups = true,
+      signal,
+    } = options
+    if (runIds !== undefined && runIds.length === 0) {
+      return []
+    }
+    const runs = this.runsTable
+    const failures = this.failuresTable
+
+    const filters: ReturnType<typeof this.sql>[] = []
+    if (since !== undefined) {
+      filters.push(this.sql`f.failed_at > ${new Date(since)}`)
+    }
+    if (runIds !== undefined) {
+      filters.push(this.sql`f.run_id IN ${this.sql(runIds as readonly string[])}`)
+    }
+    filters.push(
+      project === null
+        ? this.sql`r.project IS NULL`
+        : this.sql`r.project = ${project}`,
+    )
+    if (excludeInfraBlowups) {
+      filters.push(this.sql`r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}`)
+      filters.push(this.sql`r.ended_at IS NOT NULL`)
+    }
+    // Build `A AND B AND C …` by reducing the filter fragments.
+    const whereClause = filters.reduce(
+      (accumulator, filter, index) =>
+        index === 0 ? filter : this.sql`${accumulator} AND ${filter}`,
+    )
+
+    const rows = await this.wrap('listFailures', () =>
+      withRetry(
+        () => {
+          const query = this.sql<
+            Array<{
+              run_id: string
+              test_file: string
+              test_name: string
+              failure_kind: string
+              error_message: string | null
+              failed_at: Date | string
+            }>
+          >`
+            SELECT f.run_id, f.test_file, f.test_name, f.failure_kind,
+                   f.error_message, f.failed_at
+              FROM ${this.sql(failures)} f
+              JOIN ${this.sql(runs)} r ON r.run_id = f.run_id
+             WHERE ${whereClause}
+             ORDER BY f.failed_at ASC
+          `
+          return cancelOnAbort(query, signal)
+        },
+        { ...this.retryOptions, signal },
+      ),
+    )
+
+    return rows.map((row) => ({
+      runId: row.run_id,
+      testFile: row.test_file,
+      testName: row.test_name,
+      failureKind: row.failure_kind,
+      errorMessage: row.error_message,
+      failedAt:
+        row.failed_at instanceof Date
+          ? row.failed_at.toISOString()
+          : String(row.failed_at),
     }))
   }
 

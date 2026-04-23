@@ -8,6 +8,11 @@ import {
 import { renderPatterns } from './render-patterns'
 import { renderShell } from './render-shell'
 
+export {
+  aggregateDashboard,
+  type AggregateDashboardOptions,
+  type AggregatedDashboard,
+} from './aggregate'
 export type { HotFile, KindBreakdown, RecentRun, RunFailure } from './types'
 
 /**

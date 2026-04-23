@@ -8,6 +8,7 @@ import {
   DEFAULT_WINDOW_DAYS,
   definePlugin,
   detectBaselineVersion,
+  type FailureRow,
   type FlakyPattern,
   flakyPatternSchema,
   type GetNewPatternsOptions,
@@ -18,6 +19,7 @@ import {
   type IStore,
   insertFailureInputSchema,
   insertRunInputSchema,
+  type ListFailuresOptions,
   MAX_FAILED_TESTS_PER_RUN,
   MS_PER_DAY,
   mapRowToPattern,
@@ -45,7 +47,7 @@ export const sqliteStoreOptionsSchema = type({
 /** Inferred options type for {@link SqliteStore}; accepted by its constructor. */
 export type SqliteStoreOptions = typeof sqliteStoreOptionsSchema.infer
 
-const DEFAULT_DB_PATH = 'node_modules/.cache/flaky-tests/failures.db'
+const DEFAULT_DB_PATH = './failures.db'
 
 /** Row shape in the bookkeeping `schema_version` table. */
 interface SchemaVersionRow {
@@ -481,6 +483,86 @@ export class SqliteStore implements IStore {
       errorsBetweenTests: row.errors_between_tests,
       gitSha: row.git_sha,
       gitDirty: row.git_dirty === null ? null : row.git_dirty !== 0,
+    }))
+  }
+
+  /**
+   * Raw failure rows used by the HTML report and other consumers that need
+   * to bucket failures (by kind, by file, by run). `since` filters on
+   * `failed_at`; `runIds` narrows to specific runs; both AND-combine when
+   * present. `excludeInfraBlowups` defaults to `true`, matching
+   * {@link getNewPatterns}.
+   *
+   * @throws `DOMException` with `name === 'AbortError'` when
+   *   `options.signal` aborts before the query starts.
+   * @throws {@link SQLiteError} (from `bun:sqlite`) when the query fails.
+   */
+  async listFailures(options: ListFailuresOptions): Promise<FailureRow[]> {
+    options.signal?.throwIfAborted()
+    const {
+      since,
+      runIds,
+      project = null,
+      excludeInfraBlowups = true,
+    } = options
+
+    const conditions: string[] = []
+    const args: (string | number)[] = []
+
+    if (since !== undefined) {
+      conditions.push('f.failed_at > ?')
+      args.push(since)
+    }
+    if (runIds !== undefined) {
+      if (runIds.length === 0) {
+        return []
+      }
+      const placeholders = runIds.map(() => '?').join(', ')
+      conditions.push(`f.run_id IN (${placeholders})`)
+      args.push(...runIds)
+    }
+    if (project === null) {
+      conditions.push('r.project IS NULL')
+    } else {
+      conditions.push('r.project = ?')
+      args.push(project)
+    }
+    if (excludeInfraBlowups) {
+      conditions.push(`r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}`)
+      conditions.push('r.ended_at IS NOT NULL')
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    const rows = this.db
+      .query<
+        {
+          run_id: string
+          test_file: string
+          test_name: string
+          failure_kind: string
+          error_message: string | null
+          failed_at: string
+        },
+        (string | number)[]
+      >(
+        `SELECT f.run_id, f.test_file, f.test_name, f.failure_kind,
+                f.error_message, f.failed_at
+           FROM failures f
+           JOIN runs r ON r.run_id = f.run_id
+           ${whereClause}
+          ORDER BY f.failed_at ASC`,
+      )
+      .all(...args)
+
+    return rows.map((row) => ({
+      runId: row.run_id,
+      testFile: row.test_file,
+      testName: row.test_name,
+      failureKind: row.failure_kind,
+      errorMessage: row.error_message,
+      failedAt: row.failed_at,
     }))
   }
 

@@ -63,6 +63,7 @@ export {
 export { stripTimestampPrefix } from './store-utils'
 export type {
   FailureKind,
+  FailureRow,
   FlakyPattern,
   GetNewPatternsOptions,
   GetRecentRunsOptions,
@@ -70,6 +71,7 @@ export type {
   InsertFailureInput,
   InsertRunInput,
   IStore,
+  ListFailuresOptions,
   RecentRun,
   RunStatus,
   UpdateRunInput,

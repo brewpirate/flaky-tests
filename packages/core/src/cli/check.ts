@@ -29,13 +29,19 @@
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Config, FlakyPattern, IStore } from '@flaky-tests/core'
+import type {
+  Config,
+  FailureRow,
+  FlakyPattern,
+  IStore,
+} from '@flaky-tests/core'
 import {
   createLogger,
   createStoreFromConfig,
   getNewPatternsOptionsSchema,
   MAX_CLI_ERROR_MESSAGE_LENGTH,
   MissingStorePackageError,
+  MS_PER_DAY,
   parse,
   resolveConfig,
 } from '@flaky-tests/core'
@@ -47,7 +53,7 @@ import {
   gitHubConfigSchema,
   resolveRepo,
 } from './github'
-import { generateHtml } from './html'
+import { aggregateDashboard, generateHtml } from './html'
 import { copyToClipboard, generatePrompt } from './prompt'
 
 const log = createLogger('cli')
@@ -127,6 +133,7 @@ async function main(
 
   let patterns: FlakyPattern[]
   let recentRuns: Awaited<ReturnType<typeof store.getRecentRuns>> = []
+  let failures: FailureRow[] = []
   try {
     patterns = await store.getNewPatterns(
       parse(getNewPatternsOptionsSchema, {
@@ -135,14 +142,24 @@ async function main(
         project: runtimeConfig.project ?? null,
       }),
     )
-    // Fetch run history up front so `--html` can show it even when
-    // there are zero newly-flaky patterns. Cheap and always relevant
-    // to the report.
+    // Fetch run history + raw failure rows up front so `--html` can
+    // render the full dashboard even when there are zero newly-flaky
+    // patterns. `listFailures` is the single primitive; aggregation
+    // (kinds / hot files / per-run drill-downs) happens in core.
     if (doHtml) {
-      recentRuns = await store.getRecentRuns({
-        limit: RECENT_RUNS_LIMIT,
-        project: runtimeConfig.project ?? null,
-      })
+      const dashboardSince = new Date(
+        Date.now() - DASHBOARD_WINDOW_DAYS * MS_PER_DAY,
+      ).toISOString()
+      ;[recentRuns, failures] = await Promise.all([
+        store.getRecentRuns({
+          limit: RECENT_RUNS_LIMIT,
+          project: runtimeConfig.project ?? null,
+        }),
+        store.listFailures({
+          since: dashboardSince,
+          project: runtimeConfig.project ?? null,
+        }),
+      ])
     }
   } finally {
     await store.close()
@@ -157,6 +174,7 @@ async function main(
         patterns,
         windowDays,
         recentRuns,
+        failures,
         outPath: cliConfig.htmlOut,
       })
     }
@@ -220,8 +238,13 @@ async function main(
       patterns,
       windowDays,
       recentRuns,
+      failures,
       outPath: cliConfig.htmlOut,
     })
+    // --html is an end-user report action — the HTML is the signal. Drop the
+    // CI-gate exit so `bun report` doesn't look like a failure in local use.
+    // Run `flaky-tests` without --html to keep the exit=1 gate for CI.
+    process.exit(0)
   }
 
   process.exit(1)
@@ -229,25 +252,36 @@ async function main(
 
 /** Default limit for recent-runs queries surfaced in the HTML report. */
 const RECENT_RUNS_LIMIT = 20
+/** Window used for the dashboard aggregates (kinds + hot files). Intentionally
+ *  wider than the detection window so the report surfaces a month of health
+ *  signal even when detection only looks at the last week. */
+const DASHBOARD_WINDOW_DAYS = 30
+/** Max files surfaced in the "Hot files" table. */
+const HOT_FILE_LIMIT = 15
 
 interface WriteAndOpenHtmlReportOpts {
   patterns: FlakyPattern[]
   windowDays: number
   recentRuns: Awaited<ReturnType<IStore['getRecentRuns']>>
+  failures: FailureRow[]
   outPath: string | undefined
 }
 
-/** Render the HTML report with whatever patterns and recent runs we have,
- *  write it to disk, and open it in the default browser. Always safe to
- *  call — empty `patterns` produces a report that still shows the run
- *  history, which is what users want after a clean run. */
+/** Render the HTML report with whatever patterns, recent runs, and raw
+ *  failure rows we have, aggregate in-process, write it to disk, and open
+ *  it in the default browser. Always safe to call — empty `patterns`
+ *  produces a report that still shows the run history, which is what users
+ *  want after a clean run. */
 function writeAndOpenHtmlReport(opts: WriteAndOpenHtmlReportOpts): void {
-  const { patterns, windowDays, recentRuns, outPath } = opts
+  const { patterns, windowDays, recentRuns, failures, outPath } = opts
+  const dashboard = aggregateDashboard(failures, {
+    hotFileLimit: HOT_FILE_LIMIT,
+  })
   const html = generateHtml(patterns, windowDays, {
     recentRuns,
-    kindBreakdown: [],
-    hotFiles: [],
-    failuresByRun: new Map(),
+    kindBreakdown: dashboard.kindBreakdown,
+    hotFiles: dashboard.hotFiles,
+    failuresByRun: dashboard.failuresByRun,
   })
   const resolvedPath =
     outPath ?? join(tmpdir(), `flaky-tests-${Date.now()}.html`)
