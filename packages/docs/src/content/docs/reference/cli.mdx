@@ -5,16 +5,16 @@ description: Reference for all flaky-tests CLI flags and options.
 
 import { Aside } from '@astrojs/starlight/components'
 
-The CLI is provided by `@flaky-tests/cli`. Run it with `bunx`:
+The CLI is provided by `@flaky-tests/core`. Run it with `bunx`:
 
 ```sh
-bunx @flaky-tests/cli [flags]
+bunx @flaky-tests/core [flags]
 ```
 
 Or install globally:
 
 ```sh
-bun add -g @flaky-tests/cli
+bun add -g @flaky-tests/core
 flaky-tests [flags]
 ```
 
@@ -34,7 +34,7 @@ Running the CLI with no flags:
 Number of days in each detection window. The CLI compares the current window against an equal prior window.
 
 ```sh
-bunx @flaky-tests/cli --window 14   # 14-day windows
+bunx @flaky-tests/core --window 14   # 14-day windows
 ```
 
 Default: `7`
@@ -44,7 +44,7 @@ Default: `7`
 Minimum number of failures in the current window to flag a test as flaky.
 
 ```sh
-bunx @flaky-tests/cli --threshold 3
+bunx @flaky-tests/core --threshold 3
 ```
 
 Default: `2`
@@ -54,7 +54,7 @@ Default: `2`
 Print an AI investigation prompt for each pattern to stdout. Structured for pasting into Claude, Cursor, or Copilot.
 
 ```sh
-bunx @flaky-tests/cli --prompt
+bunx @flaky-tests/core --prompt
 ```
 
 ### `--copy`
@@ -62,7 +62,7 @@ bunx @flaky-tests/cli --prompt
 Copy the investigation prompt to the clipboard. Uses `pbcopy` on macOS, `xclip` on Linux, `clip` on Windows.
 
 ```sh
-bunx @flaky-tests/cli --prompt --copy
+bunx @flaky-tests/core --prompt --copy
 ```
 
 If multiple patterns are found, all prompts are concatenated before copying.
@@ -72,7 +72,7 @@ If multiple patterns are found, all prompts are concatenated before copying.
 Open a GitHub issue for each new pattern. Requires `GITHUB_TOKEN` and either `GITHUB_REPOSITORY` (set automatically in Actions) or `--repo`.
 
 ```sh
-bunx @flaky-tests/cli --create-issue --repo your-org/your-repo
+bunx @flaky-tests/core --create-issue --repo your-org/your-repo
 ```
 
 Issues include the investigation prompt in a collapsible `<details>` block. If an open issue for the same test already exists, a new one is not created.
@@ -82,7 +82,7 @@ Issues include the investigation prompt in a collapsible `<details>` block. If a
 Override the repository for issue creation. Defaults to `GITHUB_REPOSITORY` env var, then falls back to parsing `git remote get-url origin`.
 
 ```sh
-bunx @flaky-tests/cli --create-issue --repo acme/api
+bunx @flaky-tests/core --create-issue --repo acme/api
 ```
 
 ### `--html`
@@ -90,7 +90,7 @@ bunx @flaky-tests/cli --create-issue --repo acme/api
 Generate a self-contained HTML report (single file, inline CSS + JS) and open it in the default browser.
 
 ```sh
-bunx @flaky-tests/cli --html
+bunx @flaky-tests/core --html
 ```
 
 Works even when there are no newly-flaky patterns — the report falls back to run history. See [Using the HTML report](/guides/html-report/) for what's included and how to share it.
@@ -100,7 +100,7 @@ Works even when there are no newly-flaky patterns — the report falls back to r
 Destination path for `--html`. Defaults to a timestamped temp file.
 
 ```sh
-bunx @flaky-tests/cli --html --out flaky-report.html
+bunx @flaky-tests/core --html --out flaky-report.html
 ```
 
 Use this to commit the report, attach it to a PR, or upload it as a CI artifact.
@@ -117,7 +117,7 @@ Use this to commit the report, attach it to a PR, or upload it as a CI artifact.
 The exit code makes the CLI composable in CI pipelines. Use `|| true` to suppress failure if you want CI to pass regardless of flaky patterns:
 
 ```sh
-bunx @flaky-tests/cli || true
+bunx @flaky-tests/core || true
 ```
 </Aside>
 
@@ -125,23 +125,23 @@ bunx @flaky-tests/cli || true
 
 ```sh
 # Check with defaults
-bunx @flaky-tests/cli
+bunx @flaky-tests/core
 
 # Check 30-day window, threshold 5
-bunx @flaky-tests/cli --window 30 --threshold 5
+bunx @flaky-tests/core --window 30 --threshold 5
 
 # Print prompts for each pattern
-bunx @flaky-tests/cli --prompt
+bunx @flaky-tests/core --prompt
 
 # Copy single prompt to clipboard
-bunx @flaky-tests/cli --prompt --copy
+bunx @flaky-tests/core --prompt --copy
 
 # Create GitHub issues
-GITHUB_TOKEN=$TOKEN bunx @flaky-tests/cli --create-issue --repo your-org/your-repo
+GITHUB_TOKEN=$TOKEN bunx @flaky-tests/core --create-issue --repo your-org/your-repo
 
 # Use Turso store
 FLAKY_TESTS_STORE=turso \
   TURSO_URL=libsql://... \
   TURSO_AUTH_TOKEN=... \
-  bunx @flaky-tests/cli
+  bunx @flaky-tests/core
 ```

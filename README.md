@@ -7,7 +7,7 @@
 > Zero-friction flaky test detection for Bun and Vitest.
 
 [![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-flaky--tests-blue?logo=github)](https://github.com/marketplace/actions/flaky-tests)
-[![npm](https://img.shields.io/npm/v/@flaky-tests/cli)](https://www.npmjs.com/package/@flaky-tests/cli)
+[![npm](https://img.shields.io/npm/v/@flaky-tests/core)](https://www.npmjs.com/package/@flaky-tests/core)
 
 **flaky-tests** hooks into your test runner, records every failure to a database, and detects when tests have *newly* started failing intermittently — then generates an AI investigation prompt and opens a GitHub issue automatically.
 
@@ -48,7 +48,7 @@ preload = ["@flaky-tests/plugin-bun/preload"]
 
 ```sh
 bun test   # failures are captured automatically
-bunx @flaky-tests/cli --prompt
+bunx @flaky-tests/core --prompt
 ```
 
 → [Full documentation](https://brewpirate.github.io/flaky-tests)
@@ -232,8 +232,7 @@ See also the [dev docs](docs/dev/) for more contributor guides.
 |---|---|
 | [`@flaky-tests/plugin-bun`](packages/plugin-bun) | Bun test preload |
 | [`@flaky-tests/plugin-vitest`](packages/plugin-vitest) | Vitest reporter |
-| [`@flaky-tests/cli`](packages/cli) | Pattern detection CLI |
-| [`@flaky-tests/core`](packages/core) | Shared types and `IStore` interface |
+| [`@flaky-tests/core`](packages/core) | Shared types, `IStore` interface, and pattern-detection CLI (`flaky-tests` bin) |
 | [`@flaky-tests/store-sqlite`](packages/store-sqlite) | Local SQLite |
 | [`@flaky-tests/store-turso`](packages/store-turso) | Turso (remote SQLite) |
 | [`@flaky-tests/store-supabase`](packages/store-supabase) | Supabase |

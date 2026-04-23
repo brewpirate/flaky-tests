@@ -164,20 +164,20 @@ graph TD
 
 ---
 
-## @flaky-tests/cli
+## @flaky-tests/core CLI (`packages/core/src/cli/`)
 
-**What it does**: Reads from a store, detects newly-flaky test patterns, and either prints prompts, copies to clipboard, generates HTML reports, or opens GitHub issues.
+**What it does**: Reads from a store, detects newly-flaky test patterns, and either prints prompts, copies to clipboard, generates HTML reports, or opens GitHub issues. Ships as the `flaky-tests` bin from `@flaky-tests/core`; programmatic helpers are exported from `@flaky-tests/core/cli`.
 
 **Key files**:
 - `check.ts` — Main CLI entry point (argument parsing, orchestration)
 - `prompt.ts` — Generates AI investigation prompts
 - `github.ts` — GitHub REST API helpers (issue creation, repo resolution)
-- `html.ts` — Generates self-contained HTML reports
+- `html/` — Generates self-contained HTML reports
 - `index.ts` — Public API re-exports
 
 ### Gotchas
 
-**`resolveStore()` uses dynamic imports.** The store adapters (turso, supabase, postgres) are imported with `await import(...)` so they're only loaded if the user selects that store. This keeps the CLI lightweight — you don't need `@libsql/client` installed if you're using SQLite. But it means these imports can fail at runtime if the package isn't installed (they're `optionalDependencies`).
+**`resolveStore()` uses dynamic imports.** The store adapters (sqlite, turso, supabase, postgres) are imported with `await import(...)` so they're only loaded if the user selects that store. This keeps the CLI lightweight — you don't need `@libsql/client` installed if you're using SQLite. Users install whichever store package they need alongside `@flaky-tests/core`; if the package isn't installed, the dispatcher throws `MissingStorePackageError` with a clear install hint.
 
 **Argument parsing is hand-rolled.** There's no library — just `process.argv.includes()` and `process.argv.indexOf()`. This keeps dependencies at zero but means no automatic help generation, no subcommand routing, and easy-to-miss edge cases. The `--repo` flag is parsed in `github.ts` (not `check.ts`), which is inconsistent.
 

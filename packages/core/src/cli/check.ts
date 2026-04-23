@@ -7,13 +7,13 @@
  * windows. Exits 0 if clean, 1 if new patterns are found (CI-friendly).
  *
  * Usage:
- *   bunx @flaky-tests/cli
- *   bunx @flaky-tests/cli --window 14 --threshold 3
- *   bunx @flaky-tests/cli --prompt     # print investigation prompts
- *   bunx @flaky-tests/cli --copy       # copy first prompt to clipboard
- *   bunx @flaky-tests/cli --create-issue
- *   bunx @flaky-tests/cli --html       # write HTML report and open in browser
- *   bunx @flaky-tests/cli --html --out report.html  # write to a specific file
+ *   bunx @flaky-tests/core
+ *   bunx @flaky-tests/core --window 14 --threshold 3
+ *   bunx @flaky-tests/core --prompt     # print investigation prompts
+ *   bunx @flaky-tests/core --copy       # copy first prompt to clipboard
+ *   bunx @flaky-tests/core --create-issue
+ *   bunx @flaky-tests/core --html       # write HTML report and open in browser
+ *   bunx @flaky-tests/core --html --out report.html  # write to a specific file
  *
  * Environment variables:
  *   FLAKY_TESTS_STORE             sqlite | turso | supabase | postgres (default: sqlite)

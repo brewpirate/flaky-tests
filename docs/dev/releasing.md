@@ -91,12 +91,11 @@ Configured via `updateInternalDependencies: "patch"` in `.changeset/config.json`
 
 The publish command handles dependency ordering automatically:
 
-1. `@flaky-tests/core` (no deps)
+1. `@flaky-tests/core` (no runtime deps; ships the `flaky-tests` CLI bin)
 2. `@flaky-tests/store-sqlite` (depends on core)
 3. `@flaky-tests/store-turso`, `store-supabase`, `store-postgres` (depend on core)
 4. `@flaky-tests/plugin-bun` (depends on core + store-sqlite)
 5. `@flaky-tests/plugin-vitest` (depends on core)
-6. `@flaky-tests/cli` (depends on core + store-sqlite + optional stores)
 
 ## Secrets required
 

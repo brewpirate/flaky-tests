@@ -6,7 +6,7 @@ import {
   type KindBreakdown,
   type RecentRun,
   type RunFailure,
-} from '../packages/cli/src/html.ts'
+} from '../packages/core/src/cli/html'
 
 const now = Date.now()
 const iso = (offsetMs: number) => new Date(now - offsetMs).toISOString()

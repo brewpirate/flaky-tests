@@ -22,8 +22,7 @@ cd packages/docs && bun run build    # production build
 
 ## Monorepo structure
 
-- `packages/core` — `IStore` interface, shared types, error categorization helpers
-- `packages/cli` — Detection CLI (`flaky-tests` bin), prompt generation
+- `packages/core` — `IStore` interface, shared types, error categorization helpers, and the detection CLI (`flaky-tests` bin, prompt generation) under `src/cli/`
 - `packages/plugin-bun` — Bun test preload, captures failures via `bun:sqlite`
 - `packages/plugin-vitest` — Vitest reporter implementing `onInit`/`onFinished`
 - `packages/store-sqlite` — Local SQLite store (uses `bun:sqlite`, WAL mode)
@@ -32,7 +31,7 @@ cd packages/docs && bun run build    # production build
 - `packages/store-postgres` — PostgreSQL/Neon store
 - `packages/docs` — Starlight documentation site
 
-Dependency order: core → stores → plugins → cli
+Dependency order: core → stores → plugins (CLI lives inside core)
 
 ## Key architecture
 
@@ -48,7 +47,7 @@ Tests use Bun's built-in test runner. Two tiers:
 
 **Unit tests** (`bun test`) — run on every commit, no external deps:
 - `packages/core/src/*.test.ts` — schemas, validation, escaping, git, errors, prompt, pattern mapper
-- `packages/cli/src/*.test.ts` — prompt generation, GitHub API, HTML report
+- `packages/core/src/cli/**/*.test.ts` — CLI args, prompt generation, GitHub API, HTML report
 - `packages/plugin-vitest/src/index.test.ts` — reporter lifecycle with mock store
 - `packages/plugin-bun/src/*.test.ts` — preload store contract, git capture
 - `packages/store-sqlite/src/index.test.ts` — full store + pattern detection
