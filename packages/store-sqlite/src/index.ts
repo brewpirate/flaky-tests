@@ -2,6 +2,9 @@ import { mkdirSync } from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
+  buildListFailuresQuery,
+  buildNewPatternsQuery,
+  buildRecentRunsQuery,
   type Config,
   CREATE_SCHEMA_VERSION_TABLE,
   createLogger,
@@ -15,29 +18,36 @@ import {
   type GetNewPatternsOptions,
   type GetRecentRunsOptions,
   getNewPatternsOptionsSchema,
+  INSERT_FAILURE_SQL,
+  INSERT_RUN_SQL,
+  INSERT_SCHEMA_VERSION_SQL,
   type InsertFailureInput,
   type InsertRunInput,
   type IStore,
   insertFailureInputSchema,
   insertRunInputSchema,
   type ListFailuresOptions,
-  MAX_FAILED_TESTS_PER_RUN,
-  MS_PER_DAY,
   makeStoreWrapper,
   mapRowToPattern,
   type PatternRow,
   parse,
   parseArray,
   pendingMigrations,
+  pragmaTableInfoSql,
   type RecentRun,
   type RetryOptions,
   type RunStatus,
   raceAbort,
   retryOptionsSchema,
-  SCHEMA_VERSION_TABLE,
   type SchemaInspector,
+  SELECT_APPLIED_MIGRATIONS_SQL,
+  SELECT_CURRENT_VERSION_SQL,
+  SELECT_RUN_STATUS_SQL,
+  SELECT_USER_TABLES_SQL,
   SQLITE_MIGRATIONS,
   type SqliteMigration,
+  UPDATE_RUN_RECONCILE_SQL,
+  UPDATE_RUN_SQL,
   type UpdateRunInput,
   updateRunInputSchema,
   withRetry,
@@ -155,7 +165,7 @@ export class SqliteStore implements IStore {
         const seedStatements: { sql: string; args: InArgs }[] = []
         for (let version = current + 1; version <= baseline; version++) {
           seedStatements.push({
-            sql: `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`,
+            sql: INSERT_SCHEMA_VERSION_SQL,
             args: [version, now] as InArgs,
           })
         }
@@ -170,9 +180,7 @@ export class SqliteStore implements IStore {
   }
 
   private async getCurrentVersion(): Promise<number> {
-    const result = await this.client.execute(
-      `SELECT MAX(version) AS version FROM ${SCHEMA_VERSION_TABLE}`,
-    )
+    const result = await this.client.execute(SELECT_CURRENT_VERSION_SQL)
     const row = result.rows[0] as unknown as
       | { version: number | bigint | null }
       | undefined
@@ -188,9 +196,7 @@ export class SqliteStore implements IStore {
   private async buildSchemaInspector(): Promise<SchemaInspector> {
     const tableNames = new Set<string>()
     const columnsByTable = new Map<string, Set<string>>()
-    const tables = await this.client.execute(
-      "SELECT name FROM sqlite_master WHERE type = 'table'",
-    )
+    const tables = await this.client.execute(SELECT_USER_TABLES_SQL)
     for (const row of tables.rows) {
       const { name } = row as unknown as { name: string }
       if (typeof name === 'string' && name.length > 0) {
@@ -200,7 +206,7 @@ export class SqliteStore implements IStore {
     for (const tableName of tableNames) {
       // PRAGMA doesn't accept bind parameters; table names come from our
       // own migration list probes (constants), not user input.
-      const info = await this.client.execute(`PRAGMA table_info(${tableName})`)
+      const info = await this.client.execute(pragmaTableInfoSql(tableName))
       const columns = new Set<string>()
       for (const row of info.rows) {
         const { name } = row as unknown as { name: string }
@@ -223,7 +229,7 @@ export class SqliteStore implements IStore {
     const statements = [
       ...migration.up.map((sql) => ({ sql, args: [] as InArgs })),
       {
-        sql: `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`,
+        sql: INSERT_SCHEMA_VERSION_SQL,
         args: [migration.version, now] as InArgs,
       },
     ]
@@ -235,9 +241,7 @@ export class SqliteStore implements IStore {
 
   /** Expose the applied-migration ledger for tooling/tests. */
   async getAppliedMigrations(): Promise<SchemaVersionRow[]> {
-    const result = await this.client.execute(
-      `SELECT version, applied_at FROM ${SCHEMA_VERSION_TABLE} ORDER BY version ASC`,
-    )
+    const result = await this.client.execute(SELECT_APPLIED_MIGRATIONS_SQL)
     return result.rows.map((row) => {
       const r = row as unknown as {
         version: number | bigint
@@ -260,8 +264,7 @@ export class SqliteStore implements IStore {
     parse(insertRunInputSchema, input)
     await this.wrap('insertRun', () =>
       this.client.execute({
-        sql: `INSERT INTO runs (run_id, project, started_at, git_sha, git_dirty, runtime_version, test_args)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        sql: INSERT_RUN_SQL,
         args: [
           input.runId,
           input.project ?? null,
@@ -284,15 +287,7 @@ export class SqliteStore implements IStore {
     parse(updateRunInputSchema, input)
     await this.wrap('updateRun', () =>
       this.client.execute({
-        sql: `UPDATE runs
-                 SET ended_at             = ?,
-                     duration_ms          = ?,
-                     status               = ?,
-                     total_tests          = ?,
-                     passed_tests         = ?,
-                     failed_tests         = ?,
-                     errors_between_tests = ?
-               WHERE run_id = ?`,
+        sql: UPDATE_RUN_SQL,
         args: [
           input.endedAt ?? null,
           input.durationMs ?? null,
@@ -316,10 +311,7 @@ export class SqliteStore implements IStore {
     parse(insertFailureInputSchema, input)
     await this.wrap('insertFailure', () =>
       this.client.execute({
-        sql: `INSERT INTO failures
-                (run_id, test_file, test_name, failure_kind,
-                 error_message, error_stack, duration_ms, failed_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: INSERT_FAILURE_SQL,
         args: [
           input.runId,
           input.testFile,
@@ -380,7 +372,7 @@ export class SqliteStore implements IStore {
   async reconcileRun(runId: string): Promise<void> {
     await this.wrap('reconcileRun', async () => {
       const existing = await this.client.execute({
-        sql: 'SELECT status FROM runs WHERE run_id = ?',
+        sql: SELECT_RUN_STATUS_SQL,
         args: [runId] as InArgs,
       })
       const row = existing.rows[0] as unknown as
@@ -390,10 +382,7 @@ export class SqliteStore implements IStore {
         return
       }
       await this.client.execute({
-        sql: `UPDATE runs
-                 SET status               = 'fail',
-                     errors_between_tests = COALESCE(errors_between_tests, 0) + 1
-               WHERE run_id = ?`,
+        sql: UPDATE_RUN_RECONCILE_SQL,
         args: [runId] as InArgs,
       })
       log.warn(
@@ -418,50 +407,15 @@ export class SqliteStore implements IStore {
     const windowDays = validated.windowDays ?? DEFAULT_WINDOW_DAYS
     const threshold = validated.threshold ?? DEFAULT_THRESHOLD
     const project = validated.project ?? null
-    const now = Date.now()
-    const windowStart = new Date(now - windowDays * MS_PER_DAY).toISOString()
-    const priorStart = new Date(now - windowDays * 2 * MS_PER_DAY).toISOString()
-    const projectClause =
-      project === null ? 'r.project IS NULL' : 'r.project = ?'
-    const preFilterArgs = [
-      windowStart,
-      windowStart,
-      priorStart,
-      windowStart,
-      windowStart,
-      priorStart,
-    ]
-    const args =
-      project === null
-        ? [...preFilterArgs, threshold]
-        : [...preFilterArgs, project, threshold]
+    const query = buildNewPatternsQuery({ windowDays, threshold, project })
 
     const result = await this.wrap('getNewPatterns', () =>
       withRetry(
         () =>
           raceAbort(
             this.client.execute({
-              sql: `SELECT
-                 f.test_file,
-                 f.test_name,
-                 SUM(CASE WHEN f.failed_at > ?  THEN 1 ELSE 0 END) AS recent_fails,
-                 SUM(CASE WHEN f.failed_at <= ? AND f.failed_at > ? THEN 1 ELSE 0 END) AS prior_fails,
-                 GROUP_CONCAT(DISTINCT f.failure_kind) AS failure_kinds,
-                 MAX(CASE WHEN f.failed_at > ? AND f.error_message IS NOT NULL
-                          THEN f.failed_at || CHAR(1) || f.error_message END) AS last_error_message_raw,
-                 MAX(CASE WHEN f.failed_at > ? AND f.error_stack IS NOT NULL
-                          THEN f.failed_at || CHAR(1) || f.error_stack   END) AS last_error_stack_raw,
-                 MAX(f.failed_at) AS last_failed
-               FROM failures f
-               JOIN runs r ON r.run_id = f.run_id
-              WHERE r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}
-                AND r.ended_at IS NOT NULL
-                AND f.failed_at > ?
-                AND ${projectClause}
-              GROUP BY f.test_file, f.test_name
-              HAVING recent_fails >= ? AND prior_fails = 0
-              ORDER BY recent_fails DESC`,
-              args: args as InArgs,
+              sql: query.sql,
+              args: query.args as InArgs,
             }),
             options.signal,
           ),
@@ -487,22 +441,15 @@ export class SqliteStore implements IStore {
    */
   async getRecentRuns(options: GetRecentRunsOptions): Promise<RecentRun[]> {
     options.signal?.throwIfAborted()
-    const { limit, project = null, signal } = options
-    const projectClause = project === null ? 'project IS NULL' : 'project = ?'
-    const args = project === null ? [limit] : [project, limit]
+    const { signal } = options
+    const query = buildRecentRunsQuery(options)
     const result = await this.wrap('getRecentRuns', () =>
       withRetry(
         () =>
           raceAbort(
             this.client.execute({
-              sql: `SELECT run_id, project, started_at, ended_at, duration_ms, status,
-                       total_tests, passed_tests, failed_tests,
-                       errors_between_tests, git_sha, git_dirty
-                  FROM runs
-                 WHERE ${projectClause}
-                 ORDER BY started_at DESC
-                 LIMIT ?`,
-              args: args as InArgs,
+              sql: query.sql,
+              args: query.args as InArgs,
             }),
             signal,
           ),
@@ -540,55 +487,19 @@ export class SqliteStore implements IStore {
    */
   async listFailures(options: ListFailuresOptions): Promise<FailureRow[]> {
     options.signal?.throwIfAborted()
-    const {
-      since,
-      runIds,
-      project = null,
-      excludeInfraBlowups = true,
-      signal,
-    } = options
-
-    const conditions: string[] = []
-    const args: (string | number)[] = []
-
-    if (since !== undefined) {
-      conditions.push('f.failed_at > ?')
-      args.push(since)
+    const { signal } = options
+    const query = buildListFailuresQuery(options)
+    if ('empty' in query) {
+      return []
     }
-    if (runIds !== undefined) {
-      if (runIds.length === 0) {
-        return []
-      }
-      const placeholders = runIds.map(() => '?').join(', ')
-      conditions.push(`f.run_id IN (${placeholders})`)
-      args.push(...runIds)
-    }
-    if (project === null) {
-      conditions.push('r.project IS NULL')
-    } else {
-      conditions.push('r.project = ?')
-      args.push(project)
-    }
-    if (excludeInfraBlowups) {
-      conditions.push(`r.failed_tests < ${MAX_FAILED_TESTS_PER_RUN}`)
-      conditions.push('r.ended_at IS NOT NULL')
-    }
-
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
     const result = await this.wrap('listFailures', () =>
       withRetry(
         () =>
           raceAbort(
             this.client.execute({
-              sql: `SELECT f.run_id, f.test_file, f.test_name, f.failure_kind,
-                           f.error_message, f.failed_at
-                      FROM failures f
-                      JOIN runs r ON r.run_id = f.run_id
-                      ${whereClause}
-                     ORDER BY f.failed_at ASC`,
-              args: args as InArgs,
+              sql: query.sql,
+              args: query.args as InArgs,
             }),
             signal,
           ),
