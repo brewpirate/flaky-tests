@@ -19,3 +19,17 @@ export const MAX_PROMPT_STACK_LINES = 20
 
 /** Maximum error message length displayed in CLI summary output. */
 export const MAX_CLI_ERROR_MESSAGE_LENGTH = 120
+
+/** Max recent runs surfaced in the HTML report's run history table. */
+export const RECENT_RUNS_LIMIT = 20
+
+/**
+ * Lookback window (in days) used for the HTML report's dashboard
+ * aggregates — kind breakdown and hot files. Intentionally wider than
+ * {@link DEFAULT_WINDOW_DAYS} (detection) so the report shows a broader
+ * health signal even when detection only inspects the last week.
+ */
+export const DASHBOARD_WINDOW_DAYS = 30
+
+/** Max files surfaced in the HTML report's "Hot files" table. */
+export const HOT_FILE_LIMIT = 15

@@ -1,6 +1,17 @@
+import { type } from 'arktype'
 import { createLogger } from '#core/errors/log'
 
 const log = createLogger('retry')
+
+/**
+ * Shared arktype schema used by remote store adapters (turso / postgres /
+ * supabase) to validate their `retry` constructor option. Centralised here
+ * so each adapter imports one definition instead of hand-rolling its own.
+ */
+export const retryOptionsSchema = type({
+  'attempts?': 'number > 0',
+  'baseMs?': 'number > 0',
+})
 
 /** Options accepted by {@link withRetry}. */
 export interface RetryOptions {

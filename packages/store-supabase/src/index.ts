@@ -23,6 +23,7 @@ import {
   type RecentRun,
   type RetryOptions,
   type RunStatus,
+  retryOptionsSchema,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
@@ -34,17 +35,6 @@ import { createClient } from '@supabase/supabase-js'
 import { type } from 'arktype'
 
 const log = createLogger('store-supabase')
-
-/**
- * Retry tuning for read methods. Defaults to 3 attempts / 100ms base from
- * {@link withRetry}. Writes are not retried because `insertFailure` lacks an
- * idempotency key — a retried write that succeeded server-side would
- * double-insert.
- */
-export const retryOptionsSchema = type({
-  'attempts?': 'number > 0',
-  'baseMs?': 'number > 0',
-})
 
 /** Configuration for the Supabase store. */
 export const supabaseStoreOptionsSchema = type({

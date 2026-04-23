@@ -5,16 +5,6 @@
  * that emits HTML belongs in its owning renderer module.
  */
 
-/** Minimal HTML-entity escape for user-controlled strings (test names, file
- *  paths, error messages) that get interpolated into the single-file report. */
-export function esc(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 /** Buckets a recent-failure count into the four visual severity tiers that
  *  drive card accents, TOC dots, and pill colors throughout the report. */
 export const SEVERITY_CRITICAL_THRESHOLD = 10

@@ -38,11 +38,14 @@ import type {
 import {
   createLogger,
   createStoreFromConfig,
+  DASHBOARD_WINDOW_DAYS,
   getNewPatternsOptionsSchema,
+  HOT_FILE_LIMIT,
   MAX_CLI_ERROR_MESSAGE_LENGTH,
   MissingStorePackageError,
   MS_PER_DAY,
   parse,
+  RECENT_RUNS_LIMIT,
   resolveConfig,
 } from '@flaky-tests/core'
 import { aggregateDashboard, generateHtml } from '../report/html'
@@ -249,15 +252,6 @@ async function main(
 
   process.exit(1)
 }
-
-/** Default limit for recent-runs queries surfaced in the HTML report. */
-const RECENT_RUNS_LIMIT = 20
-/** Window used for the dashboard aggregates (kinds + hot files). Intentionally
- *  wider than the detection window so the report surfaces a month of health
- *  signal even when detection only looks at the last week. */
-const DASHBOARD_WINDOW_DAYS = 30
-/** Max files surfaced in the "Hot files" table. */
-const HOT_FILE_LIMIT = 15
 
 interface WriteAndOpenHtmlReportOpts {
   patterns: FlakyPattern[]

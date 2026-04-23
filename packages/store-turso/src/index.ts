@@ -30,6 +30,7 @@ import {
   type RetryOptions,
   type RunStatus,
   raceAbort,
+  retryOptionsSchema,
   SCHEMA_VERSION_TABLE,
   type SchemaInspector,
   SQLITE_MIGRATIONS,
@@ -45,17 +46,6 @@ import { type } from 'arktype'
 
 const log = createLogger('store-turso')
 const PACKAGE = '@flaky-tests/store-turso'
-
-/**
- * Retry tuning for read methods. Defaults — 3 attempts, 100ms base — come
- * from {@link withRetry}; override per-store to disable (attempts=1) or
- * extend the backoff window. Applies only to read methods; writes are not
- * retried because {@link IStore.insertFailure} lacks an idempotency key.
- */
-export const retryOptionsSchema = type({
-  'attempts?': 'number > 0',
-  'baseMs?': 'number > 0',
-})
 
 /** Configuration for the Turso (libSQL) store. */
 export const tursoStoreOptionsSchema = type({
