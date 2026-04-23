@@ -1,6 +1,7 @@
 import type { FlakyPattern } from '@flaky-tests/core'
 import { generatePrompt } from '@flaky-tests/core'
-import { esc, severityRank, shortFile } from './utils'
+import { escapeHtml as esc } from '../html-utils'
+import { severityRank, shortFile } from './utils'
 
 /** Renders one flaky-pattern card — severity-colored header, stats, last error,
  *  and a collapsed investigation prompt with a copy affordance. */

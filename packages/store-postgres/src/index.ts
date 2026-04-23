@@ -25,6 +25,7 @@ import {
   type RecentRun,
   type RetryOptions,
   type RunStatus,
+  retryOptionsSchema,
   StoreError,
   type UpdateRunInput,
   updateRunInputSchema,
@@ -36,17 +37,6 @@ import postgres from 'postgres'
 
 const log = createLogger('store-postgres')
 const PACKAGE = '@flaky-tests/store-postgres'
-
-/**
- * Retry tuning for read methods. Defaults to 3 attempts / 100ms base from
- * {@link withRetry}. Writes are not retried because {@link IStore.insertFailure}
- * has no idempotency key — a retried write that succeeded server-side would
- * double-insert.
- */
-export const retryOptionsSchema = type({
-  'attempts?': 'number > 0',
-  'baseMs?': 'number > 0',
-})
 
 /** Configuration for the PostgreSQL store. */
 export const postgresStoreOptionsSchema = type({

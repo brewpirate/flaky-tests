@@ -1,7 +1,7 @@
 import type { FlakyPattern } from '@flaky-tests/core'
+import { escapeHtml as esc } from '../html-utils'
 import type { HotFile, KindBreakdown, RecentRun, RunFailure } from './types'
 import {
-  esc,
   failColor,
   formatDuration,
   formatRelative,
@@ -51,7 +51,7 @@ export function renderSummaryStats(
       <div class="stat-cell">
         <span class="stat-cell-value" style="color:${criticalColor}">${critical}</span>
         <span class="stat-cell-label">critical</span>
-        <span class="stat-cell-desc">Tests with ≥10 fails</span>
+        <span class="stat-cell-desc">Tests with ≥${SEVERITY_CRITICAL_THRESHOLD} fails</span>
       </div>
       <div class="stat-cell">
         <span class="stat-cell-value" style="color:${failColor(totalRecentFails)}">${totalRecentFails}</span>
