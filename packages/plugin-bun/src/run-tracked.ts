@@ -89,7 +89,8 @@ async function reconcileRun(runId: string): Promise<void> {
       SqliteStore: new (options: {
         dbPath?: string
       }) => {
-        reconcileRun(runId: string): void
+        migrate(): Promise<void>
+        reconcileRun(runId: string): Promise<void>
         close(): Promise<void>
       }
     }
@@ -98,7 +99,10 @@ async function reconcileRun(runId: string): Promise<void> {
     )
     const store = new mod.SqliteStore({ dbPath: DB_PATH })
     try {
-      store.reconcileRun(runId)
+      // Ensure the schema is present before reconciling — the store no
+      // longer auto-migrates in the constructor (libsql is async).
+      await store.migrate()
+      await store.reconcileRun(runId)
     } finally {
       await store.close()
     }

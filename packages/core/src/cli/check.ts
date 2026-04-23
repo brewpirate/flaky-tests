@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 /**
  * flaky-tests check
@@ -26,6 +26,7 @@
 
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
+import { spawn } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -289,11 +290,12 @@ function writeAndOpenHtmlReport(opts: WriteAndOpenHtmlReportOpts): void {
   } else if (process.platform === 'win32') {
     opener = 'start'
   }
-  Bun.spawnSync({
-    cmd: [opener, resolvedPath],
-    stdout: 'ignore',
-    stderr: 'ignore',
+  // Detached so we don't block the CLI while the browser loads.
+  const child = spawn(opener, [resolvedPath], {
+    stdio: 'ignore',
+    detached: true,
   })
+  child.unref()
   console.log('  Opening in browser…\n')
 }
 
