@@ -29,7 +29,7 @@
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Config, FlakyPattern, IStore } from '../index'
+import type { Config, FlakyPattern, IStore } from '@flaky-tests/core'
 import {
   createLogger,
   createStoreFromConfig,
@@ -38,7 +38,7 @@ import {
   MissingStorePackageError,
   parse,
   resolveConfig,
-} from '../index'
+} from '@flaky-tests/core'
 import { type CliConfig, parseCliConfig } from './args'
 import { CliError, ConfigError } from './errors'
 import {

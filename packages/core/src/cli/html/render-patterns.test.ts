@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { FlakyPattern } from '../../index'
+import type { FlakyPattern } from '@flaky-tests/core'
 import { renderPatterns } from './render-patterns'
 
 const pattern: FlakyPattern = {

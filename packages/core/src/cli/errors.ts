@@ -5,7 +5,7 @@
  * so callers (CI pipelines) get a stable signal.
  */
 
-export { ConfigError } from '../index'
+export { ConfigError } from '@flaky-tests/core'
 
 /** A CLI error the user should see. Default exit code: 1. */
 export class CliError extends Error {

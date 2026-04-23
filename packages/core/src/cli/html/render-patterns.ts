@@ -1,5 +1,5 @@
-import type { FlakyPattern } from '../../index'
-import { generatePrompt } from '../prompt'
+import type { FlakyPattern } from '@flaky-tests/core'
+import { generatePrompt } from '@flaky-tests/core'
 import { esc, severityRank, shortFile } from './utils'
 
 /** Renders one flaky-pattern card — severity-colored header, stats, last error,

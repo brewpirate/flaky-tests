@@ -15,6 +15,7 @@
     "test:integration": "INTEGRATION=1 bun test packages/*/src/*.integration.test.ts",
     "test:all": "INTEGRATION=1 bun test",
     "report": "bun packages/core/src/cli/check.ts --html",
+    "report:cli": "flaky-tests --html",
     "test:cli": "bun packages/core/src/cli/check.ts",
     "typecheck": "for config in packages/core/tsconfig.json packages/plugin-bun/tsconfig.json packages/plugin-vitest/tsconfig.json packages/store-postgres/tsconfig.json packages/store-sqlite/tsconfig.json packages/store-supabase/tsconfig.json packages/store-turso/tsconfig.json; do echo \"==> $config\"; tsc -p \"$config\" --noEmit || exit 1; done",
     "build": "bun run --filter '!@flaky-tests/docs' build",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.11",
     "@changesets/cli": "^2.30.0",
+    "@flaky-tests/core": "workspace:*",
     "typescript": "^6.0.2"
   }
 }
