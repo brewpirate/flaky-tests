@@ -23,16 +23,12 @@ import * as bunTest from 'bun:test'
 import { afterAll, mock } from 'bun:test'
 import type { IStore } from '@flaky-tests/core'
 import {
-  categorizeError,
+  buildInsertFailureInput,
+  buildInsertRunInput,
+  buildUpdateRunInput,
   createLogger,
   DescribeStack,
-  extractMessage,
-  extractStack,
-  insertFailureInputSchema,
-  insertRunInputSchema,
-  parse,
   resolveConfig,
-  updateRunInputSchema,
 } from '@flaky-tests/core'
 import { captureGitInfo } from './git'
 import { createPendingWriteTracker } from './pending-writes'
@@ -138,14 +134,12 @@ export function createPreload(store: IStore): void {
 
   safeVoid('insertRun', () =>
     store.insertRun(
-      parse(insertRunInputSchema, {
+      buildInsertRunInput({
         runId,
         project,
         startedAt,
-        gitSha: git.sha,
-        gitDirty: git.dirty,
+        git,
         runtimeVersion: Bun.version,
-        testArgs: process.argv.slice(2).join(' '),
       }),
     ),
   )
@@ -160,15 +154,12 @@ export function createPreload(store: IStore): void {
     errorsBetweenTests++
     safeVoid('insertFailure (between-tests)', () =>
       store.insertFailure(
-        parse(insertFailureInputSchema, {
+        buildInsertFailureInput({
           runId,
           testFile: resolveTestFile(error),
           testName: '<between tests>',
-          failureKind: categorizeError(error),
-          errorMessage: extractMessage(error),
-          errorStack: extractStack(error),
+          error,
           durationMs: 0,
-          failedAt: new Date().toISOString(),
         }),
       ),
     )
@@ -185,15 +176,12 @@ export function createPreload(store: IStore): void {
   }): void => {
     safeVoid('insertFailure', () =>
       store.insertFailure(
-        parse(insertFailureInputSchema, {
+        buildInsertFailureInput({
           runId,
           testFile: opts.testFile,
           testName: opts.testName,
-          failureKind: categorizeError(opts.error),
-          errorMessage: extractMessage(opts.error),
-          errorStack: extractStack(opts.error),
-          durationMs: Math.round(opts.durationMs),
-          failedAt: new Date().toISOString(),
+          error: opts.error,
+          durationMs: opts.durationMs,
         }),
       ),
     )
@@ -301,10 +289,9 @@ export function createPreload(store: IStore): void {
     await store
       .updateRun(
         runId,
-        parse(updateRunInputSchema, {
+        buildUpdateRunInput({
           endedAt,
           durationMs,
-          status,
           totalTests: testsRun,
           passedTests,
           failedTests: testsFailed,
