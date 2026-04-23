@@ -37,8 +37,8 @@
 
 import type { Config } from '#core/config/config'
 import { MissingStorePackageError } from '#core/errors/errors'
-import { listRegisteredPlugins } from './plugin'
 import type { IStore } from '#core/types'
+import { listRegisteredPlugins } from './plugin'
 
 export type StoreModuleImporter = (spec: string) => Promise<unknown>
 

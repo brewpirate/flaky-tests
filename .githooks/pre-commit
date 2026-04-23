@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Pre-commit hook: lockfile + biome + typecheck + unit tests.
+# Fails fast on first error to keep feedback quick.
+#
+# Activate once with:
+#   git config core.hooksPath .githooks
+
+set -euo pipefail
+
+echo "==> Verifying lockfile is in sync with package.json..."
+# Catches the case where someone added/changed a dep without updating
+# bun.lock. CI runs --frozen-lockfile, so catching it locally first
+# avoids a CI-only failure.
+bun install --frozen-lockfile
+
+echo "==> Biome check (lint + format, auto-fix)..."
+bun run check:fix
+# Restage anything check:fix rewrote so the commit snapshot includes
+# the biome fixes instead of leaving them dangling in the working tree.
+git add -u
+
+echo "==> Type checking all packages..."
+bun run typecheck
+
+echo "==> Building all packages (catches publish-time bundler regressions)..."
+bun run build
+bun run build:types
+
+echo "==> Running unit tests..."
+# Bun sometimes segfaults during shutdown after a successful test run
+# (worker-thread cleanup race). Tolerate non-zero exit when the test
+# summary shows zero failures and zero errors.
+TEST_OUTPUT=$(mktemp)
+trap 'rm -f "$TEST_OUTPUT"' EXIT
+set +e
+bun test 2>&1 | tee "$TEST_OUTPUT"
+TEST_EXIT=${PIPESTATUS[0]}
+set -e
+
+if [[ $TEST_EXIT -eq 0 ]]; then
+  : # Clean exit, all good.
+elif grep -qE '^ +0 fail' "$TEST_OUTPUT" && ! grep -qE '^ +[1-9][0-9]* (fail|errors?)' "$TEST_OUTPUT"; then
+  echo "==> Tests passed (Bun crashed during shutdown — known issue with worker cleanup; ignoring)."
+else
+  echo "==> Tests failed (exit $TEST_EXIT)."
+  exit $TEST_EXIT
+fi
+
+echo "==> All checks passed."

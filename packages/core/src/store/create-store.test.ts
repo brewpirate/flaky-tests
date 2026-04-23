@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import type { Config } from '#core/config/config'
-import { createStoreFromConfig } from './create-store'
 import { MissingStorePackageError } from '#core/errors/errors'
-import { definePlugin } from './plugin'
 import type { IStore } from '#core/types'
+import { createStoreFromConfig } from './create-store'
+import { definePlugin } from './plugin'
 
 const base: Config = {
   log: { level: 'warn' },

@@ -45,6 +45,7 @@ import {
   parse,
   resolveConfig,
 } from '@flaky-tests/core'
+import { aggregateDashboard, generateHtml } from '../report/html'
 import { type CliConfig, parseCliConfig } from './args'
 import { CliError, ConfigError } from './errors'
 import {
@@ -53,7 +54,6 @@ import {
   gitHubConfigSchema,
   resolveRepo,
 } from './github'
-import { aggregateDashboard, generateHtml } from '../report/html'
 import { copyToClipboard, generatePrompt } from './prompt'
 
 const log = createLogger('cli')
