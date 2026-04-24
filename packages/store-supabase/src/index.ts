@@ -6,6 +6,7 @@ import {
   definePlugin,
   type FailureRow,
   type FlakyPattern,
+  type FlakyPluginDescriptor,
   flakyPatternSchema,
   type GetNewPatternsOptions,
   type GetRecentRunsOptions,
@@ -38,15 +39,24 @@ import { type } from 'arktype'
 const log = createLogger('store-supabase')
 
 /** Configuration for the Supabase store. */
-export const supabaseStoreOptionsSchema = type({
+const supabaseStoreOptionsSchema = type({
   url: type.string.atLeastLength(1),
   key: type.string.atLeastLength(1),
   'tablePrefix?': 'string',
   'retry?': retryOptionsSchema,
 })
 
-/** Validated options accepted by {@link SupabaseStore}. Inferred from the ArkType schema so runtime and compile-time stay aligned. */
-export type SupabaseStoreOptions = typeof supabaseStoreOptionsSchema.infer
+/** Options accepted by {@link SupabaseStore}. */
+export interface SupabaseStoreOptions {
+  /** Supabase project URL. */
+  url: string
+  /** Supabase anon or service role key. */
+  key: string
+  /** Table name prefix (default `flaky_test`). */
+  tablePrefix?: string | undefined
+  /** Retry policy for transient driver errors. */
+  retry?: RetryOptions | undefined
+}
 
 const PACKAGE = '@flaky-tests/store-supabase'
 
@@ -531,22 +541,23 @@ export class SupabaseStore implements IStore {
  *
  * @throws `Error` from `create()` when `config.store.type !== 'supabase'`.
  */
-export const supabaseStorePlugin = definePlugin({
-  name: 'store-supabase',
-  configSchema: supabaseStoreOptionsSchema,
-  create(config: Config): SupabaseStore {
-    if (config.store.type !== 'supabase') {
-      throw new Error(
-        `store-supabase plugin invoked with config.store.type="${config.store.type}"`,
-      )
-    }
-    return new SupabaseStore({
-      url: config.store.url,
-      key: config.store.key,
-      ...(config.store.tablePrefix !== undefined && {
-        tablePrefix: config.store.tablePrefix,
-      }),
-      ...(config.store.retry !== undefined && { retry: config.store.retry }),
-    })
-  },
-})
+export const supabaseStorePlugin: FlakyPluginDescriptor<SupabaseStore> =
+  definePlugin({
+    name: 'store-supabase',
+    configSchema: supabaseStoreOptionsSchema,
+    create(config: Config): SupabaseStore {
+      if (config.store.type !== 'supabase') {
+        throw new Error(
+          `store-supabase plugin invoked with config.store.type="${config.store.type}"`,
+        )
+      }
+      return new SupabaseStore({
+        url: config.store.url,
+        key: config.store.key,
+        ...(config.store.tablePrefix !== undefined && {
+          tablePrefix: config.store.tablePrefix,
+        }),
+        ...(config.store.retry !== undefined && { retry: config.store.retry }),
+      })
+    },
+  })

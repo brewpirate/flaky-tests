@@ -11,6 +11,7 @@ import {
   detectBaselineVersion,
   type FailureRow,
   type FlakyPattern,
+  type FlakyPluginDescriptor,
   flakyPatternSchema,
   type GetNewPatternsOptions,
   type GetRecentRunsOptions,
@@ -55,14 +56,21 @@ const log = createLogger('store-turso')
 const PACKAGE = '@flaky-tests/store-turso'
 
 /** Configuration for the Turso (libSQL) store. */
-export const tursoStoreOptionsSchema = type({
+const tursoStoreOptionsSchema = type({
   url: type.string.atLeastLength(1),
   'authToken?': 'string',
   'retry?': retryOptionsSchema,
 })
 
-/** Inferred options type for {@link TursoStore}: libSQL URL plus optional HTTP auth token. */
-export type TursoStoreOptions = typeof tursoStoreOptionsSchema.infer
+/** Options accepted by {@link TursoStore}. */
+export interface TursoStoreOptions {
+  /** libSQL URL (e.g. `libsql://...` or `file:...`). */
+  url: string
+  /** HTTP auth token; required for remote Turso, optional for local file URLs. */
+  authToken?: string | undefined
+  /** Retry policy for transient libSQL driver errors. */
+  retry?: RetryOptions | undefined
+}
 
 /** Shape of a row in the bookkeeping `schema_version` table. */
 interface SchemaVersionRow {
@@ -484,21 +492,23 @@ export class TursoStore implements IStore {
  *
  * @throws `Error` from `create()` when `config.store.type !== 'turso'`.
  */
-export const tursoStorePlugin = definePlugin({
-  name: 'store-turso',
-  configSchema: tursoStoreOptionsSchema,
-  create(config: Config): TursoStore {
-    if (config.store.type !== 'turso') {
-      throw new Error(
-        `store-turso plugin invoked with config.store.type="${config.store.type}"`,
-      )
-    }
-    return new TursoStore({
-      url: config.store.url,
-      ...(config.store.authToken !== undefined && {
-        authToken: config.store.authToken,
-      }),
-      ...(config.store.retry !== undefined && { retry: config.store.retry }),
-    })
+export const tursoStorePlugin: FlakyPluginDescriptor<TursoStore> = definePlugin(
+  {
+    name: 'store-turso',
+    configSchema: tursoStoreOptionsSchema,
+    create(config: Config): TursoStore {
+      if (config.store.type !== 'turso') {
+        throw new Error(
+          `store-turso plugin invoked with config.store.type="${config.store.type}"`,
+        )
+      }
+      return new TursoStore({
+        url: config.store.url,
+        ...(config.store.authToken !== undefined && {
+          authToken: config.store.authToken,
+        }),
+        ...(config.store.retry !== undefined && { retry: config.store.retry }),
+      })
+    },
   },
-})
+)

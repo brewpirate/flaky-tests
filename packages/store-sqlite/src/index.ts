@@ -14,6 +14,7 @@ import {
   detectBaselineVersion,
   type FailureRow,
   type FlakyPattern,
+  type FlakyPluginDescriptor,
   flakyPatternSchema,
   type GetNewPatternsOptions,
   type GetRecentRunsOptions,
@@ -59,14 +60,19 @@ import { type } from 'arktype'
 const log = createLogger('store-sqlite')
 const PACKAGE = '@flaky-tests/store-sqlite'
 
-/** Configuration for the SQLite-backed flaky-tests store. */
-export const sqliteStoreOptionsSchema = type({
+/** Options accepted by {@link SqliteStore}. */
+export interface SqliteStoreOptions {
+  /** Path to the local SQLite file. Defaults to `./failures.db`. */
+  dbPath?: string | undefined
+  /** Retry policy for transient libSQL driver errors. */
+  retry?: RetryOptions | undefined
+}
+
+/** Runtime validator mirroring {@link SqliteStoreOptions}. */
+const sqliteStoreOptionsSchema = type({
   'dbPath?': 'string | undefined',
   'retry?': retryOptionsSchema,
 })
-
-/** Inferred options type for {@link SqliteStore}; accepted by its constructor. */
-export type SqliteStoreOptions = typeof sqliteStoreOptionsSchema.infer
 
 const DEFAULT_DB_PATH = './failures.db'
 
@@ -540,17 +546,18 @@ export class SqliteStore implements IStore {
  *
  * @throws `Error` from `create()` when `config.store.type !== 'sqlite'`.
  */
-export const sqliteStorePlugin = definePlugin({
-  name: 'store-sqlite',
-  configSchema: sqliteStoreOptionsSchema,
-  create(config: Config): SqliteStore {
-    if (config.store.type !== 'sqlite') {
-      throw new Error(
-        `store-sqlite plugin invoked with config.store.type="${config.store.type}"`,
-      )
-    }
-    return new SqliteStore({
-      ...(config.store.path !== undefined && { dbPath: config.store.path }),
-    })
-  },
-})
+export const sqliteStorePlugin: FlakyPluginDescriptor<SqliteStore> =
+  definePlugin({
+    name: 'store-sqlite',
+    configSchema: sqliteStoreOptionsSchema,
+    create(config: Config): SqliteStore {
+      if (config.store.type !== 'sqlite') {
+        throw new Error(
+          `store-sqlite plugin invoked with config.store.type="${config.store.type}"`,
+        )
+      }
+      return new SqliteStore({
+        ...(config.store.path !== undefined && { dbPath: config.store.path }),
+      })
+    },
+  })
