@@ -1,4 +1,4 @@
-import { type } from 'arktype'
+import { type Type, type } from 'arktype'
 import { createLogger } from '#core/errors/log'
 
 const log = createLogger('retry')
@@ -8,7 +8,10 @@ const log = createLogger('retry')
  * supabase) to validate their `retry` constructor option. Centralised here
  * so each adapter imports one definition instead of hand-rolling its own.
  */
-export const retryOptionsSchema = type({
+export const retryOptionsSchema: Type<{
+  attempts?: number
+  baseMs?: number
+}> = type({
   'attempts?': 'number > 0',
   'baseMs?': 'number > 0',
 })

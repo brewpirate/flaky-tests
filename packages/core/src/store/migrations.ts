@@ -40,7 +40,7 @@ export interface SqliteMigration {
 export const SCHEMA_VERSION_TABLE = 'schema_version'
 
 /** DDL for the bookkeeping table. Adapters run this before anything else. */
-export const CREATE_SCHEMA_VERSION_TABLE = `CREATE TABLE IF NOT EXISTS ${SCHEMA_VERSION_TABLE} (
+export const CREATE_SCHEMA_VERSION_TABLE: string = `CREATE TABLE IF NOT EXISTS ${SCHEMA_VERSION_TABLE} (
   version     INTEGER PRIMARY KEY,
   applied_at  TEXT NOT NULL
 )`

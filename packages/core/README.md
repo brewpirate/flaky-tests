@@ -12,7 +12,7 @@ bun add @flaky-tests/core
 
 ### Types and shared utilities
 
-- **`IStore`** — Interface every store adapter implements (`migrate`, `insertRun`, `updateRun`, `insertFailure`, `insertFailures`, `getNewPatterns`, `close`).
+- **`IStore`** — Interface every store adapter implements (`migrate`, `insertRun`, `updateRun`, `insertFailure`, `insertFailures`, `getNewPatterns`, `getRecentRuns`, `listFailures`, `close`).
 - **`FlakyPattern`**, **`InsertRunInput`**, **`InsertFailureInput`** — Data types exchanged with stores.
 - **`FailureKind`** — Coarse classification: `assertion`, `timeout`, `uncaught`, `unknown`.
 - **`categorizeError(error)`** — Classifies an unknown into a `FailureKind`.

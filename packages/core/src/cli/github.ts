@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process'
 import type { Config, FlakyPattern } from '@flaky-tests/core'
 import { createLogger } from '@flaky-tests/core'
-import { type } from 'arktype'
+import { type Type, type } from 'arktype'
 import { generatePrompt } from './prompt'
 
 const log = createLogger('cli:github')
@@ -56,7 +56,11 @@ async function fetchWithTimeout(
 }
 
 /** Authentication and target repository for GitHub API calls. */
-export const gitHubConfigSchema = type({
+export const gitHubConfigSchema: Type<{
+  token: string
+  owner: string
+  repo: string
+}> = type({
   token: type.string.atLeastLength(1),
   owner: type.string.atLeastLength(1),
   repo: type.string.atLeastLength(1),

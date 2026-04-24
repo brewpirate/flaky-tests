@@ -16,16 +16,16 @@ import { SCHEMA_VERSION_TABLE } from '#core/store/migrations'
 // --- Schema version bookkeeping -----------------------------------------
 
 /** Append a `schema_version` row recording that a migration landed. */
-export const INSERT_SCHEMA_VERSION_SQL = `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`
+export const INSERT_SCHEMA_VERSION_SQL: string = `INSERT INTO ${SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?, ?)`
 
 /** Look up the highest migration version the DB has ever applied. */
-export const SELECT_CURRENT_VERSION_SQL = `SELECT MAX(version) AS version FROM ${SCHEMA_VERSION_TABLE}`
+export const SELECT_CURRENT_VERSION_SQL: string = `SELECT MAX(version) AS version FROM ${SCHEMA_VERSION_TABLE}`
 
 /** Full migration ledger for tooling/tests. */
-export const SELECT_APPLIED_MIGRATIONS_SQL = `SELECT version, applied_at FROM ${SCHEMA_VERSION_TABLE} ORDER BY version ASC`
+export const SELECT_APPLIED_MIGRATIONS_SQL: string = `SELECT version, applied_at FROM ${SCHEMA_VERSION_TABLE} ORDER BY version ASC`
 
 /** Enumerate user tables when probing a pre-versioning DB's schema. */
-export const SELECT_USER_TABLES_SQL =
+export const SELECT_USER_TABLES_SQL: string =
   "SELECT name FROM sqlite_master WHERE type = 'table'"
 
 /** PRAGMA has no bind-parameter support — callers supply `tableName` from a trusted constant list. */
@@ -35,10 +35,10 @@ export function pragmaTableInfoSql(tableName: string): string {
 
 // --- Writes -------------------------------------------------------------
 
-export const INSERT_RUN_SQL = `INSERT INTO runs (run_id, project, started_at, git_sha, git_dirty, runtime_version, test_args)
+export const INSERT_RUN_SQL: string = `INSERT INTO runs (run_id, project, started_at, git_sha, git_dirty, runtime_version, test_args)
               VALUES (?, ?, ?, ?, ?, ?, ?)`
 
-export const UPDATE_RUN_SQL = `UPDATE runs
+export const UPDATE_RUN_SQL: string = `UPDATE runs
                  SET ended_at             = ?,
                      duration_ms          = ?,
                      status               = ?,
@@ -48,16 +48,17 @@ export const UPDATE_RUN_SQL = `UPDATE runs
                      errors_between_tests = ?
                WHERE run_id = ?`
 
-export const INSERT_FAILURE_SQL = `INSERT INTO failures
+export const INSERT_FAILURE_SQL: string = `INSERT INTO failures
                 (run_id, test_file, test_name, failure_kind,
                  error_message, error_stack, duration_ms, failed_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 // --- Reconcile (store-sqlite only, here so both adapters could share if needed) -
 
-export const SELECT_RUN_STATUS_SQL = 'SELECT status FROM runs WHERE run_id = ?'
+export const SELECT_RUN_STATUS_SQL: string =
+  'SELECT status FROM runs WHERE run_id = ?'
 
-export const UPDATE_RUN_RECONCILE_SQL = `UPDATE runs
+export const UPDATE_RUN_RECONCILE_SQL: string = `UPDATE runs
                  SET status               = 'fail',
                      errors_between_tests = COALESCE(errors_between_tests, 0) + 1
                WHERE run_id = ?`

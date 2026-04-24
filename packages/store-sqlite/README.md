@@ -1,13 +1,12 @@
 # @flaky-tests/store-sqlite
 
-Local SQLite store adapter for [flaky-tests](https://github.com/brewpirate/flaky-tests). Uses Bun's built-in SQLite.
-
-> **Requires Bun runtime** (`bun >= 1.3.0`). This package imports `bun:sqlite` and will not work under Node.js.
+Local SQLite store adapter for [flaky-tests](https://github.com/brewpirate/flaky-tests). Uses `@libsql/client` against a local `file:` URL, so the same adapter runs on **both Node and Bun** — SQL is identical to `@flaky-tests/store-turso`; only the URL scheme differs.
 
 ## Install
 
 ```sh
 bun add @flaky-tests/store-sqlite
+# or: npm install @flaky-tests/store-sqlite
 ```
 
 ## Usage
@@ -15,8 +14,8 @@ bun add @flaky-tests/store-sqlite
 ```ts
 import { SqliteStore } from '@flaky-tests/store-sqlite'
 
-const store = new SqliteStore()
-// Tables are created automatically on construction
+const store = new SqliteStore({ dbPath: '.cache/flaky.db' })
+await store.migrate() // idempotent; safe on every startup
 
 const patterns = await store.getNewPatterns({ windowDays: 7, threshold: 2 })
 await store.close()
@@ -26,11 +25,12 @@ await store.close()
 
 | Option | Description | Default |
 |---|---|---|
-| `dbPath` | Path to the SQLite file | `node_modules/.cache/flaky-tests/failures.db` |
+| `dbPath` | Path to the local SQLite file | `./failures.db` |
+| `retry` | Retry policy for transient driver errors (see `RetryOptions` in `@flaky-tests/core`) | — |
 
 ## Requirements
 
-- Bun >= 1.3.0 (uses `bun:sqlite`)
+- Node >= 20, or Bun >= 1.3.0
 
 ## License
 
