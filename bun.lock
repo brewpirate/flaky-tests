@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "flaky-tests",
-      "dependencies": {
-        "@types/node": "^25.6.0",
-      },
       "devDependencies": {
         "@biomejs/biome": "2.4.11",
         "@changesets/cli": "^2.30.0",
@@ -16,12 +13,11 @@
     },
     "packages/core": {
       "name": "@flaky-tests/core",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "bin": {
         "flaky-tests": "./dist/cli/check.js",
       },
       "dependencies": {
-        "@types/node": "^25.6.0",
         "arktype": "^2.2.0",
       },
       "devDependencies": {
@@ -49,7 +45,7 @@
     },
     "packages/plugin-bun": {
       "name": "@flaky-tests/plugin-bun",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@flaky-tests/core": "workspace:*",
       },
@@ -71,7 +67,7 @@
     },
     "packages/plugin-vitest": {
       "name": "@flaky-tests/plugin-vitest",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@flaky-tests/core": "workspace:*",
       },
@@ -85,7 +81,7 @@
     },
     "packages/store-postgres": {
       "name": "@flaky-tests/store-postgres",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@flaky-tests/core": "workspace:*",
         "arktype": "^2.1.0",
@@ -97,11 +93,10 @@
     },
     "packages/store-sqlite": {
       "name": "@flaky-tests/store-sqlite",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@flaky-tests/core": "workspace:*",
         "@libsql/client": "^0.17.0",
-        "@types/node": "^25.6.0",
         "arktype": "^2.1.0",
       },
       "devDependencies": {
@@ -110,11 +105,10 @@
     },
     "packages/store-supabase": {
       "name": "@flaky-tests/store-supabase",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@flaky-tests/core": "workspace:*",
         "@supabase/supabase-js": "^2.0.0",
-        "@types/node": "^25.6.0",
         "arktype": "^2.1.0",
       },
       "devDependencies": {
@@ -123,11 +117,10 @@
     },
     "packages/store-turso": {
       "name": "@flaky-tests/store-turso",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@flaky-tests/core": "workspace:*",
         "@libsql/client": "^0.17.0",
-        "@types/node": "^25.6.0",
         "arktype": "^2.1.0",
       },
       "devDependencies": {
