@@ -185,16 +185,16 @@ jobs:
           done
 
       - name: Publish to JSR
-        # `--allow-slow-types` will be removed once the 30 slow-types issues
-        # in @flaky-tests/core are fixed (tracked in .local/plans/raise-jsr-score.md,
-        # Tier 3). Until then, publish with the flag so the score caps at
-        # ~95% but publish itself succeeds.
+        # Slow-types are cleared for @flaky-tests/core (Tier 3 of the
+        # JSR score-raise plan). If a future package adds a new slow-type,
+        # its publish fails here — surface the error, fix the type, don't
+        # paper over with --allow-slow-types.
         run: |
           failed=0
           for dir in packages/*/; do
             [ ! -f "${dir}jsr.json" ] && continue
             echo "::group::JSR publish ${dir}"
-            if ! (cd "$dir" && bunx jsr publish --allow-dirty --allow-slow-types); then
+            if ! (cd "$dir" && bunx jsr publish --allow-dirty); then
               echo "::error::JSR publish failed for ${dir}"
               failed=1
             fi

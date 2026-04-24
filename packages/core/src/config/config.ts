@@ -9,7 +9,7 @@
 
 import { readFileSync } from 'node:fs'
 import { basename, dirname, resolve } from 'node:path'
-import { type } from 'arktype'
+import { type Type, type } from 'arktype'
 import { ConfigError } from '#core/errors/errors'
 import { parse } from '#core/schema/validate-schemas'
 
@@ -17,23 +17,67 @@ import { parse } from '#core/schema/validate-schemas'
 // Schema
 // ---------------------------------------------------------------------------
 
-const logLevel = type("'silent' | 'error' | 'warn' | 'debug'")
+type LogLevel = 'silent' | 'error' | 'warn' | 'debug'
+
+const logLevel: Type<LogLevel> = type("'silent' | 'error' | 'warn' | 'debug'")
+
+interface RetryConfig {
+  attempts?: number
+  baseMs?: number
+}
+
+interface SqliteStoreConfig {
+  type: 'sqlite'
+  path?: string
+  module?: string
+}
+
+interface TursoStoreConfig {
+  type: 'turso'
+  url: string
+  authToken?: string
+  module?: string
+  retry?: RetryConfig
+}
+
+interface SupabaseStoreConfig {
+  type: 'supabase'
+  url: string
+  key: string
+  tablePrefix?: string
+  module?: string
+  retry?: RetryConfig
+}
+
+interface PostgresStoreConfig {
+  type: 'postgres'
+  connectionString?: string
+  host?: string
+  port?: number
+  database?: string
+  username?: string
+  password?: string
+  ssl?: boolean | 'require' | 'prefer' | 'allow'
+  tablePrefix?: string
+  module?: string
+  retry?: RetryConfig
+}
 
 // Every variant accepts an optional `module` override so users can point
 // the dispatcher at a fork or alternative package path for the same type.
-const sqliteStoreConfigSchema = type({
+const sqliteStoreConfigSchema: Type<SqliteStoreConfig> = type({
   type: "'sqlite'",
   'path?': 'string',
   'module?': 'string',
 })
 
 /** Retry config shared by all network-backed stores; ignored by sqlite. */
-const retryConfigSchema = type({
+const retryConfigSchema: Type<RetryConfig> = type({
   'attempts?': 'number > 0',
   'baseMs?': 'number > 0',
 })
 
-const tursoStoreConfigSchema = type({
+const tursoStoreConfigSchema: Type<TursoStoreConfig> = type({
   type: "'turso'",
   url: type.string.atLeastLength(1),
   'authToken?': 'string',
@@ -41,7 +85,7 @@ const tursoStoreConfigSchema = type({
   'retry?': retryConfigSchema,
 })
 
-const supabaseStoreConfigSchema = type({
+const supabaseStoreConfigSchema: Type<SupabaseStoreConfig> = type({
   type: "'supabase'",
   url: type.string.atLeastLength(1),
   key: type.string.atLeastLength(1),
@@ -50,7 +94,7 @@ const supabaseStoreConfigSchema = type({
   'retry?': retryConfigSchema,
 })
 
-const postgresStoreConfigSchema = type({
+const postgresStoreConfigSchema: Type<PostgresStoreConfig> = type({
   type: "'postgres'",
   'connectionString?': 'string',
   'host?': 'string',
@@ -65,12 +109,45 @@ const postgresStoreConfigSchema = type({
 })
 
 /** Discriminated union on `type` — each variant carries only its own fields. */
-export const storeConfigSchema = sqliteStoreConfigSchema
+export const storeConfigSchema: Type<
+  | SqliteStoreConfig
+  | TursoStoreConfig
+  | SupabaseStoreConfig
+  | PostgresStoreConfig
+> = sqliteStoreConfigSchema
   .or(tursoStoreConfigSchema)
   .or(supabaseStoreConfigSchema)
   .or(postgresStoreConfigSchema)
 
-export const configSchema = type({
+interface ConfigShape {
+  project?: string | null
+  log: {
+    level: LogLevel
+    file?: string
+  }
+  store:
+    | SqliteStoreConfig
+    | TursoStoreConfig
+    | SupabaseStoreConfig
+    | PostgresStoreConfig
+  detection: {
+    windowDays: number
+    threshold: number
+  }
+  github: {
+    token?: string
+    repository?: string
+  }
+  plugin: {
+    disabled: boolean
+    runIdOverride?: string
+  }
+  report: {
+    browser?: string
+  }
+}
+
+export const configSchema: Type<ConfigShape> = type({
   /**
    * Project name — scopes every write and read so multiple projects can
    * share one store without their runs commingling. Resolved from

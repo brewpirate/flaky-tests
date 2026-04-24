@@ -1,10 +1,10 @@
-import { type } from 'arktype'
+import { type Type, type } from 'arktype'
 
 // ---------------------------------------------------------------------------
 // Reusable constraints
 // ---------------------------------------------------------------------------
 
-const isoTimestamp = type('string').narrow(
+const isoTimestamp: Type<string> = type('string').narrow(
   (value, ctx) =>
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) ||
     ctx.reject({
@@ -12,24 +12,32 @@ const isoTimestamp = type('string').narrow(
     }),
 )
 
-const nonEmptyString = type.string.atLeastLength(1)
-const nonNegativeInt = type('number.integer >= 0')
-const positiveInt = type('number.integer > 0')
+const nonEmptyString: Type<string> = type.string.atLeastLength(1)
+const nonNegativeInt: Type<number> = type('number.integer >= 0')
+const positiveInt: Type<number> = type('number.integer > 0')
 
 // ---------------------------------------------------------------------------
 // Domain schemas
 // ---------------------------------------------------------------------------
 
 /** Coarse classification of why a test failed. */
-export const failureKindSchema = type(
-  "'assertion' | 'timeout' | 'uncaught' | 'unknown'",
-)
+export const failureKindSchema: Type<
+  'assertion' | 'timeout' | 'uncaught' | 'unknown'
+> = type("'assertion' | 'timeout' | 'uncaught' | 'unknown'")
 
 /** Terminal status of a completed test run. */
-export const runStatusSchema = type("'pass' | 'fail'")
+export const runStatusSchema: Type<'pass' | 'fail'> = type("'pass' | 'fail'")
 
 /** Fields required to record a new test run. */
-export const insertRunInputSchema = type({
+export const insertRunInputSchema: Type<{
+  runId: string
+  startedAt: string
+  project?: string | null
+  gitSha?: string | null
+  gitDirty?: boolean | null
+  runtimeVersion?: string | null
+  testArgs?: string | null
+}> = type({
   runId: nonEmptyString,
   startedAt: isoTimestamp,
   'project?': 'string | null',
@@ -40,7 +48,15 @@ export const insertRunInputSchema = type({
 })
 
 /** Partial fields for updating a run after it completes. */
-export const updateRunInputSchema = type({
+export const updateRunInputSchema: Type<{
+  endedAt?: string
+  durationMs?: number
+  status?: 'pass' | 'fail'
+  totalTests?: number
+  passedTests?: number
+  failedTests?: number
+  errorsBetweenTests?: number
+}> = type({
   'endedAt?': isoTimestamp,
   'durationMs?': nonNegativeInt,
   'status?': runStatusSchema,
@@ -51,7 +67,16 @@ export const updateRunInputSchema = type({
 })
 
 /** Fields required to record a single test failure within a run. */
-export const insertFailureInputSchema = type({
+export const insertFailureInputSchema: Type<{
+  runId: string
+  testFile: string
+  testName: string
+  failureKind: 'assertion' | 'timeout' | 'uncaught' | 'unknown'
+  errorMessage?: string | null
+  errorStack?: string | null
+  durationMs?: number | null
+  failedAt: string
+}> = type({
   runId: nonEmptyString,
   testFile: nonEmptyString,
   testName: nonEmptyString,
@@ -63,7 +88,16 @@ export const insertFailureInputSchema = type({
 })
 
 /** A test that has newly become flaky (output from pattern detection). */
-export const flakyPatternSchema = type({
+export const flakyPatternSchema: Type<{
+  testFile: string
+  testName: string
+  recentFails: number
+  priorFails: number
+  failureKinds: ('assertion' | 'timeout' | 'uncaught' | 'unknown')[]
+  lastErrorMessage: string | null
+  lastErrorStack: string | null
+  lastFailed: string
+}> = type({
   testFile: 'string',
   testName: 'string',
   recentFails: nonNegativeInt,
@@ -75,7 +109,11 @@ export const flakyPatternSchema = type({
 })
 
 /** Options for querying new flaky patterns. */
-export const getNewPatternsOptionsSchema = type({
+export const getNewPatternsOptionsSchema: Type<{
+  windowDays?: number
+  threshold?: number
+  project?: string | null
+}> = type({
   'windowDays?': positiveInt,
   'threshold?': positiveInt,
   /** Filter to a single project. Null-or-undefined matches rows whose `project` column is NULL so cross-project stores stay cleanly isolated. */
@@ -83,7 +121,10 @@ export const getNewPatternsOptionsSchema = type({
 })
 
 /** Git metadata captured at test-run start. Null fields indicate git is unavailable. */
-export const gitInfoSchema = type({
+export const gitInfoSchema: Type<{
+  sha: string | null
+  dirty: boolean | null
+}> = type({
   sha: 'string | null',
   dirty: 'boolean | null',
 })
