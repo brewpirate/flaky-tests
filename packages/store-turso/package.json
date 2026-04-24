@@ -1,6 +1,6 @@
 {
   "name": "@flaky-tests/store-turso",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turso (libSQL) store adapter for flaky-tests — remote SQLite, free tier",
   "type": "module",
   "exports": {
