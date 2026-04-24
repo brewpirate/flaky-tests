@@ -44,9 +44,15 @@ jobs:
         uses: changesets/action@v1
         with:
           version: bun run version-packages
-          # Intentionally no `publish:` argument — publishing is split into
-          # dedicated parallel jobs (publish-npm, publish-jsr) that share
-          # build artifacts. See below.
+          # `publish` is intentionally a no-op tagger, not the real publish.
+          # Real publishing is split into the parallel publish-npm / publish-jsr
+          # jobs below so both registries ship identical built artifacts.
+          # But `changesets/action` only emits `published: 'true'` when a
+          # publish script is present — without it, the version-commit detection
+          # path is dead and downstream jobs never fire. `changeset tag` does
+          # the registry diff the action needs and creates matching git tags
+          # (which GitHub Releases can later reference) without pushing to npm.
+          publish: bunx changeset tag
           title: 'chore: version packages'
           commit: 'chore: version packages'
         env:
