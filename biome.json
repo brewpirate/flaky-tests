@@ -94,7 +94,8 @@
         "useSortedClasses": "info",
         "noFloatingPromises": "error",
         "useExhaustiveSwitchCases": "error",
-        "useNullishCoalescing": "error"
+        "useNullishCoalescing": "error",
+        "useExplicitType": "error"
       }
     }
   },
@@ -114,6 +115,9 @@
             "noEmptyBlockStatements": "off",
             "noConsole": "off",
             "useAwait": "off"
+          },
+          "nursery": {
+            "useExplicitType": "off"
           }
         }
       }

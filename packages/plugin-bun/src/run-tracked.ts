@@ -33,7 +33,7 @@ async function loadOptionalModule<T>(spec: string): Promise<T> {
   return (await import(spec)) as T
 }
 const config = resolveConfig()
-const DB_PATH =
+const DB_PATH: string =
   config.store.type === 'sqlite' && config.store.path !== undefined
     ? config.store.path
     : 'node_modules/.cache/flaky-tests/failures.db'

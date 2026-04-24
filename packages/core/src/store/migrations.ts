@@ -82,37 +82,42 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
       'CREATE INDEX IF NOT EXISTS idx_failures_failed_at ON failures(failed_at)',
       'CREATE INDEX IF NOT EXISTS idx_runs_status        ON runs(ended_at, failed_tests)',
     ],
-    probe: (inspect) => inspect.tableExists('runs'),
+    probe: (inspect: SchemaInspector): boolean => inspect.tableExists('runs'),
   },
   {
     version: 2,
     description: 'Add runs.passed_tests',
     up: ['ALTER TABLE runs ADD COLUMN passed_tests INTEGER'],
-    probe: (inspect) => inspect.columnExists('runs', 'passed_tests'),
+    probe: (inspect: SchemaInspector): boolean =>
+      inspect.columnExists('runs', 'passed_tests'),
   },
   {
     version: 3,
     description: 'Add runs.errors_between_tests',
     up: ['ALTER TABLE runs ADD COLUMN errors_between_tests INTEGER'],
-    probe: (inspect) => inspect.columnExists('runs', 'errors_between_tests'),
+    probe: (inspect: SchemaInspector): boolean =>
+      inspect.columnExists('runs', 'errors_between_tests'),
   },
   {
     version: 4,
     description: 'Add runs.runtime_version',
     up: ['ALTER TABLE runs ADD COLUMN runtime_version TEXT'],
-    probe: (inspect) => inspect.columnExists('runs', 'runtime_version'),
+    probe: (inspect: SchemaInspector): boolean =>
+      inspect.columnExists('runs', 'runtime_version'),
   },
   {
     version: 5,
     description: 'Add runs.test_args',
     up: ['ALTER TABLE runs ADD COLUMN test_args TEXT'],
-    probe: (inspect) => inspect.columnExists('runs', 'test_args'),
+    probe: (inspect: SchemaInspector): boolean =>
+      inspect.columnExists('runs', 'test_args'),
   },
   {
     version: 6,
     description: 'Add runs.project',
     up: ['ALTER TABLE runs ADD COLUMN project TEXT'],
-    probe: (inspect) => inspect.columnExists('runs', 'project'),
+    probe: (inspect: SchemaInspector): boolean =>
+      inspect.columnExists('runs', 'project'),
   },
 ]
 

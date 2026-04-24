@@ -8,7 +8,7 @@ export { createPreload } from './preload'
 /** Lazy plugin descriptor — `create(config)` returns the Bun preload wiring helper. */
 export const bunPlugin = definePlugin({
   name: 'plugin-bun',
-  create(_config: Config) {
+  create(_config: Config): { createPreload: typeof createPreload } {
     return { createPreload }
   },
 })

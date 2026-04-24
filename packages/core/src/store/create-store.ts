@@ -38,7 +38,7 @@
 import type { Config } from '#core/config/config'
 import { MissingStorePackageError } from '#core/errors/errors'
 import type { IStore } from '#core/types'
-import { listRegisteredPlugins } from './plugin'
+import { type FlakyPluginDescriptor, listRegisteredPlugins } from './plugin'
 
 export type StoreModuleImporter = (spec: string) => Promise<unknown>
 
@@ -57,13 +57,14 @@ function isModuleNotFound(error: unknown): boolean {
   )
 }
 
-function findDescriptor(storeType: string) {
+function findDescriptor(storeType: string): FlakyPluginDescriptor | undefined {
   return listRegisteredPlugins().find(
     (descriptor) => descriptor.name === `store-${storeType}`,
   )
 }
 
-const defaultImporter: StoreModuleImporter = (spec) => import(spec)
+const defaultImporter: StoreModuleImporter = (spec: string): Promise<unknown> =>
+  import(spec)
 
 /**
  * Resolve a store instance from the unified config. Looks up a

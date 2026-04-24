@@ -40,7 +40,7 @@ export function shortFile(path: string): string {
 
 const MS_PER_SECOND = 1000
 const SECONDS_PER_MINUTE = 60
-const MS_PER_MINUTE = MS_PER_SECOND * SECONDS_PER_MINUTE
+const MS_PER_MINUTE: number = MS_PER_SECOND * SECONDS_PER_MINUTE
 const MINUTES_PER_HOUR = 60
 const HOURS_PER_DAY = 24
 const SHORT_SHA_LENGTH = 7

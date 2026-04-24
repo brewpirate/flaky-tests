@@ -38,7 +38,10 @@ import {
 const log = createLogger('plugin-vitest')
 
 /** Synchronous subprocess runner injected into core git helpers; swallows errors so missing git never breaks the reporter. */
-const runCommand: RunCommand = (command, args) => {
+const runCommand: RunCommand = (
+  command: string,
+  args: string[],
+): string | null => {
   try {
     return execFileSync(command, args, {
       encoding: 'utf8',
@@ -50,7 +53,7 @@ const runCommand: RunCommand = (command, args) => {
 }
 
 /** Thin wrapper binding the local subprocess runner to core's git capture so callers get sha/dirty without plumbing. */
-function captureGitInfo() {
+function captureGitInfo(): ReturnType<typeof captureGitInfoCore> {
   return captureGitInfoCore(runCommand)
 }
 
@@ -237,7 +240,7 @@ export class FlakyTestsReporter {
 /** Lazy plugin descriptor — `create(config)` exposes the FlakyTestsReporter constructor so hosts can wire it into Vitest with any IStore. */
 export const vitestPlugin = definePlugin({
   name: 'plugin-vitest',
-  create(_config: Config) {
+  create(_config: Config): { FlakyTestsReporter: typeof FlakyTestsReporter } {
     return { FlakyTestsReporter }
   },
 })
