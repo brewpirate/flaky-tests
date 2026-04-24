@@ -39,7 +39,7 @@ import '@flaky-tests/core/check'
 { "scripts": { "report": "bun scripts/report.ts --html" } }
 ```
 
-See the [CLI reference](/reference/cli/) for the full note on npm-vs-JSR.
+See the [CLI reference](/flaky-tests/reference/cli/) for the full note on npm-vs-JSR.
 
 ## "MissingStorePackageError" at startup
 
@@ -144,7 +144,7 @@ try {
 
 Network hiccups auto-retry with backoff on reads (`withRetry`); writes
 don't retry, so a transient 5xx during a test run just drops the
-failure. See the [retry reference](/reference/istore/#retry-behavior).
+failure. See the [retry reference](/flaky-tests/reference/istore/#retry-behavior).
 
 ## CI run's failures don't appear in `getRecentRuns`
 
@@ -228,6 +228,6 @@ errors.
 
 - File an issue with your debug log:
   [github.com/brewpirate/flaky-tests/issues](https://github.com/brewpirate/flaky-tests/issues)
-- Double-check the [Environment variables reference](/reference/env-vars/)
+- Double-check the [Environment variables reference](/flaky-tests/reference/env-vars/)
   — the biggest category of "doesn't work" bugs is an env var that's
   subtly wrong.

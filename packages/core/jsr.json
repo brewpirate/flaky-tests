@@ -8,6 +8,7 @@
     "./check": "./src/cli/check.ts"
   },
   "imports": {
+    "#core": "./src/index.ts",
     "#core/*": "./src/*.ts"
   },
   "publish": {

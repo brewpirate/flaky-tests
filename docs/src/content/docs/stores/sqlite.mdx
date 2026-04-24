@@ -47,7 +47,7 @@ Driver errors are wrapped in `StoreError` with `cause` preserved. Read methods (
 ## Limitations
 
 <Aside type="caution">
-SQLite is **local only**. The database lives on a single machine. If you run tests in CI, each runner gets a fresh environment with an empty database. Use [Turso](/stores/turso/), [Supabase](/stores/supabase/), or [Postgres](/stores/postgres/) if you need shared failure history across machines.
+SQLite is **local only**. The database lives on a single machine. If you run tests in CI, each runner gets a fresh environment with an empty database. Use [Turso](/flaky-tests/stores/turso/), [Supabase](/flaky-tests/stores/supabase/), or [Postgres](/flaky-tests/stores/postgres/) if you need shared failure history across machines.
 </Aside>
 
 ## Inspecting the database

@@ -6,8 +6,8 @@
  * keeps `check.ts` small.
  */
 
-import type { Config } from '@flaky-tests/core'
 import { type } from 'arktype'
+import type { Config } from '#core'
 import { ConfigError } from './errors'
 
 /** Validated CLI config consumed by the main entry point in `check.ts`. */

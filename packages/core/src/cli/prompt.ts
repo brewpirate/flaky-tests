@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 
-export { generatePrompt } from '@flaky-tests/core'
+export { generatePrompt } from '#core'
 
 /** Copy text to the system clipboard. Returns true on success, false if unavailable. */
 export function copyToClipboard(text: string): boolean {

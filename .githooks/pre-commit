@@ -26,6 +26,12 @@ echo "==> Building all packages (catches publish-time bundler regressions)..."
 bun run build
 bun run build:types
 
+# echo "==> Publish dry run ..."
+# bun run publish:dry
+
+echo "==> jsr.io dry run ..."
+bun run jsr:dry
+
 echo "==> Running unit tests..."
 # Bun sometimes segfaults during shutdown after a successful test run
 # (worker-thread cleanup race). Tolerate non-zero exit when the test

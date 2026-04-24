@@ -6,9 +6,9 @@
 // biome-ignore-all lint/suspicious/noConsole: CLI tool
 
 import { spawnSync } from 'node:child_process'
-import type { Config, FlakyPattern } from '@flaky-tests/core'
-import { createLogger } from '@flaky-tests/core'
 import { type Type, type } from 'arktype'
+import type { Config, FlakyPattern } from '#core'
+import { createLogger } from '#core'
 import { generatePrompt } from './prompt'
 
 const log = createLogger('cli:github')

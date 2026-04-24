@@ -1,0 +1,180 @@
+---
+title: Install
+description: Install any flaky-tests package from either npm or JSR. Mix and match one runner plugin with one store adapter.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components'
+import { PackageManagers } from 'starlight-package-managers'
+
+Every `@flaky-tests/*` package is published to **both [npm](https://www.npmjs.com/org/flaky-tests)
+and [JSR](https://jsr.io/@flaky-tests)**. Pick whichever registry fits your
+workflow — the code is identical.
+
+A working setup needs exactly **one runner plugin** (`plugin-bun` _or_ `plugin-vitest`) plus
+**one store adapter** (`store-sqlite`, `store-turso`, `store-supabase`, or `store-postgres`).
+The `core` package ships the CLI and is pulled in as a peer — install it explicitly if you
+want to run `flaky-tests` directly.
+
+<Aside type="tip" title="Not sure what to pick?">
+See [Choosing a store](/flaky-tests/guides/choosing-a-store/) for the store comparison,
+or jump to the [Quick Start](/flaky-tests/getting-started/quick-start/) for an end-to-end walkthrough.
+</Aside>
+
+## Core
+
+The CLI + shared types. Installed automatically as a peer of every plugin, but you'll want
+it explicitly if you run `flaky-tests --html` or `flaky-tests --prompt` from your own scripts.
+
+<Tabs syncKey="registry">
+  <TabItem label="npm">
+    <PackageManagers pkg="@flaky-tests/core" dev />
+  </TabItem>
+  <TabItem label="JSR">
+    ```sh
+    deno add jsr:@flaky-tests/core
+    npx jsr add @flaky-tests/core
+    bunx jsr add @flaky-tests/core
+    pnpm dlx jsr add @flaky-tests/core
+    yarn dlx jsr add @flaky-tests/core
+    ```
+  </TabItem>
+</Tabs>
+
+## Runner plugins
+
+Pick **one**. These wire into your test runner and capture failures into the store.
+
+### `@flaky-tests/plugin-bun`
+
+Bun test preload. Registers a global lifecycle hook and writes to the store via `bun:sqlite`.
+
+<Tabs syncKey="registry">
+  <TabItem label="npm">
+    <PackageManagers pkg="@flaky-tests/plugin-bun" dev />
+  </TabItem>
+  <TabItem label="JSR">
+    ```sh
+    deno add jsr:@flaky-tests/plugin-bun
+    bunx jsr add @flaky-tests/plugin-bun
+    ```
+  </TabItem>
+</Tabs>
+
+See [Setting up with Bun](/flaky-tests/guides/bun/) for the `bunfig.toml` preload step.
+
+### `@flaky-tests/plugin-vitest`
+
+Vitest reporter implementing `onInit` / `onFinished`. Works with Vitest 1.x+.
+
+<Tabs syncKey="registry">
+  <TabItem label="npm">
+    <PackageManagers pkg="@flaky-tests/plugin-vitest" dev />
+  </TabItem>
+  <TabItem label="JSR">
+    ```sh
+    npx jsr add @flaky-tests/plugin-vitest
+    pnpm dlx jsr add @flaky-tests/plugin-vitest
+    yarn dlx jsr add @flaky-tests/plugin-vitest
+    bunx jsr add @flaky-tests/plugin-vitest
+    ```
+  </TabItem>
+</Tabs>
+
+See [Setting up with Vitest](/flaky-tests/guides/vitest/) for the `vitest.config.ts` reporter registration.
+
+## Store adapters
+
+Pick **one**. All adapters implement the same [`IStore` interface](/flaky-tests/reference/istore/),
+so swapping later only requires an environment variable change.
+
+### `@flaky-tests/store-sqlite` — local
+
+Local libSQL / SQLite, runs on Node and Bun. Zero-config, perfect for local dev.
+
+<Tabs syncKey="registry">
+  <TabItem label="npm">
+    <PackageManagers pkg="@flaky-tests/store-sqlite" dev />
+  </TabItem>
+  <TabItem label="JSR">
+    ```sh
+    npx jsr add @flaky-tests/store-sqlite
+    pnpm dlx jsr add @flaky-tests/store-sqlite
+    yarn dlx jsr add @flaky-tests/store-sqlite
+    bunx jsr add @flaky-tests/store-sqlite
+    ```
+  </TabItem>
+</Tabs>
+
+Details: [SQLite store](/flaky-tests/stores/sqlite/)
+
+### `@flaky-tests/store-turso` — remote libSQL (free tier)
+
+Turso/libSQL for shared team visibility without infrastructure to run.
+
+<Tabs syncKey="registry">
+  <TabItem label="npm">
+    <PackageManagers pkg="@flaky-tests/store-turso" dev />
+  </TabItem>
+  <TabItem label="JSR">
+    ```sh
+    npx jsr add @flaky-tests/store-turso
+    pnpm dlx jsr add @flaky-tests/store-turso
+    yarn dlx jsr add @flaky-tests/store-turso
+    bunx jsr add @flaky-tests/store-turso
+    ```
+  </TabItem>
+</Tabs>
+
+Details: [Turso store](/flaky-tests/stores/turso/)
+
+### `@flaky-tests/store-supabase`
+
+Supabase-hosted Postgres via the Supabase client.
+
+<Tabs syncKey="registry">
+  <TabItem label="npm">
+    <PackageManagers pkg="@flaky-tests/store-supabase" dev />
+  </TabItem>
+  <TabItem label="JSR">
+    ```sh
+    npx jsr add @flaky-tests/store-supabase
+    pnpm dlx jsr add @flaky-tests/store-supabase
+    yarn dlx jsr add @flaky-tests/store-supabase
+    bunx jsr add @flaky-tests/store-supabase
+    ```
+  </TabItem>
+</Tabs>
+
+Details: [Supabase store](/flaky-tests/stores/supabase/)
+
+### `@flaky-tests/store-postgres` — Postgres / Neon
+
+Direct Postgres (Neon, RDS, self-hosted) via `postgres.js`.
+
+<Tabs syncKey="registry">
+  <TabItem label="npm">
+    <PackageManagers pkg="@flaky-tests/store-postgres" dev />
+  </TabItem>
+  <TabItem label="JSR">
+    ```sh
+    npx jsr add @flaky-tests/store-postgres
+    pnpm dlx jsr add @flaky-tests/store-postgres
+    yarn dlx jsr add @flaky-tests/store-postgres
+    bunx jsr add @flaky-tests/store-postgres
+    ```
+  </TabItem>
+</Tabs>
+
+Details: [Postgres / Neon store](/flaky-tests/stores/postgres/)
+
+## Source links
+
+| Package | npm | JSR | Source |
+|---|---|---|---|
+| `@flaky-tests/core` | [npmjs.com](https://www.npmjs.com/package/@flaky-tests/core) | [jsr.io](https://jsr.io/@flaky-tests/core) | [packages/core](https://github.com/brewpirate/flaky-tests/tree/main/packages/core) |
+| `@flaky-tests/plugin-bun` | [npmjs.com](https://www.npmjs.com/package/@flaky-tests/plugin-bun) | [jsr.io](https://jsr.io/@flaky-tests/plugin-bun) | [packages/plugin-bun](https://github.com/brewpirate/flaky-tests/tree/main/packages/plugin-bun) |
+| `@flaky-tests/plugin-vitest` | [npmjs.com](https://www.npmjs.com/package/@flaky-tests/plugin-vitest) | [jsr.io](https://jsr.io/@flaky-tests/plugin-vitest) | [packages/plugin-vitest](https://github.com/brewpirate/flaky-tests/tree/main/packages/plugin-vitest) |
+| `@flaky-tests/store-sqlite` | [npmjs.com](https://www.npmjs.com/package/@flaky-tests/store-sqlite) | [jsr.io](https://jsr.io/@flaky-tests/store-sqlite) | [packages/store-sqlite](https://github.com/brewpirate/flaky-tests/tree/main/packages/store-sqlite) |
+| `@flaky-tests/store-turso` | [npmjs.com](https://www.npmjs.com/package/@flaky-tests/store-turso) | [jsr.io](https://jsr.io/@flaky-tests/store-turso) | [packages/store-turso](https://github.com/brewpirate/flaky-tests/tree/main/packages/store-turso) |
+| `@flaky-tests/store-supabase` | [npmjs.com](https://www.npmjs.com/package/@flaky-tests/store-supabase) | [jsr.io](https://jsr.io/@flaky-tests/store-supabase) | [packages/store-supabase](https://github.com/brewpirate/flaky-tests/tree/main/packages/store-supabase) |
+| `@flaky-tests/store-postgres` | [npmjs.com](https://www.npmjs.com/package/@flaky-tests/store-postgres) | [jsr.io](https://jsr.io/@flaky-tests/store-postgres) | [packages/store-postgres](https://github.com/brewpirate/flaky-tests/tree/main/packages/store-postgres) |

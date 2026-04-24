@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import type { FlakyPattern, IStore, RecentRun } from '@flaky-tests/core'
+import type { FlakyPattern, IStore, RecentRun } from '#core'
 import { MAX_FAILED_TESTS_PER_RUN } from '#core/config/defaults'
 import { ValidationError } from '#core/schema/validate-schemas'
 import { daysAgo, makeFailure, makeRun } from './fixtures'

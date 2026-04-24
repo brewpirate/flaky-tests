@@ -1,5 +1,5 @@
-import type { FlakyPattern } from '@flaky-tests/core'
-import { generatePrompt } from '@flaky-tests/core'
+import type { FlakyPattern } from '#core'
+import { generatePrompt } from '#core'
 import { escapeHtml as esc } from '../html-utils'
 import { severityRank, shortFile } from './utils'
 

@@ -103,7 +103,7 @@ FLAKY_TESTS_STORE=supabase \
 <Aside type="caution">
 **Pattern detection makes two round-trip fetches.** PostgREST (the layer Supabase uses for the JS client) doesn't support the conditional aggregates that `getNewPatterns` needs. The store fetches recent and prior failures separately and groups them in JavaScript. For typical failure volumes this is fine, but it's less efficient than a direct Postgres connection.
 
-If performance is a concern, use the [Postgres store](/stores/postgres/) with a Supabase connection string instead.
+If performance is a concern, use the [Postgres store](/flaky-tests/stores/postgres/) with a Supabase connection string instead.
 </Aside>
 
 ## Using the service role key

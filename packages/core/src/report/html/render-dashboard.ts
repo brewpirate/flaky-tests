@@ -1,4 +1,4 @@
-import type { FlakyPattern } from '@flaky-tests/core'
+import type { FlakyPattern } from '#core'
 import { escapeHtml as esc } from '../html-utils'
 import type { HotFile, KindBreakdown, RecentRun, RunFailure } from './types'
 import {
