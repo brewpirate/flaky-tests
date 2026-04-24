@@ -1,6 +1,6 @@
 {
   "name": "@flaky-tests/plugin-bun",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "exports": {
     ".": "./src/index.ts",
     "./preload": "./src/preload-default.ts",

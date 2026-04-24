@@ -65,6 +65,5 @@
     "libsql",
     "test-results",
     "storage"
-  ],
-  "sideEffects": false
+  ]
 }

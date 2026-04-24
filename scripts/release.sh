@@ -11,6 +11,7 @@ echo "==> Copying LICENSE into publishable packages"
 bun run scripts/copy-license.ts
 
 echo "==> Building all packages"
+bun run build:types
 bun run build
 
 echo "==> Publishing via changesets"

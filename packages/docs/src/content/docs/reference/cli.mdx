@@ -18,6 +18,26 @@ bun add -g @flaky-tests/core
 flaky-tests [flags]
 ```
 
+<Aside type="caution" title="npm only — JSR has no CLI">
+The `flaky-tests` command is only available when installed from **npm**. JSR does not support the `bin` field in `package.json` — it publishes TypeScript source as modules, not executables.
+
+If you installed via `bunx jsr add @flaky-tests/core`, you'll get the library exports but no `flaky-tests` binary on your PATH. Either:
+
+- Install from npm instead: `bun add -D @flaky-tests/core` (recommended for CLI use), or
+- Invoke the CLI as a module from a wrapper script:
+
+  ```ts
+  // scripts/report.ts
+  import '@flaky-tests/core/check'
+  ```
+
+  ```json
+  { "scripts": { "report": "bun scripts/report.ts --html" } }
+  ```
+
+Dual-publishing (npm for the CLI, JSR for library imports) is the idiomatic split. Library-only consumers can use either registry; CLI users need npm.
+</Aside>
+
 ## Default behavior
 
 Running the CLI with no flags:

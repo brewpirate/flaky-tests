@@ -9,6 +9,38 @@ If you just set up flaky-tests and something isn't working the way you
 expect, work through the checks below in order. Each section starts
 with the symptom so you can grep for the error text.
 
+## `flaky-tests: command not found` after installing from JSR
+
+**Symptom:**
+
+```
+$ flaky-tests --html
+bash: flaky-tests: command not found
+```
+
+**Cause:** JSR does not support the `bin` field in `package.json`. If you
+installed via `bunx jsr add @flaky-tests/core`, you get the library
+exports but no executable on your PATH.
+
+**Fix:** install from npm instead:
+
+```sh
+bun add -D @flaky-tests/core
+```
+
+Or, if you must stay on JSR, invoke the CLI as a module from a wrapper:
+
+```ts
+// scripts/report.ts
+import '@flaky-tests/core/check'
+```
+
+```json
+{ "scripts": { "report": "bun scripts/report.ts --html" } }
+```
+
+See the [CLI reference](/reference/cli/) for the full note on npm-vs-JSR.
+
 ## "MissingStorePackageError" at startup
 
 **Symptom:**

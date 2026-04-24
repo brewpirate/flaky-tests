@@ -14,6 +14,8 @@
  * is SQLite-only today (relies on `SqliteStore.reconcileRun`), so non-sqlite
  * configs skip it with a debug log and the run's status stays whatever the
  * preload wrote.
+ *
+ * @module
  */
 
 // biome-ignore-all lint/suspicious/noConsole: CLI wrapper

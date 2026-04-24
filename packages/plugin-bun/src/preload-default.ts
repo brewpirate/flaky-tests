@@ -10,6 +10,8 @@
  * matching credentials env vars) to route failures to the backend of
  * your choice. Install only the store package you actually use —
  * every adapter is an `optionalDependency`.
+ *
+ * @module
  */
 
 // biome-ignore-all lint/suspicious/noConsole: preload is dev tooling

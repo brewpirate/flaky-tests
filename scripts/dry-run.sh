@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 bun run build:types
 bun run build
 
