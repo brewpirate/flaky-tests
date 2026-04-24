@@ -10,8 +10,22 @@ import type { Config } from '@flaky-tests/core'
 import { type } from 'arktype'
 import { ConfigError } from './errors'
 
-/** Shape of validated CLI config. Consumed by the main entry point in `check.ts`. */
-export const cliConfigSchema = type({
+/** Validated CLI config consumed by the main entry point in `check.ts`. */
+export interface CliConfig {
+  help: boolean
+  version: boolean
+  windowDays: number
+  threshold: number
+  showPrompts: boolean
+  doCopy: boolean
+  doCreateIssue: boolean
+  doHtml: boolean
+  htmlOut?: string | undefined
+  repo?: string | undefined
+}
+
+/** Runtime validator mirroring {@link CliConfig}. */
+const cliConfigSchema = type({
   help: 'boolean',
   version: 'boolean',
   windowDays: 'number > 0',
@@ -23,8 +37,6 @@ export const cliConfigSchema = type({
   'htmlOut?': 'string',
   'repo?': 'string',
 })
-
-export type CliConfig = typeof cliConfigSchema.infer
 
 export interface ParseCliConfigOpts {
   argv: readonly string[]

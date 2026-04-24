@@ -32,6 +32,7 @@ import {
   captureGitInfo as captureGitInfoCore,
   createLogger,
   definePlugin,
+  type FlakyPluginDescriptor,
   resolveConfig,
 } from '@flaky-tests/core'
 
@@ -238,7 +239,9 @@ export class FlakyTestsReporter {
 }
 
 /** Lazy plugin descriptor — `create(config)` exposes the FlakyTestsReporter constructor so hosts can wire it into Vitest with any IStore. */
-export const vitestPlugin = definePlugin({
+export const vitestPlugin: FlakyPluginDescriptor<{
+  FlakyTestsReporter: typeof FlakyTestsReporter
+}> = definePlugin({
   name: 'plugin-vitest',
   create(_config: Config): { FlakyTestsReporter: typeof FlakyTestsReporter } {
     return { FlakyTestsReporter }

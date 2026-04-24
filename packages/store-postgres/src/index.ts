@@ -6,6 +6,7 @@ import {
   definePlugin,
   type FailureRow,
   type FlakyPattern,
+  type FlakyPluginDescriptor,
   flakyPatternSchema,
   type GetNewPatternsOptions,
   type GetRecentRunsOptions,
@@ -38,7 +39,7 @@ const log = createLogger('store-postgres')
 const PACKAGE = '@flaky-tests/store-postgres'
 
 /** Configuration for the PostgreSQL store. */
-export const postgresStoreOptionsSchema = type({
+const postgresStoreOptionsSchema = type({
   'connectionString?': 'string',
   'host?': 'string',
   'port?': 'number.integer > 0',
@@ -50,8 +51,27 @@ export const postgresStoreOptionsSchema = type({
   'retry?': retryOptionsSchema,
 })
 
-/** Inferred options type for constructing a {@link PostgresStore}. */
-export type PostgresStoreOptions = typeof postgresStoreOptionsSchema.infer
+/** Options accepted by {@link PostgresStore}. */
+export interface PostgresStoreOptions {
+  /** Full Postgres URL (e.g. `postgres://user:pass@host:5432/db`). */
+  connectionString?: string | undefined
+  /** Hostname (alternative to `connectionString`). */
+  host?: string | undefined
+  /** Port (default 5432). */
+  port?: number | undefined
+  /** Database name. */
+  database?: string | undefined
+  /** Username. */
+  username?: string | undefined
+  /** Password. */
+  password?: string | undefined
+  /** SSL mode. */
+  ssl?: boolean | 'require' | 'prefer' | 'allow' | undefined
+  /** Table name prefix (default `flaky_test`). */
+  tablePrefix?: string | undefined
+  /** Retry policy for transient driver errors. */
+  retry?: RetryOptions | undefined
+}
 
 /** Standard Postgres listening port; used when the caller omits `port`. */
 const DEFAULT_POSTGRES_PORT = 5432
@@ -558,16 +578,17 @@ export class PostgresStore implements IStore {
  *
  * @throws `Error` from `create()` when `config.store.type !== 'postgres'`.
  */
-export const postgresStorePlugin = definePlugin({
-  name: 'store-postgres',
-  configSchema: postgresStoreOptionsSchema,
-  create(config: Config): PostgresStore {
-    if (config.store.type !== 'postgres') {
-      throw new Error(
-        `store-postgres plugin invoked with config.store.type="${config.store.type}"`,
-      )
-    }
-    const { type: _type, ...storeOptions } = config.store
-    return new PostgresStore(storeOptions)
-  },
-})
+export const postgresStorePlugin: FlakyPluginDescriptor<PostgresStore> =
+  definePlugin({
+    name: 'store-postgres',
+    configSchema: postgresStoreOptionsSchema,
+    create(config: Config): PostgresStore {
+      if (config.store.type !== 'postgres') {
+        throw new Error(
+          `store-postgres plugin invoked with config.store.type="${config.store.type}"`,
+        )
+      }
+      const { type: _type, ...storeOptions } = config.store
+      return new PostgresStore(storeOptions)
+    },
+  })
