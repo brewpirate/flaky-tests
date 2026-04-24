@@ -1,4 +1,4 @@
-import type { FlakyPattern } from '@flaky-tests/core'
+import type { FlakyPattern } from '#core'
 import {
   type DashboardData,
   renderDashboard,

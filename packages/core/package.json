@@ -24,6 +24,7 @@
     }
   },
   "imports": {
+    "#core": "./src/index.ts",
     "#core/*": "./src/*.ts"
   },
   "main": "./dist/index.js",

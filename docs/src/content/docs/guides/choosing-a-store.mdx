@@ -24,7 +24,7 @@ The default. Uses Bun's built-in SQLite driver — no external dependencies.
 
 **When to use:** local development, solo projects, or any setup where you only care about patterns on a single machine.
 
-→ [SQLite store reference](/stores/sqlite/)
+→ [SQLite store reference](/flaky-tests/stores/sqlite/)
 
 ## Turso
 
@@ -34,7 +34,7 @@ Remote SQLite via [Turso](https://turso.tech). The schema and queries are identi
 
 **When to use:** small teams that want shared failure history across CI and local without operating a database server.
 
-→ [Turso store reference](/stores/turso/)
+→ [Turso store reference](/flaky-tests/stores/turso/)
 
 ## Supabase
 
@@ -48,7 +48,7 @@ Pattern detection (`getNewPatterns`) does two round-trip fetches and groups resu
 
 **When to use:** teams already running Supabase for their application.
 
-→ [Supabase store reference](/stores/supabase/)
+→ [Supabase store reference](/flaky-tests/stores/supabase/)
 
 ## Postgres
 
@@ -58,7 +58,7 @@ Uses `COUNT(*) FILTER (WHERE ...)` aggregates, which is more efficient than the 
 
 **When to use:** teams with an existing Postgres server, or anyone who wants the most efficient queries.
 
-→ [Postgres / Neon store reference](/stores/postgres/)
+→ [Postgres / Neon store reference](/flaky-tests/stores/postgres/)
 
 ## Switching stores
 

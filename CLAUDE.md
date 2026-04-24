@@ -16,8 +16,8 @@ bun run build        # build all packages
 
 Docs site (Astro + Starlight):
 ```sh
-cd packages/docs && bun run dev      # local dev server
-cd packages/docs && bun run build    # production build
+cd docs && bun run dev      # local dev server
+cd docs && bun run build    # production build
 ```
 
 ## Monorepo structure
@@ -29,7 +29,7 @@ cd packages/docs && bun run build    # production build
 - `packages/store-turso` — Remote Turso/libSQL store
 - `packages/store-supabase` — Supabase store
 - `packages/store-postgres` — PostgreSQL/Neon store
-- `packages/docs` — Starlight documentation site
+- `docs/` — Starlight documentation site (at repo root, outside `packages/`)
 
 Dependency order: core → stores → plugins (CLI lives inside core)
 
@@ -64,7 +64,7 @@ Integration tests are guarded by `describe.skipIf(!process.env.INTEGRATION)`.
 - `ci.yml` — unit tests on push to main and all PRs
 - `integration.yml` — integration tests on push to main + manual trigger (Postgres via Docker, Turso in-memory, Supabase via secrets)
 - `flaky-check.yml` — scheduled detection (Monday 9am UTC) + manual trigger
-- `docs.yml` — deploys docs to GitHub Pages when `packages/docs/**` changes
+- `docs.yml` — deploys docs to GitHub Pages when `docs/**` changes
 - `release.yml` — changesets-driven npm publish + GitHub Release
 
 ## GitHub Action

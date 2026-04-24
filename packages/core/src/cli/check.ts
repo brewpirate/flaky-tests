@@ -30,12 +30,7 @@ import { spawn } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type {
-  Config,
-  FailureRow,
-  FlakyPattern,
-  IStore,
-} from '@flaky-tests/core'
+import type { Config, FailureRow, FlakyPattern, IStore } from '#core'
 import {
   createLogger,
   createStoreFromConfig,
@@ -48,7 +43,7 @@ import {
   parse,
   RECENT_RUNS_LIMIT,
   resolveConfig,
-} from '@flaky-tests/core'
+} from '#core'
 import { aggregateDashboard, generateHtml } from '../report/html'
 import { type CliConfig, parseCliConfig } from './args'
 import { CliError, ConfigError } from './errors'

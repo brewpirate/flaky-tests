@@ -6,13 +6,13 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import { listRegisteredPlugins } from '@flaky-tests/core'
 import { bunPlugin } from '@flaky-tests/plugin-bun'
 import { vitestPlugin } from '@flaky-tests/plugin-vitest'
 import { postgresStorePlugin } from '@flaky-tests/store-postgres'
 import { sqliteStorePlugin } from '@flaky-tests/store-sqlite'
 import { supabaseStorePlugin } from '@flaky-tests/store-supabase'
 import { tursoStorePlugin } from '@flaky-tests/store-turso'
+import { listRegisteredPlugins } from '#core'
 
 const EXPECTED_NAMES = [
   'plugin-bun',

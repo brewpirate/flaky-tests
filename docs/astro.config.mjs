@@ -1,6 +1,12 @@
 import starlight from '@astrojs/starlight'
 import catppuccin from '@catppuccin/starlight'
 import { defineConfig } from 'astro/config'
+import starlightChangelogs, {
+  makeChangelogsSidebarLinks,
+} from 'starlight-changelogs'
+import starlightLinksValidator from 'starlight-links-validator'
+import starlightLlmsTxt from 'starlight-llms-txt'
+import starlightTypeDoc, { typeDocSidebarGroup } from 'starlight-typedoc'
 
 export default defineConfig({
   site: 'https://brewpirate.github.io',
@@ -10,8 +16,11 @@ export default defineConfig({
       title: 'flaky-tests',
       description:
         'Zero-friction flaky test detection for Bun and Vitest. Catches patterns, generates prompts, opens issues.',
+      favicon: '/favicon.svg',
+      lastUpdated: true,
       logo: {
-        src: './src/assets/mrflaky.png',
+        light: './src/assets/logo-light.svg',
+        dark: './src/assets/logo-dark.svg',
         replacesTitle: false,
       },
       plugins: [
@@ -19,6 +28,15 @@ export default defineConfig({
           dark: { flavor: 'mocha', accent: 'red' },
           light: { flavor: 'latte', accent: 'red' },
         }),
+        starlightLinksValidator(),
+        starlightLlmsTxt(),
+        starlightTypeDoc({
+          entryPoints: ['../packages/core/src/index.ts'],
+          tsconfig: '../packages/core/tsconfig.json',
+          output: 'api',
+          sidebar: { label: 'API (generated)', collapsed: true },
+        }),
+        starlightChangelogs(),
       ],
       social: [
         {
@@ -28,8 +46,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl:
-          'https://github.com/brewpirate/flaky-tests/edit/main/packages/docs/',
+        baseUrl: 'https://github.com/brewpirate/flaky-tests/edit/main/docs/',
       },
       sidebar: [
         {
@@ -40,6 +57,7 @@ export default defineConfig({
               label: 'What is a flaky test?',
               slug: 'getting-started/what-is-a-flaky-test',
             },
+            { label: 'Install', slug: 'getting-started/install' },
             { label: 'Quick Start', slug: 'getting-started/quick-start' },
           ],
         },
@@ -90,6 +108,48 @@ export default defineConfig({
               slug: 'github-action/example-workflows',
             },
           ],
+        },
+        typeDocSidebarGroup,
+        {
+          label: 'Changelogs',
+          collapsed: true,
+          items: makeChangelogsSidebarLinks([
+            {
+              type: 'recent',
+              base: 'changelog/core',
+              label: '@flaky-tests/core',
+            },
+            {
+              type: 'recent',
+              base: 'changelog/plugin-bun',
+              label: '@flaky-tests/plugin-bun',
+            },
+            {
+              type: 'recent',
+              base: 'changelog/plugin-vitest',
+              label: '@flaky-tests/plugin-vitest',
+            },
+            {
+              type: 'recent',
+              base: 'changelog/store-sqlite',
+              label: '@flaky-tests/store-sqlite',
+            },
+            {
+              type: 'recent',
+              base: 'changelog/store-turso',
+              label: '@flaky-tests/store-turso',
+            },
+            {
+              type: 'recent',
+              base: 'changelog/store-supabase',
+              label: '@flaky-tests/store-supabase',
+            },
+            {
+              type: 'recent',
+              base: 'changelog/store-postgres',
+              label: '@flaky-tests/store-postgres',
+            },
+          ]),
         },
       ],
     }),
