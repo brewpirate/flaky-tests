@@ -1,6 +1,6 @@
 {
   "name": "@flaky-tests/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Storage-agnostic core types and CLI for flaky-tests",
   "type": "module",
   "bin": {
