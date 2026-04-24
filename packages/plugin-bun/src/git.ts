@@ -7,7 +7,10 @@ import {
 export type { GitInfo } from '@flaky-tests/core'
 
 /** Bun-native command runner injected into the core git capture helper so this package has no Node child_process dependency. */
-const runCommand: RunCommand = (command, args) => {
+const runCommand: RunCommand = (
+  command: string,
+  args: string[],
+): string | null => {
   try {
     const result = Bun.spawnSync({
       cmd: [command, ...args],

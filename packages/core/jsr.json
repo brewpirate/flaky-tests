@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "exports": {
     ".": "./src/index.ts",
+    "./test-helpers": "./src/test-helpers/index.ts",
     "./cli": "./src/cli/index.ts"
+  },
+  "publish": {
+    "exclude": [
+      "dist/",
+      "**/*.test.ts",
+      "**/*.integration.test.ts",
+      "**/__snapshots__/"
+    ]
   }
 }

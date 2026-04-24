@@ -195,7 +195,11 @@ export function createPreload(store: IStore): void {
    */
   const wrapTest = (originalTest: TestFn): TestFn => {
     /** Per-invocation wrapper that measures duration and records thrown errors before rethrowing so Bun still reports the failure. */
-    const callWrapped: TestFn = (name, fn, timeout) => {
+    const callWrapped: TestFn = (
+      name: string,
+      fn: TestCallback,
+      timeout?: number,
+    ): unknown => {
       // Preserve `done`-callback style — wrapping would change arity and
       // trigger Bun's async-done timeout.
       if (fn.length > 0) {
@@ -222,7 +226,7 @@ export function createPreload(store: IStore): void {
       return originalTest(name, wrappedFn, timeout)
     }
     return new Proxy(originalTest, {
-      apply: (_t, _th, args) =>
+      apply: (_t: TestFn, _th: unknown, args: unknown[]): unknown =>
         callWrapped(
           args[0] as string,
           args[1] as TestCallback,
@@ -230,7 +234,7 @@ export function createPreload(store: IStore): void {
         ),
       // Forward property access (.each, .skip, ...) to the original.
       // Bun's sub-APIs have strict `this` validation — bind to the real target.
-      get: (target, prop) => {
+      get: (target: TestFn, prop: string | symbol): unknown => {
         const value = Reflect.get(target, prop, target)
         return typeof value === 'function' ? value.bind(target) : value
       },
@@ -240,7 +244,10 @@ export function createPreload(store: IStore): void {
   /** Proxy-wraps `describe` so we can track the nested path for fully-qualified test names. Uses the same proxy pattern as {@link wrapTest} to preserve chained sub-APIs. */
   const wrapDescribe = (originalDescribe: DescribeFn): DescribeFn => {
     /** Snapshots the describe path eagerly since Bun executes nested describe bodies after the outer frame has left the live stack. */
-    const callWrapped: DescribeFn = (name, body) => {
+    const callWrapped: DescribeFn = (
+      name: string,
+      body: () => void,
+    ): unknown => {
       // Capture path synchronously — Bun defers nested describe body execution
       // past the point where the outer frame is still on the live stack.
       const capturedFrames = [...describeStack.snapshot, name]
@@ -249,9 +256,9 @@ export function createPreload(store: IStore): void {
       )
     }
     return new Proxy(originalDescribe, {
-      apply: (_t, _th, args) =>
+      apply: (_t: DescribeFn, _th: unknown, args: unknown[]): unknown =>
         callWrapped(args[0] as string, args[1] as () => void),
-      get: (target, prop) => {
+      get: (target: DescribeFn, prop: string | symbol): unknown => {
         const value = Reflect.get(target, prop, target)
         return typeof value === 'function' ? value.bind(target) : value
       },

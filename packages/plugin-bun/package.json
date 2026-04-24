@@ -50,16 +50,50 @@
   "dependencies": {
     "@flaky-tests/core": "workspace:*"
   },
-  "optionalDependencies": {
+  "devDependencies": {
+    "bun-types": "^1.3.13"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "author": "Daniel Zenner <daniel@zenner.dev>",
+  "homepage": "https://brewpirate.github.io/flaky-tests",
+  "bugs": {
+    "url": "https://github.com/brewpirate/flaky-tests/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brewpirate/flaky-tests.git",
+    "directory": "packages/plugin-bun"
+  },
+  "keywords": [
+    "flaky-tests",
+    "bun",
+    "bun-test",
+    "test-reporter"
+  ],
+  "sideEffects": [
+    "./dist/preload-default.js",
+    "./src/preload-default.ts"
+  ],
+  "peerDependencies": {
     "@flaky-tests/store-sqlite": "workspace:*",
     "@flaky-tests/store-turso": "workspace:*",
     "@flaky-tests/store-supabase": "workspace:*",
     "@flaky-tests/store-postgres": "workspace:*"
   },
-  "devDependencies": {
-    "bun-types": "latest"
-  },
-  "engines": {
-    "bun": ">=1.3.0"
+  "peerDependenciesMeta": {
+    "@flaky-tests/store-sqlite": {
+      "optional": true
+    },
+    "@flaky-tests/store-turso": {
+      "optional": true
+    },
+    "@flaky-tests/store-supabase": {
+      "optional": true
+    },
+    "@flaky-tests/store-postgres": {
+      "optional": true
+    }
   }
 }

@@ -3,7 +3,14 @@
   "version": "0.1.0",
   "exports": {
     ".": "./src/index.ts",
-    "./preload": "./src/preload-sqlite.ts",
+    "./preload": "./src/preload-default.ts",
     "./run-tracked": "./src/run-tracked.ts"
+  },
+  "publish": {
+    "exclude": [
+      "dist/",
+      "**/*.test.ts",
+      "**/*.integration.test.ts"
+    ]
   }
 }

@@ -217,8 +217,8 @@ export class SqliteStore implements IStore {
       columnsByTable.set(tableName, columns)
     }
     return {
-      tableExists: (name) => tableNames.has(name),
-      columnExists: (table, column) =>
+      tableExists: (name: string): boolean => tableNames.has(name),
+      columnExists: (table: string, column: string): boolean =>
         columnsByTable.get(table)?.has(column) === true,
     }
   }
