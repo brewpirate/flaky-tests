@@ -43,6 +43,27 @@
     "arktype": "^2.1.0"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "bun-types": "^1.3.13"
+  },
+  "author": "Daniel Zenner <daniel@zenner.dev>",
+  "homepage": "https://brewpirate.github.io/flaky-tests",
+  "bugs": {
+    "url": "https://github.com/brewpirate/flaky-tests/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brewpirate/flaky-tests.git",
+    "directory": "packages/store-supabase"
+  },
+  "keywords": [
+    "flaky-tests",
+    "supabase",
+    "test-results",
+    "storage"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.3.0"
   }
 }

@@ -48,12 +48,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # npm provenance ties each published version back to the exact
+          # GitHub Actions run that built it. Requires the `id-token: write`
+          # permission declared above and npm 9.5+ (default on runners).
+          NPM_CONFIG_PROVENANCE: 'true'
 
-      - name: Sync JSR versions and publish
+      - name: Sync JSR versions from package.json
         if: env.HAS_NPM_TOKEN == 'true' && steps.changesets.outputs.published == 'true'
         run: |
           for dir in packages/*/; do
-            [ ! -f "$dir/jsr.json" ] && continue
+            [ ! -f "${dir}jsr.json" ] && continue
             version=$(bun -e "console.log(JSON.parse(require('fs').readFileSync('${dir}package.json','utf8')).version)")
             bun -e "
               const fs = require('fs');
@@ -61,5 +65,16 @@ jobs:
               j.version = '$version';
               fs.writeFileSync('${dir}jsr.json', JSON.stringify(j, null, 2) + '\n');
             "
-            cd "$dir" && bunx jsr publish --allow-dirty || true && cd ../..
+          done
+
+      - name: Publish to JSR
+        # Tokenless publish via OIDC — requires the `id-token: write`
+        # permission (declared above). Only fires after a successful
+        # changesets npm publish so JSR versions track npm versions.
+        if: env.HAS_NPM_TOKEN == 'true' && steps.changesets.outputs.published == 'true'
+        run: |
+          for dir in packages/*/; do
+            [ ! -f "${dir}jsr.json" ] && continue
+            echo "==> jsr publish $dir"
+            (cd "$dir" && bunx jsr publish --allow-dirty)
           done

@@ -1,5 +1,14 @@
 {
   "name": "@flaky-tests/store-supabase",
   "version": "0.1.0",
-  "exports": { ".": "./src/index.ts" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publish": {
+    "exclude": [
+      "dist/",
+      "**/*.test.ts",
+      "**/*.integration.test.ts"
+    ]
+  }
 }

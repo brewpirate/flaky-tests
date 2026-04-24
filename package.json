@@ -23,7 +23,9 @@
     "build:docs": "bun run --filter '@flaky-tests/docs' build",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "./scripts/release.sh"
+    "release": "./scripts/release.sh",
+    "publish:dry": "bun run build && for dir in packages/*/; do [ -f \"$dir/package.json\" ] && [ \"$dir\" != 'packages/docs/' ] && echo \"=== $dir ===\" && (cd \"$dir\" && bun publish --dry-run --access public); done",
+    "jsr:dry": "for dir in packages/*/; do [ -f \"${dir}jsr.json\" ] && echo \"=== $dir ===\" && (cd \"$dir\" && bunx jsr publish --dry-run --allow-dirty); done"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.11",

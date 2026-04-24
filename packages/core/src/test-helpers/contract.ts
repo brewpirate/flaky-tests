@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import type { IStore } from '@flaky-tests/core'
+import type { FlakyPattern, IStore, RecentRun } from '@flaky-tests/core'
 import { MAX_FAILED_TESTS_PER_RUN } from '#core/config/defaults'
 import { ValidationError } from '#core/schema/validate-schemas'
 import { daysAgo, makeFailure, makeRun } from './fixtures'
@@ -81,7 +81,9 @@ export function runContractTests(
         windowDays: 7,
         threshold: 2,
       })
-      const match = patterns.find((pattern) => pattern.testName === testName)
+      const match = patterns.find(
+        (pattern: FlakyPattern) => pattern.testName === testName,
+      )
       expect(match).toBeDefined()
       expect(match?.recentFails).toBe(2)
       expect(match?.priorFails).toBe(0)
@@ -99,7 +101,7 @@ export function runContractTests(
         threshold: 2,
       })
       expect(
-        patterns.find((pattern) => pattern.testName === testName),
+        patterns.find((pattern: FlakyPattern) => pattern.testName === testName),
       ).toBeUndefined()
     })
 
@@ -123,7 +125,8 @@ export function runContractTests(
         threshold: 2,
       })
       expect(
-        patterns.find((pattern) => pattern.testName === testName)?.recentFails,
+        patterns.find((pattern: FlakyPattern) => pattern.testName === testName)
+          ?.recentFails,
       ).toBe(2)
     })
 
@@ -146,7 +149,7 @@ export function runContractTests(
       ])
       const pattern = (
         await store.getNewPatterns({ windowDays: 7, threshold: 2 })
-      ).find((p) => p.testName === testName)
+      ).find((p: FlakyPattern) => p.testName === testName)
       expect(pattern).toBeDefined()
       expect(pattern?.recentFails).toBe(2)
       expect(pattern?.priorFails).toBe(0)
@@ -161,7 +164,7 @@ export function runContractTests(
       ])
       const pattern = (
         await store.getNewPatterns({ windowDays: 7, threshold: 2 })
-      ).find((p) => p.testName === testName)
+      ).find((p: FlakyPattern) => p.testName === testName)
       expect(pattern).toBeUndefined()
     })
 
@@ -170,7 +173,7 @@ export function runContractTests(
       await seedRun([{ name: testName, daysBack: 1 }])
       const pattern = (
         await store.getNewPatterns({ windowDays: 7, threshold: 2 })
-      ).find((p) => p.testName === testName)
+      ).find((p: FlakyPattern) => p.testName === testName)
       expect(pattern).toBeUndefined()
     })
 
@@ -182,7 +185,7 @@ export function runContractTests(
       ])
       const pattern = (
         await store.getNewPatterns({ windowDays: 7, threshold: 2 })
-      ).find((p) => p.testName === testName)
+      ).find((p: FlakyPattern) => p.testName === testName)
       expect(pattern).toBeUndefined()
     })
 
@@ -199,8 +202,12 @@ export function runContractTests(
         windowDays: 7,
         threshold: 2,
       })
-      expect(patterns.find((p) => p.testName === insideName)).toBeDefined()
-      expect(patterns.find((p) => p.testName === outsideName)).toBeUndefined()
+      expect(
+        patterns.find((p: FlakyPattern) => p.testName === insideName),
+      ).toBeDefined()
+      expect(
+        patterns.find((p: FlakyPattern) => p.testName === outsideName),
+      ).toBeUndefined()
     })
 
     test('custom threshold overrides the default', async () => {
@@ -211,8 +218,12 @@ export function runContractTests(
       ])
       const belowCustom = await store.getNewPatterns({ threshold: 3 })
       const atCustom = await store.getNewPatterns({ threshold: 2 })
-      expect(belowCustom.find((p) => p.testName === testName)).toBeUndefined()
-      expect(atCustom.find((p) => p.testName === testName)).toBeDefined()
+      expect(
+        belowCustom.find((p: FlakyPattern) => p.testName === testName),
+      ).toBeUndefined()
+      expect(
+        atCustom.find((p: FlakyPattern) => p.testName === testName),
+      ).toBeDefined()
     })
 
     test('multiple patterns sorted by recentFails descending', async () => {
@@ -227,8 +238,13 @@ export function runContractTests(
       ])
       const patterns = (
         await store.getNewPatterns({ windowDays: 7, threshold: 2 })
-      ).filter((p) => p.testName === heavy || p.testName === light)
-      expect(patterns.map((p) => p.testName)).toEqual([heavy, light])
+      ).filter(
+        (p: FlakyPattern) => p.testName === heavy || p.testName === light,
+      )
+      expect(patterns.map((p: FlakyPattern) => p.testName)).toEqual([
+        heavy,
+        light,
+      ])
       expect(patterns[0]?.recentFails).toBe(3)
       expect(patterns[1]?.recentFails).toBe(2)
     })
@@ -241,7 +257,7 @@ export function runContractTests(
       ])
       const pattern = (
         await store.getNewPatterns({ windowDays: 7, threshold: 2 })
-      ).find((p) => p.testName === testName)
+      ).find((p: FlakyPattern) => p.testName === testName)
       expect(pattern?.failureKinds.slice().sort()).toEqual([
         'assertion',
         'timeout',
@@ -269,7 +285,7 @@ export function runContractTests(
       })
       const pattern = (
         await store.getNewPatterns({ windowDays: 7, threshold: 2 })
-      ).find((p) => p.testName === testName)
+      ).find((p: FlakyPattern) => p.testName === testName)
       expect(pattern?.lastErrorMessage).toBe('newer error')
     })
 
@@ -284,7 +300,7 @@ export function runContractTests(
       )
       const pattern = (
         await store.getNewPatterns({ windowDays: 7, threshold: 2 })
-      ).find((p) => p.testName === testName)
+      ).find((p: FlakyPattern) => p.testName === testName)
       expect(pattern).toBeUndefined()
     })
 
@@ -323,8 +339,10 @@ export function runContractTests(
 
       const runs = await store.getRecentRuns({ limit: 100 })
       const ours = runs
-        .filter((run) => [oldest, middle, newest].includes(run.runId))
-        .map((run) => run.runId)
+        .filter((run: RecentRun) =>
+          [oldest, middle, newest].includes(run.runId),
+        )
+        .map((run: RecentRun) => run.runId)
       expect(ours).toEqual([newest, middle, oldest])
     })
 
@@ -363,8 +381,8 @@ export function runContractTests(
       })
       const nullRuns = await store.getRecentRuns({ limit: 100, project: null })
 
-      const alphaIds = alphaRuns.map((run) => run.runId)
-      const nullIds = nullRuns.map((run) => run.runId)
+      const alphaIds = alphaRuns.map((run: RecentRun) => run.runId)
+      const nullIds = nullRuns.map((run: RecentRun) => run.runId)
       expect(alphaIds).toContain(alphaRunId)
       expect(alphaIds).not.toContain(nullRunId)
       expect(nullIds).toContain(nullRunId)
