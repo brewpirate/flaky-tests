@@ -6,6 +6,9 @@
     "./test-helpers": "./src/test-helpers/index.ts",
     "./cli": "./src/cli/index.ts"
   },
+  "imports": {
+    "#core/*": "./src/*.ts"
+  },
   "publish": {
     "exclude": [
       "dist/",

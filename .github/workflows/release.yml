@@ -7,21 +7,113 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
+# Workflow-level permissions default to none. Each job declares its own scoped
+# permissions to follow least-privilege. `id-token: write` is only needed on
+# publish jobs (for OIDC-backed provenance on both npm and JSR).
+permissions: {}
 
 jobs:
-  release:
+  # ─── Job 1: Version ──────────────────────────────────────────────────────
+  # Runs changesets/action in version-only mode (no `publish:` arg). On a
+  # branch with unreleased changesets it opens/updates the "Version Packages"
+  # PR. When that PR is merged, this job detects the version-bump commit and
+  # emits `published: 'true'` for downstream publish jobs to gate on.
+  version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      published-packages: ${{ steps.changesets.outputs.publishedPackages }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Changesets needs full history to compute the version graph.
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Create release PR or detect version commit
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: bun run version-packages
+          # Intentionally no `publish:` argument — publishing is split into
+          # dedicated parallel jobs (publish-npm, publish-jsr) that share
+          # build artifacts. See below.
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Job 2: Build ────────────────────────────────────────────────────────
+  # Runs once, produces `packages/*/dist/**` + `packages/*/dist/**/*.d.ts`,
+  # and uploads them as artifacts for downstream publish jobs to consume.
+  # Centralising the build here means npm and JSR publish from identical
+  # artifacts and we never build twice.
+  build:
+    needs: version
+    if: needs.version.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Copy LICENSE into publishable packages
+        run: bun run scripts/copy-license.ts
+
+      - name: Build packages (bundled dist)
+        run: bun run build
+
+      - name: Build types (d.ts)
+        run: bun run build:types
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          # Capture LICENSE alongside dist/ so publish jobs don't have to
+          # re-run copy-license.ts. The glob must match exactly what
+          # npm/JSR will publish.
+          path: |
+            packages/*/dist/
+            packages/*/LICENSE
+          retention-days: 1
+          if-no-files-found: error
+
+  # ─── Job 3: Publish to npm ───────────────────────────────────────────────
+  # Runs in parallel with publish-jsr. Provenance is enabled via
+  # NPM_CONFIG_PROVENANCE, which npm reads automatically; requires
+  # `id-token: write` for the OIDC token that attests to the build.
+  publish-npm:
+    needs: [version, build]
+    if: needs.version.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     env:
       HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
     steps:
-      - name: Verify release prerequisites
+      - name: Verify NPM_TOKEN is set
         run: |
           if [ "$HAS_NPM_TOKEN" != "true" ]; then
-            echo "::warning::NPM_TOKEN secret is not set — publish steps will be skipped. Add it under Settings → Secrets and variables → Actions to enable publishing."
+            echo "::error::NPM_TOKEN secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
           fi
 
       - uses: actions/checkout@v6
@@ -33,28 +125,53 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build packages
-        run: bun run build
-
-      - name: Create release PR or publish
-        id: changesets
-        if: env.HAS_NPM_TOKEN == 'true'
-        uses: changesets/action@v1
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
         with:
-          version: bun run version-packages
-          publish: bun run release
-          title: 'chore: version packages'
-          commit: 'chore: version packages'
+          name: dist-artifacts
+          path: packages/
+
+      - name: Publish to npm with provenance
+        run: bun changeset publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           # npm provenance ties each published version back to the exact
-          # GitHub Actions run that built it. Requires the `id-token: write`
-          # permission declared above and npm 9.5+ (default on runners).
+          # GitHub Actions run that built it. Requires `id-token: write`
+          # (declared above) and npm 9.5+ (default on GitHub runners).
           NPM_CONFIG_PROVENANCE: 'true'
 
-      - name: Sync JSR versions from package.json
-        if: env.HAS_NPM_TOKEN == 'true' && steps.changesets.outputs.published == 'true'
+  # ─── Job 4: Publish to JSR ───────────────────────────────────────────────
+  # Runs in parallel with publish-npm. Tokenless auth via OIDC, enabled by
+  # `id-token: write`. Each package with a jsr.json is published independently;
+  # the loop tracks per-package failures but tries every package so partial
+  # success is possible.
+  publish-jsr:
+    needs: [version, build]
+    if: needs.version.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: packages/
+
+      - name: Sync JSR versions to package.json versions
+        # Changesets bumps package.json#version but not jsr.json#version.
+        # Keep the two in sync so published JSR tags match published npm tags.
         run: |
           for dir in packages/*/; do
             [ ! -f "${dir}jsr.json" ] && continue
@@ -68,13 +185,19 @@ jobs:
           done
 
       - name: Publish to JSR
-        # Tokenless publish via OIDC — requires the `id-token: write`
-        # permission (declared above). Only fires after a successful
-        # changesets npm publish so JSR versions track npm versions.
-        if: env.HAS_NPM_TOKEN == 'true' && steps.changesets.outputs.published == 'true'
+        # `--allow-slow-types` will be removed once the 30 slow-types issues
+        # in @flaky-tests/core are fixed (tracked in .local/plans/raise-jsr-score.md,
+        # Tier 3). Until then, publish with the flag so the score caps at
+        # ~95% but publish itself succeeds.
         run: |
+          failed=0
           for dir in packages/*/; do
             [ ! -f "${dir}jsr.json" ] && continue
-            echo "==> jsr publish $dir"
-            (cd "$dir" && bunx jsr publish --allow-dirty)
+            echo "::group::JSR publish ${dir}"
+            if ! (cd "$dir" && bunx jsr publish --allow-dirty --allow-slow-types); then
+              echo "::error::JSR publish failed for ${dir}"
+              failed=1
+            fi
+            echo "::endgroup::"
           done
+          exit $failed

@@ -1,3 +1,17 @@
+/**
+ * Core exports for the flaky-tests ecosystem.
+ *
+ * Storage-agnostic types (`IStore`, `Config`, `FailureKind`), config
+ * resolution, failure-pattern detection, retry/abort utilities, the
+ * plugin-registry for store adapters, and the shared HTML report
+ * generator. Consumed by `@flaky-tests/plugin-bun`,
+ * `@flaky-tests/plugin-vitest`, and every `@flaky-tests/store-*` adapter.
+ *
+ * New store backends integrate here by calling `definePlugin()` with a
+ * `name: 'store-<type>'` — no change to core is required.
+ *
+ * @module
+ */
 export {
   isRetryableError,
   type RetryOptions,
