@@ -1,6 +1,6 @@
 {
   "name": "@flaky-tests/plugin-bun",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "description": "Bun test preload plugin for flaky-tests",
   "type": "module",
   "exports": {

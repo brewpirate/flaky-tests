@@ -1,6 +1,6 @@
 {
   "name": "@flaky-tests/store-supabase",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Supabase store adapter for flaky-tests",
   "type": "module",
   "exports": {
